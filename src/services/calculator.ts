@@ -1350,7 +1350,9 @@ export function calculateRoofMaterials(params: RoofCalculationParams): RoofCalcu
     includeFascia,
     fasciaType,
     includeBirdStop,
-    birdStopType
+    birdStopType,
+    insulationType = 'none',
+    rafterSpacingM = 1.0
   } = params;
 
   const effectiveWidth = Math.max(1, baseWidthM + (overhangM * 2));
@@ -1366,54 +1368,82 @@ export function calculateRoofMaterials(params: RoofCalculationParams): RoofCalcu
   const slopeLengthHalfWidth = (effectiveWidth / 2) * slopeFactor;
   const slopeLengthFull = effectiveLength * slopeFactor;
 
+  let wallPlateM = 0;
+  let ridgeBeamM = 0;
+  let hipRafterLen = 0;
+  let valleyGutterM = 0;
+
   switch (style) {
     case 'lean_to':
       surfaceArea = effectiveWidth * (effectiveLength * slopeFactor);
       ridgeLength = effectiveWidth;
       eavesPerimeterM = (2 * effectiveWidth) + (2 * slopeLengthFull);
       birdStopLengthM = effectiveWidth;
+      wallPlateM = 2 * effectiveWidth;
+      ridgeBeamM = effectiveWidth;
       break;
     case 'gable':
       surfaceArea = 2 * (effectiveLength) * slopeLengthHalfWidth;
       ridgeLength = effectiveLength;
       eavesPerimeterM = (2 * effectiveLength) + (4 * slopeLengthHalfWidth);
       birdStopLengthM = 2 * effectiveLength;
+      wallPlateM = 2 * effectiveLength;
+      ridgeBeamM = effectiveLength;
       break;
     case 'hip':
       surfaceArea = effectiveWidth * effectiveLength * slopeFactor * 1.08;
-      const hipRafterLen = Math.sqrt(Math.pow(slopeLengthHalfWidth, 2) + Math.pow(effectiveWidth / 2, 2));
-      ridgeLength = (effectiveLength - effectiveWidth) + (4 * hipRafterLen);
+      hipRafterLen = Math.sqrt(Math.pow(slopeLengthHalfWidth, 2) + Math.pow(effectiveWidth / 2, 2));
+      ridgeLength = Math.max(1, effectiveLength - effectiveWidth) + (4 * hipRafterLen);
       eavesPerimeterM = 2 * (effectiveWidth + effectiveLength);
       birdStopLengthM = eavesPerimeterM;
+      wallPlateM = 2 * (effectiveWidth + effectiveLength);
+      ridgeBeamM = Math.max(1, effectiveLength - effectiveWidth);
+      valleyGutterM = Math.round(hipRafterLen * 1.5 * 10) / 10;
       break;
     case 'flat_slab':
       surfaceArea = effectiveWidth * effectiveLength;
       ridgeLength = 0;
       eavesPerimeterM = 0;
       birdStopLengthM = 0;
+      wallPlateM = 0;
+      ridgeBeamM = 0;
       break;
   }
 
   eavesPerimeterM = Math.round(eavesPerimeterM * 10) / 10;
   birdStopLengthM = Math.round(birdStopLengthM * 10) / 10;
 
-  const isHeavyRoof = materialType === 'concrete_tile' || materialType === 'cpac';
-  const steelWeightPerSqm = isHeavyRoof ? 22 : 14.5;
-  const totalSteelKg = surfaceArea * steelWeightPerSqm;
+  // 1. คำนวณเหล็กตามหลักวิศวกรรมจริงแยกรายชิ้นส่วน (ท่อนละ 6 ม.)
+  const wallPlateBars = wallPlateM > 0 ? Math.ceil((wallPlateM * 1.08) / 6) : 0;
+  
+  const rafterCount = style === 'lean_to' 
+    ? (Math.ceil(effectiveWidth / rafterSpacingM) + 1)
+    : (Math.ceil(effectiveLength / rafterSpacingM) + 1) * 2;
+  const raftersTotalM = (rafterCount * slopeLengthHalfWidth) + (style === 'hip' ? 4 * hipRafterLen : 0);
+  const rafterBars = raftersTotalM > 0 ? Math.ceil((raftersTotalM * 1.10) / 6) : 0;
 
-  const cChannelKg = totalSteelKg * 0.60;
-  const boxSteelKg = totalSteelKg * 0.25;
-  const purlinKg = totalSteelKg * 0.15;
+  const ridgeBeamBars = ridgeBeamM > 0 ? Math.ceil((ridgeBeamM * 1.10) / 6) * 2 : 0; // ประกบคู่ 2C-150
 
-  const cChannelBars = Math.ceil(cChannelKg / 24.3);
-  const boxSteelBars = Math.ceil(boxSteelKg / 30.5);
+  const kingPostHeight = (effectiveWidth / 2) * Math.tan(rad);
+  const kingPostCount = ridgeBeamM > 0 ? Math.max(2, Math.ceil(ridgeBeamM / 3.5) + 1) : 0;
+  const kingPostBars = kingPostCount > 0 ? Math.ceil((kingPostCount * (kingPostHeight + 1.2) * 1.15) / 6) : 0;
+
+  // แปสำเร็จรูปกัลวาไนซ์
   const purlinBars = Math.ceil(surfaceArea / (purlinSpacingM * 6) * 1.15);
 
+  const cChannelBars = wallPlateBars + rafterBars + ridgeBeamBars + kingPostBars;
+  const cChannelKg = Math.round(cChannelBars * 24.3); // C-100x50x20x2.3 mm ~ 24.3 kg/ท่อน 6ม.
+  
+  const boxSteelBars = Math.ceil(cChannelBars * 0.25); // เหล็กกล่องสำหรับดั้งรัดและค้ำยัน
+  const boxSteelKg = Math.round(boxSteelBars * 28.5);
+
+  const isHeavyRoof = materialType === 'concrete_tile' || materialType === 'cpac';
   let sheetsCount = surfaceArea;
   if (isHeavyRoof) {
-    sheetsCount = Math.ceil(surfaceArea * 11);
+    sheetsCount = Math.ceil(surfaceArea * 11); // ซีแพค 11 แผ่น/ตร.ม.
   }
 
+  // 2. เชิงชาย
   let fasciaLength = 0;
   let fasciaPieces = 0;
   let fasciaMatPricePerM = 0;
@@ -1445,6 +1475,7 @@ export function calculateRoofMaterials(params: RoofCalculationParams): RoofCalcu
   const fasciaMaterialCost = Math.round(fasciaLength * fasciaMatPricePerM);
   const fasciaLaborCost = Math.round(fasciaLength * fasciaLabPricePerM);
 
+  // 3. แผ่นปิดกันนก
   let birdStopLength = 0;
   let birdStopPieces = 0;
   let birdStopMatPricePerM = 0;
@@ -1479,16 +1510,51 @@ export function calculateRoofMaterials(params: RoofCalculationParams): RoofCalcu
   const birdStopMaterialCost = Math.round(birdStopLength * birdStopMatPricePerM);
   const birdStopLaborCost = Math.round(birdStopLength * birdStopLabPricePerM);
 
+  // 4. ระบบครอบแห้ง Dry Ridge System & รางน้ำตะเฆ่ราง
+  const dryRidgeRolls = ridgeLength > 0 ? Math.ceil(ridgeLength / 3.0) : 0;
+  const dryRidgeCost = dryRidgeRolls * 750; // ม้วนละ 3 เมตร 750 บาท
+
+  const valleyGutterCost = Math.round(valleyGutterM * 450); // สแตนเลส 304 หนา 0.5 มม. 450 บาท/ม.
+
+  // 5. สกรูยึดหลังคาพร้อมยาง EPDM
+  const roofScrewsPcs = Math.ceil(surfaceArea * 5.5);
+  const roofScrewsCost = Math.ceil(roofScrewsPcs * 1.5);
+
+  // 6. ฉนวนกันความร้อน
+  let insulationSqm = 0;
+  let insulationMaterialCost = 0;
+  let insulationLaborCost = 0;
+  if (insulationType !== 'none' && surfaceArea > 0) {
+    insulationSqm = Math.round(surfaceArea);
+    let matRate = 0;
+    let labRate = 0;
+    if (insulationType === 'pu_foam_1in') {
+      matRate = 180;
+      labRate = 45;
+    } else if (insulationType === 'pe_foam_5mm') {
+      matRate = 65;
+      labRate = 25;
+    } else if (insulationType === 'stay_cool_75mm') {
+      matRate = 145;
+      labRate = 35;
+    } else if (insulationType === 'stay_cool_150mm') {
+      matRate = 260;
+      labRate = 45;
+    }
+    insulationMaterialCost = Math.round(insulationSqm * matRate);
+    insulationLaborCost = Math.round(insulationSqm * labRate);
+  }
+
   const baseMaterialPricePerSqm = isHeavyRoof ? 550 : 380;
   const baseLaborPricePerSqm = isHeavyRoof ? 180 : 120;
-  const roofMatTotal = Math.round((surfaceArea * baseMaterialPricePerSqm) + (totalSteelKg * 34));
-  const roofLabTotal = Math.round((surfaceArea * baseLaborPricePerSqm) + (totalSteelKg * 14));
+  const roofMatTotal = Math.round((surfaceArea * baseMaterialPricePerSqm) + (cChannelKg * 34) + (boxSteelKg * 36) + (purlinBars * 190));
+  const roofLabTotal = Math.round((surfaceArea * baseLaborPricePerSqm) + ((cChannelKg + boxSteelKg) * 14));
 
   return {
     effectiveRoofAreaSqm: Math.round(surfaceArea * 10) / 10,
-    c_channel_kg: Math.round(cChannelKg),
+    c_channel_kg: cChannelKg,
     c_channel_bars: cChannelBars,
-    box_steel_kg: Math.round(boxSteelKg),
+    box_steel_kg: boxSteelKg,
     box_steel_bars: boxSteelBars,
     purlin_bars: purlinBars,
     roofSheetsCount: Math.round(sheetsCount),
@@ -1502,8 +1568,21 @@ export function calculateRoofMaterials(params: RoofCalculationParams): RoofCalcu
     fasciaLaborCost,
     birdStopMaterialCost,
     birdStopLaborCost,
-    materialEstimateThb: roofMatTotal + fasciaMaterialCost + birdStopMaterialCost,
-    laborEstimateThb: roofLabTotal + fasciaLaborCost + birdStopLaborCost
+    wallPlateBars,
+    rafterBars,
+    ridgeBeamBars,
+    kingPostBars,
+    valleyGutterM,
+    valleyGutterCost,
+    dryRidgeRolls,
+    dryRidgeCost,
+    roofScrewsPcs,
+    roofScrewsCost,
+    insulationSqm,
+    insulationMaterialCost,
+    insulationLaborCost,
+    materialEstimateThb: roofMatTotal + fasciaMaterialCost + birdStopMaterialCost + dryRidgeCost + valleyGutterCost + roofScrewsCost + insulationMaterialCost,
+    laborEstimateThb: roofLabTotal + fasciaLaborCost + birdStopLaborCost + insulationLaborCost
   };
 }
 
@@ -1721,7 +1800,12 @@ export function calculateStructureMaterials(params: StructureCalcParams): Struct
   const estConcreteLab = totalConcreteCuM * 450;
   const estSteelMat = (totalSteelKg * 28.5) + (tieWireKg * 55);
   const estSteelLab = totalSteelKg * 7.5;
-  const estFormMat = totalFormworkSqm * 150;
+  // ไม้แบบคิดค่าเสื่อมการหมุนเวียนใช้ซ้ำ 3-4 ครั้ง (40% ของราคาไม้ใหม่ตามมาตรฐานกรมบัญชีกลาง)
+  const estFormMat = Math.round(totalFormworkSqm * (150 * 0.40));
+  // เผื่อระยะทาบ 40d-50d และงอขอเหล็กเสริม 12%
+  const rebarLapAllowanceKg = Math.round((db12Kg + db16Kg) * 0.12);
+  // ลูกปูนหนุนเหล็ก Covering 4.5 ลูก/ตร.ม. ไม้แบบ
+  const concreteSpacersPcs = Math.ceil(totalFormworkSqm * 4.5);
   const estFormLab = totalFormworkSqm * 120;
 
   const wireMeshPricePerSqm = wireMeshDiameterMm === 6 ? 65 : 45;
@@ -1743,6 +1827,8 @@ export function calculateStructureMaterials(params: StructureCalcParams): Struct
     cementBags50kg,
     sandCuM,
     rockCuM,
+    concreteSpacersPcs,
+    rebarLapAllowanceKg,
     formworkFootingSqm: Math.round(formworkFootingSqm * 10) / 10,
     formworkColumnSqm: Math.round(formworkColumnSqm * 10) / 10,
     formworkBeamSqm: Math.round(formworkBeamSqm * 10) / 10,

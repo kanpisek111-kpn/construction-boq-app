@@ -470,6 +470,7 @@ export interface PlanAnalysisResult {
 
 export type RoofStyle = 'lean_to' | 'gable' | 'hip' | 'flat_slab';
 export type RoofMaterialType = 'metal_sheet' | 'concrete_tile' | 'cpac' | 'shingle';
+export type RoofInsulationType = 'none' | 'pu_foam_1in' | 'pe_foam_5mm' | 'stay_cool_75mm' | 'stay_cool_150mm';
 export type FasciaType = 
   | 'fiber_cement_double'
   | 'fiber_cement_single'
@@ -494,6 +495,8 @@ export interface RoofCalculationParams {
   fasciaType: FasciaType;
   includeBirdStop: boolean;
   birdStopType: BirdStopType;
+  insulationType?: RoofInsulationType;
+  rafterSpacingM?: number;
 }
 
 export interface RoofCalculationResult {
@@ -516,6 +519,19 @@ export interface RoofCalculationResult {
   birdStopLaborCost: number;
   laborEstimateThb: number;
   materialEstimateThb: number;
+  wallPlateBars: number;
+  rafterBars: number;
+  ridgeBeamBars: number;
+  kingPostBars: number;
+  valleyGutterM: number;
+  valleyGutterCost: number;
+  dryRidgeRolls: number;
+  dryRidgeCost: number;
+  roofScrewsPcs: number;
+  roofScrewsCost: number;
+  insulationSqm: number;
+  insulationMaterialCost: number;
+  insulationLaborCost: number;
 }
 
 export type SlabSystemType = 'precast_plank' | 'cast_in_place' | 'hybrid';
@@ -604,6 +620,8 @@ export interface StructureCalcResult {
   tieWireKg: number;
   sandCuM: number;
   rockCuM: number;
+  concreteSpacersPcs: number;
+  rebarLapAllowanceKg: number;
   estMaterialCost: number;
   estLaborCost: number;
   footingSummaryList?: { code: string; count: number; concreteCuM: number; formworkSqm: number; steelKg: number }[];

@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { RoofStyle, RoofMaterialType, RoofCalculationParams, BOQItem, FasciaType, BirdStopType } from '../types';
+import { RoofStyle, RoofMaterialType, RoofCalculationParams, BOQItem, FasciaType, BirdStopType, RoofInsulationType } from '../types';
 import { calculateRoofMaterials } from '../services/calculator';
 
 interface RoofEstimatorModalProps {
@@ -22,6 +22,8 @@ export const RoofEstimatorModal: React.FC<RoofEstimatorModalProps> = ({ isOpen, 
   const [fasciaType, setFasciaType] = useState<FasciaType>('fiber_cement_double');
   const [includeBirdStop, setIncludeBirdStop] = useState<boolean>(true);
   const [birdStopType, setBirdStopType] = useState<BirdStopType>('metal_sheet_eaves');
+  const [insulationType, setInsulationType] = useState<RoofInsulationType>('none');
+  const [rafterSpacingM, setRafterSpacingM] = useState<number>(1.0);
 
   // ปรับชนิดแผ่นปิดกันนกอัตโนมัติเมื่อเปลี่ยนวัสดุมุง
   const handleMaterialChange = (newMat: RoofMaterialType) => {
@@ -48,40 +50,194 @@ export const RoofEstimatorModal: React.FC<RoofEstimatorModalProps> = ({ isOpen, 
       fasciaType,
       includeBirdStop,
       birdStopType,
+      insulationType,
+      rafterSpacingM,
     };
     return calculateRoofMaterials(params);
-  }, [style, baseWidthM, baseLengthM, overhangM, pitchDeg, materialType, purlinSpacingM, includeFascia, fasciaType, includeBirdStop, birdStopType]);
+  }, [style, baseWidthM, baseLengthM, overhangM, pitchDeg, materialType, purlinSpacingM, includeFascia, fasciaType, includeBirdStop, birdStopType, insulationType, rafterSpacingM]);
 
   if (!isOpen) return null;
 
   const handleApply = () => {
     const timestamp = Date.now();
-    const generatedItems: BOQItem[] = [
-      {
-        id: `roof-gen-steel-${timestamp}`,
-        category: 'roof',
-        name: `โครงเหล็กหลังคาจันทัน/อะเส (เหล็กซี) และแป [คำนวณตามองศา ${pitchDeg}°]`,
-        spec: `ทรง ${style === 'gable' ? 'หน้าจั่ว' : style === 'hip' ? 'ปั้นหยา' : style === 'lean_to' ? 'เพิงแหงน' : 'ดาดฟ้า'} เหล็กซี ${result.c_channel_bars} ท่อน + เหล็กกล่อง ${result.box_steel_bars} ท่อน + แป ${result.purlin_bars} ท่อน`,
-        quantity: result.c_channel_kg + result.box_steel_kg,
-        unit: 'กก.',
-        materialUnitPrice: 34,
-        laborUnitPrice: 15,
-        wastePercent: 8,
-      },
-      {
-        id: `roof-gen-sheet-${timestamp + 1}`,
-        category: 'roof',
-        name: `วัสดุมุงหลังคา (${materialType === 'metal_sheet' ? 'แผ่นเมทัลชีทเคลือบสี บุฉนวน PU' : 'กระเบื้องคอนกรีตลอนคู่/ซีแพคโมเนีย'})`,
-        spec: `พื้นที่ผิวเอียง ${result.effectiveRoofAreaSqm} ตร.ม. พร้อมครอบสันจั่ว/ตะเข้สัน ${result.ridgeTilesM} ม.`,
-        quantity: result.effectiveRoofAreaSqm,
-        unit: 'ตร.ม.',
-        materialUnitPrice: materialType === 'metal_sheet' ? 360 : 520,
-        laborUnitPrice: materialType === 'metal_sheet' ? 95 : 170,
-        wastePercent: 6,
-      }
-    ];
+    const generatedItems: BOQItem[] = [];
 
-    // เพิ่มไม้เชิงชาย (ถ้าเลือก)
+    // 1. เหล็กอะเส (Wall Plate)
+    if (result.wallPlateBars > 0) {
+      generatedItems.push({
+        id: `roof-gen-wallplate-${timestamp}`,
+        category: 'roof',
+        name: 'เหล็กอะเสรอบตัวบ้าน C-125x50x20x3.2 มม. หรือ C-150 (ท่อนละ 6.00 ม.)',
+        spec: `ความยาวอะเสรวม ${Math.round(result.wallPlateBars * 6)} ม. (${result.wallPlateBars} ท่อน @ 6ม.) ยึดเสา คสล. ด้วย J-Bolt / พุกเหล็ก`,
+        quantity: result.wallPlateBars,
+        unit: 'ท่อน',
+        materialUnitPrice: 680,
+        laborUnitPrice: 140,
+        wastePercent: 5,
+      });
+    }
+
+    // 2. เหล็กจันทัน (Rafters)
+    if (result.rafterBars > 0) {
+      generatedItems.push({
+        id: `roof-gen-rafter-${timestamp + 1}`,
+        category: 'roof',
+        name: 'เหล็กจันทัน C-100x50x20x2.3 มม. (ระยะห่าง @ ' + rafterSpacingM + ' ม.)',
+        spec: `คำนวณตามความชันลาดเอียง ${pitchDeg}° และระยะยื่นชายคา ${overhangM} ม. (สั่ง ${result.rafterBars} ท่อน @ 6ม.)`,
+        quantity: result.rafterBars,
+        unit: 'ท่อน',
+        materialUnitPrice: 490,
+        laborUnitPrice: 120,
+        wastePercent: 6,
+      });
+    }
+
+    // 3. เหล็กอกไก่และดั้ง/ค้ำยัน (Ridge Beam & King Post)
+    const ridgeAndPostBars = result.ridgeBeamBars + result.kingPostBars;
+    if (ridgeAndPostBars > 0) {
+      generatedItems.push({
+        id: `roof-gen-ridgebeam-${timestamp + 2}`,
+        category: 'roof',
+        name: 'เหล็กอกไก่และดั้งรับสันหลังคา C-125/C-150 หรือ 2C ประกบคู่ พร้อมค้ำยัน',
+        spec: `แนวสันอกไก่ยาว ${result.ridgeTilesM} ม. รวมดั้งและท้าวแขนค้ำยัน (${ridgeAndPostBars} ท่อน @ 6ม.)`,
+        quantity: ridgeAndPostBars,
+        unit: 'ท่อน',
+        materialUnitPrice: 650,
+        laborUnitPrice: 150,
+        wastePercent: 5,
+      });
+    }
+
+    // 4. แปสำเร็จรูปกัลวาไนซ์ (Purlins)
+    if (result.purlin_bars > 0) {
+      const purlinSpec = materialType === 'concrete_tile' || materialType === 'cpac'
+        ? `แปซีแพคสำเร็จรูปกัลวาไนซ์กันสนิม หนา 0.55-0.70 มม. ระยะแป @ ${purlinSpacingM} ม. (${result.purlin_bars} ท่อน @ 6ม.)`
+        : `แปกัลวาไนซ์ทรง C-Purlin หนา 0.70 มม. ระยะแป @ ${purlinSpacingM} ม. (${result.purlin_bars} ท่อน @ 6ม.)`;
+
+      generatedItems.push({
+        id: `roof-gen-purlin-${timestamp + 3}`,
+        category: 'roof',
+        name: 'แปกัลวาไนซ์สำเร็จรูป ป้องกันสนิม (ท่อนละ 6.00 ม.)',
+        spec: purlinSpec,
+        quantity: result.purlin_bars,
+        unit: 'ท่อน',
+        materialUnitPrice: 195,
+        laborUnitPrice: 45,
+        wastePercent: 5,
+      });
+    }
+
+    // 5. วัสดุมุงหลังคา (Roof Sheets / Tiles)
+    const roofSheetName = materialType === 'metal_sheet'
+      ? 'แผ่นหลังคาเมทัลชีทเคลือบสีอลูซิงค์ (AZ-150) หนา 0.35-0.40 มม. มอก.'
+      : materialType === 'cpac'
+      ? 'กระเบื้องหลังคาคอนกรีตแผ่นเรียบ/ซีแพคโมเนีย ตราช้าง/SCG มอก.'
+      : 'กระเบื้องหลังคาคอนกรีตลอนคู่ มอก.';
+
+    generatedItems.push({
+      id: `roof-gen-sheet-${timestamp + 4}`,
+      category: 'roof',
+      name: roofSheetName,
+      spec: `พื้นที่ผิวลาดเอียง ${result.effectiveRoofAreaSqm} ตร.ม. (องศา ${pitchDeg}°) คำนวณเผื่อซ้อนทับและเศษวัสดุ`,
+      quantity: result.effectiveRoofAreaSqm,
+      unit: 'ตร.ม.',
+      materialUnitPrice: materialType === 'metal_sheet' ? 240 : 380,
+      laborUnitPrice: materialType === 'metal_sheet' ? 85 : 140,
+      wastePercent: 6,
+    });
+
+    // 6. ครอบสันหลังคาและครอบตะเฆ่สัน (Ridge & Hip Caps)
+    if (result.ridgeTilesM > 0) {
+      const capName = materialType === 'metal_sheet'
+        ? 'แฟลชชิ่งครอบสันจั่ว/ครอบข้างเมทัลชีท พับขึ้นรูปสีเดียวกับหลังคา'
+        : 'กระเบื้องครอบสันโค้ง/ครอบตะเข้สัน SCG ซีแพคโมเนีย พร้อมอุปกรณ์ยึด';
+
+      generatedItems.push({
+        id: `roof-gen-ridgecap-${timestamp + 5}`,
+        category: 'roof',
+        name: capName,
+        spec: `ความยาวแนวสันหลังคาและตะเฆ่สันรวม ${result.ridgeTilesM} ม.`,
+        quantity: result.ridgeTilesM,
+        unit: 'ม.',
+        materialUnitPrice: materialType === 'metal_sheet' ? 120 : 190,
+        laborUnitPrice: materialType === 'metal_sheet' ? 45 : 75,
+        wastePercent: 5,
+      });
+    }
+
+    // 7. ระบบครอบแห้ง Dry Ridge System (สำหรับกระเบื้องคอนกรีต/ซีแพค)
+    if (result.dryRidgeRolls > 0 && (materialType === 'concrete_tile' || materialType === 'cpac')) {
+      generatedItems.push({
+        id: `roof-gen-dryridge-${timestamp + 6}`,
+        category: 'roof',
+        name: 'แผ่นปิดรอยต่อกันรั่วระบบครอบแห้ง (Dry Ridge System / ม้วนละ 3.00 ม.)',
+        spec: `แผ่นบิวทิลพร้อมแถบกาวกันน้ำ ทน UV ยึดใต้ครอบสันหลังคา ${result.dryRidgeRolls} ม้วน (ไม่ต้องใช้ปูนปั้น ไม่แตกร้าว)`,
+        quantity: result.dryRidgeRolls,
+        unit: 'ม้วน',
+        materialUnitPrice: 750,
+        laborUnitPrice: 150,
+        wastePercent: 0,
+      });
+    }
+
+    // 8. รางน้ำตะเฆ่รางสแตนเลส (Valley Gutter) สำหรับทรงปั้นหยา
+    if (result.valleyGutterM > 0 && style === 'hip') {
+      generatedItems.push({
+        id: `roof-gen-valleygutter-${timestamp + 7}`,
+        category: 'roof',
+        name: 'รางน้ำตะเฆ่รางสแตนเลส เกรด 304 หนา 0.5 มม. พับปีกกันน้ำย้อน',
+        spec: `ความยาวตะเฆ่รางรับน้ำฝน ${result.valleyGutterM} ม. ป้องกันน้ำรั่วซึมเข้าร่องหักหลังคา`,
+        quantity: result.valleyGutterM,
+        unit: 'ม.',
+        materialUnitPrice: 450,
+        laborUnitPrice: 120,
+        wastePercent: 5,
+      });
+    }
+
+    // 9. สกรูยึดหลังคาปลายสว่านหัวหกเหลี่ยม + ยาง EPDM
+    if (result.roofScrewsPcs > 0) {
+      const screwBoxes = Math.ceil(result.roofScrewsPcs / 100);
+      generatedItems.push({
+        id: `roof-gen-screws-${timestamp + 8}`,
+        category: 'roof',
+        name: 'สกรูปลายสว่านหัวหกเหลี่ยม พร้อมแหวนยาง EPDM กันรั่วซึม (กล่อง 100 ตัว)',
+        spec: `จำนวน ${result.roofScrewsPcs} ตัว (${screwBoxes} กล่อง) ผ่านมาตรฐานการทดสอบการรั่วซึม มอก.`,
+        quantity: screwBoxes,
+        unit: 'กล่อง',
+        materialUnitPrice: 140,
+        laborUnitPrice: 30,
+        wastePercent: 5,
+      });
+    }
+
+    // 10. ฉนวนกันความร้อน (ถ้าเลือก)
+    if (insulationType !== 'none' && result.insulationSqm > 0) {
+      const insName = insulationType === 'pu_foam_1in'
+        ? 'ฉนวนกันความร้อนโพลียูรีเทนโฟม (PU Foam) หนา 1 นิ้ว เคลือบฟอยล์สะท้อนความร้อน'
+        : insulationType === 'pe_foam_5mm'
+        ? 'ฉนวนกันความร้อน PE Foam หนา 5 มม. ติดใต้แผ่นหลังคา'
+        : insulationType === 'stay_cool_75mm'
+        ? 'ฉนวนใยแก้วกันความร้อน SCG Stay Cool หนา 75 มม. (3 นิ้ว) วางเหนือฝ้าเพดาน'
+        : 'ฉนวนใยแก้วกันความร้อน SCG Stay Cool หนา 150 มม. (6 นิ้ว) วางเหนือฝ้าเพดาน';
+
+      const insMat = insulationType === 'pu_foam_1in' ? 180 : insulationType === 'pe_foam_5mm' ? 65 : insulationType === 'stay_cool_75mm' ? 145 : 260;
+      const insLab = insulationType === 'pu_foam_1in' ? 45 : insulationType === 'pe_foam_5mm' ? 25 : insulationType === 'stay_cool_75mm' ? 35 : 45;
+
+      generatedItems.push({
+        id: `roof-gen-insulation-${timestamp + 9}`,
+        category: 'roof',
+        name: insName,
+        spec: `พื้นที่ติดตั้ง ${result.insulationSqm} ตร.ม. ช่วยลดความร้อนเข้าสู่ตัวบ้านและลดเสียงฝนตกกระทบ`,
+        quantity: result.insulationSqm,
+        unit: 'ตร.ม.',
+        materialUnitPrice: insMat,
+        laborUnitPrice: insLab,
+        wastePercent: 5,
+      });
+    }
+
+    // 11. ไม้เชิงชาย (ถ้าเลือก)
     if (includeFascia && result.fasciaLengthM > 0) {
       const fasciaLabel = fasciaType === 'fiber_cement_double'
         ? 'ไม้เชิงชายไฟเบอร์ซีเมนต์ 2 ชั้น (หน้า 8" + หน้า 6" ทับซ้อน)'
@@ -95,7 +251,7 @@ export const RoofEstimatorModal: React.FC<RoofEstimatorModalProps> = ({ isOpen, 
       const unitPriceLab = fasciaType === 'fiber_cement_double' ? 85 : fasciaType === 'fiber_cement_single' ? 65 : fasciaType === 'flashing_metal' ? 50 : 130;
 
       generatedItems.push({
-        id: `roof-gen-fascia-${timestamp + 2}`,
+        id: `roof-gen-fascia-${timestamp + 10}`,
         category: 'roof',
         name: fasciaLabel,
         spec: `ความยาวชายคารอบหลังคา ${result.fasciaLengthM} ม. (~ สั่ง ${result.fasciaPieces3m} แผ่น ยาว 3.0ม.) ยึดสกรูเกลียวปล่อยพร้อมโป๊วหัวสกรู`,
@@ -107,7 +263,7 @@ export const RoofEstimatorModal: React.FC<RoofEstimatorModalProps> = ({ isOpen, 
       });
     }
 
-    // เพิ่มแผ่นปิดกันนก (ถ้าเลือก)
+    // 12. แผ่นปิดกันนก (ถ้าเลือก)
     if (includeBirdStop && result.birdStopLengthM > 0 && birdStopType !== 'none') {
       const birdStopLabel = birdStopType === 'metal_sheet_eaves'
         ? 'แผ่นปิดกันนกปลายลอนเมทัลชีท (Metal Sheet Eaves Filler / โฟม PE เกรดทน UV)'
@@ -121,7 +277,7 @@ export const RoofEstimatorModal: React.FC<RoofEstimatorModalProps> = ({ isOpen, 
       const birdLabPrice = birdStopType === 'metal_sheet_eaves' ? 30 : birdStopType === 'cpac_wave' ? 40 : birdStopType === 'roman_tile' ? 35 : 50;
 
       generatedItems.push({
-        id: `roof-gen-birdstop-${timestamp + 3}`,
+        id: `roof-gen-birdstop-${timestamp + 11}`,
         category: 'roof',
         name: birdStopLabel,
         spec: `ติดตั้งตามแนวปลายลอนรับน้ำฝน ${result.birdStopLengthM} ม. (${result.birdStopPieces} ชิ้น) ป้องกันนก หนู และสัตว์เลื้อยคลานเข้าใต้ฝ้า`,
@@ -275,6 +431,22 @@ export const RoofEstimatorModal: React.FC<RoofEstimatorModalProps> = ({ isOpen, 
               </select>
             </div>
 
+            {/* ฉนวนกันความร้อน */}
+            <div>
+              <label className="text-xs text-slate-300 block mb-1 font-medium">ฉนวนกันความร้อน (Roof Insulation)</label>
+              <select
+                value={insulationType}
+                onChange={(e) => setInsulationType(e.target.value as RoofInsulationType)}
+                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400"
+              >
+                <option value="none">ไม่ใส่ฉนวนกันความร้อน</option>
+                <option value="pu_foam_1in">PU Foam หนา 1 นิ้ว (ฉีดพ่นใต้แผ่น / ติดสำเร็จรูป ลดเสียงฝนดีเยี่ยม)</option>
+                <option value="pe_foam_5mm">PE Foam หนา 5 มม. ติดใต้หลังคาเมทัลชีท (ประหยัด)</option>
+                <option value="stay_cool_75mm">ฉนวนใยแก้ว SCG Stay Cool หนา 75 มม. (3 นิ้ว) ปูบนฝ้า</option>
+                <option value="stay_cool_150mm">ฉนวนใยแก้ว SCG Stay Cool หนา 150 มม. (6 นิ้ว) ปูบนฝ้า (กันร้อนสูงสุด)</option>
+              </select>
+            </div>
+
             {/* 🌟 2. ตัวเลือกเฉพาะ: ไม้เชิงชาย & แผ่นปิดกันนก (Fascia & Bird Stop) 🌟 */}
             <div className="pt-2 border-t border-slate-800 flex flex-col gap-3">
               <span className="text-xs font-semibold uppercase tracking-wider text-cyan-400 flex items-center gap-1.5">
@@ -394,27 +566,39 @@ export const RoofEstimatorModal: React.FC<RoofEstimatorModalProps> = ({ isOpen, 
 
               <div className="p-4 flex flex-col gap-2.5 text-xs overflow-y-auto max-h-[380px]">
                 
-                {/* 1. โครงเหล็กจันทัน & อะเส */}
+                {/* 1. เหล็กอะเส */}
                 <div className="flex justify-between items-center py-1.5 border-b border-slate-850">
                   <div className="flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-cyan-400"></span>
-                    <span className="text-slate-300 font-medium">เหล็กตัวซี C100x50x20 (จันทัน & อะเส):</span>
+                    <span className="text-slate-300 font-medium">เหล็กอะเสรอบบ้าน C-125/C-150:</span>
                   </div>
                   <div className="text-right">
-                    <span className="font-mono font-bold text-white mr-1">{result.c_channel_kg.toLocaleString()} กก.</span>
-                    <span className="text-slate-400 font-mono text-[11px]">({result.c_channel_bars} ท่อน @ 6ม.)</span>
+                    <span className="font-mono font-bold text-cyan-300 mr-1">{result.wallPlateBars} ท่อน</span>
+                    <span className="text-slate-500 font-mono text-[10px]">(@ 6ม. เผื่อเข้ามุม)</span>
                   </div>
                 </div>
 
-                {/* 2. เหล็กกล่องอกไก่ ขื่อ ดั้ง */}
+                {/* 2. เหล็กจันทัน */}
                 <div className="flex justify-between items-center py-1.5 border-b border-slate-850">
                   <div className="flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-blue-400"></span>
-                    <span className="text-slate-300 font-medium">เหล็กกล่อง 100x50 หรือ 4"x2" (ดั้ง ขื่อ อกไก่ ตะเข้สัน):</span>
+                    <span className="text-slate-300 font-medium">เหล็กจันทัน C-100x50x20 (@ {rafterSpacingM}ม.):</span>
                   </div>
                   <div className="text-right">
-                    <span className="font-mono font-bold text-white mr-1">{result.box_steel_kg.toLocaleString()} กก.</span>
-                    <span className="text-slate-400 font-mono text-[11px]">({result.box_steel_bars} ท่อน @ 6ม.)</span>
+                    <span className="font-mono font-bold text-blue-300 mr-1">{result.rafterBars} ท่อน</span>
+                    <span className="text-slate-500 font-mono text-[10px]">(@ 6ม.)</span>
+                  </div>
+                </div>
+
+                {/* 3. เหล็กอกไก่ ดั้ง และค้ำยัน */}
+                <div className="flex justify-between items-center py-1.5 border-b border-slate-850">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-indigo-400"></span>
+                    <span className="text-slate-300 font-medium">เหล็กอกไก่ & ดั้ง & ค้ำยัน (2C/กล่อง):</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="font-mono font-bold text-indigo-300 mr-1">{result.ridgeBeamBars + result.kingPostBars} ท่อน</span>
+                    <span className="text-slate-500 font-mono text-[10px]">(@ 6ม.)</span>
                   </div>
                 </div>
 
@@ -497,6 +681,60 @@ export const RoofEstimatorModal: React.FC<RoofEstimatorModalProps> = ({ isOpen, 
                     )}
                   </div>
                 </div>
+
+                {/* 🌟 7. ระบบครอบแห้ง Dry Ridge (สำหรับกระเบื้อง) 🌟 */}
+                {result.dryRidgeRolls > 0 && (materialType === 'concrete_tile' || materialType === 'cpac') && (
+                  <div className="flex justify-between items-center py-1.5 border-b border-slate-850">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+                      <span className="text-slate-300 font-medium">แผ่นปิดรอยต่อครอบแห้ง Dry Ridge:</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="font-mono font-bold text-amber-300 mr-1">{result.dryRidgeRolls} ม้วน</span>
+                      <span className="text-slate-500 font-mono text-[10px]">(ม้วนละ 3 ม. ฿{result.dryRidgeCost.toLocaleString()})</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* 🌟 8. รางน้ำตะเฆ่รางสแตนเลส (ทรงปั้นหยา) 🌟 */}
+                {result.valleyGutterM > 0 && style === 'hip' && (
+                  <div className="flex justify-between items-center py-1.5 border-b border-slate-850">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-teal-400"></span>
+                      <span className="text-slate-300 font-medium">รางน้ำตะเฆ่รางสแตนเลส 304 หนา 0.5มม.:</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="font-mono font-bold text-teal-300 mr-1">{result.valleyGutterM} ม.</span>
+                      <span className="text-slate-500 font-mono text-[10px]">(฿{result.valleyGutterCost.toLocaleString()})</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* 🌟 9. สกรูยึดหลังคา EPDM 🌟 */}
+                <div className="flex justify-between items-center py-1.5 border-b border-slate-850">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-purple-400"></span>
+                    <span className="text-slate-300 font-medium">สกรูปลายสว่านหัวหกเหลี่ยม + ยาง EPDM:</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="font-mono font-bold text-purple-300 mr-1">{result.roofScrewsPcs} ตัว</span>
+                    <span className="text-slate-500 font-mono text-[10px]">({Math.ceil(result.roofScrewsPcs / 100)} กล่อง)</span>
+                  </div>
+                </div>
+
+                {/* 🌟 10. ฉนวนกันความร้อน 🌟 */}
+                {insulationType !== 'none' && result.insulationSqm > 0 && (
+                  <div className="flex justify-between items-center py-1.5 border-b border-slate-850">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-pink-400"></span>
+                      <span className="text-slate-300 font-medium">ฉนวนกันความร้อน ({insulationType === 'pu_foam_1in' ? 'PU โฟม 1 นิ้ว' : insulationType === 'pe_foam_5mm' ? 'PE โฟม 5มม.' : 'Stay Cool ใยแก้ว'}):</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="font-mono font-bold text-pink-300 mr-1">{result.insulationSqm} ตร.ม.</span>
+                      <span className="text-slate-500 font-mono text-[10px]">(฿{(result.insulationMaterialCost + result.insulationLaborCost).toLocaleString()})</span>
+                    </div>
+                  </div>
+                )}
 
                 {/* สรุปค่าของ & ค่าแรงงานรวมทั้งหมด */}
                 <div className="mt-2 p-3 bg-gradient-to-r from-amber-500/10 via-slate-900 to-cyan-500/10 rounded-lg border border-amber-500/30 flex justify-between items-center">
