@@ -329,6 +329,7 @@ export interface ProjectSaveState {
 }
 
 export type ExternalItemType = 
+  | 'preliminaries'
   | 'fence'
   | 'carport'
   | 'drainage'
@@ -561,6 +562,14 @@ export interface BeamItem {
   stirrupSpacingM: number;       
 }
 
+export type FoundationPileType = 
+  | 'spread_footing'     // ฐานแผ่ (ไม่ตอกเข็ม)
+  | 'bored_pile_35'      // เสาเข็มเจาะ Ø 0.35 ม.
+  | 'driven_pile_i22'    // เสาเข็มไอ I-22
+  | 'driven_pile_i18'    // เสาเข็มไอ I-18
+  | 'micro_pile_i20'     // เสาเข็มไมโครไพล์
+  | 'hex_pile_6m';       // เสาเข็มหกเหลี่ยมกลวง 6 ม.
+
 export interface StructureCalcParams {
   columnCount: number;
   columnWidthM: number;
@@ -590,8 +599,15 @@ export interface StructureCalcParams {
   castInPlaceThicknessCm: number;
   wireMeshDiameterMm: 4 | 6;
   castInPlaceRebarType: 'RB9' | 'DB12';
-  castInPlaceRebarSpacingM: number;
-}
+    castInPlaceRebarSpacingM: number;
+  // งานดินขุดและเสาเข็ม (Earthwork & Foundation)
+  pileType?: FoundationPileType;
+  pileLengthM?: number;
+  pilesPerFooting?: number;
+  excavationDepthM?: number;
+  sandBeddingThicknessM?: number;
+  leanConcreteThicknessM?: number;
+};
 
 export interface StructureCalcResult {
   concreteFootingCuM: number;
@@ -634,4 +650,15 @@ export interface StructureCalcResult {
   estLaborCost: number;
   footingSummaryList?: { code: string; count: number; concreteCuM: number; formworkSqm: number; steelKg: number }[];
   beamSummaryList?: { code: string; lengthM: number; concreteCuM: number; formworkSqm: number; steelKg: number }[];
+  // ผลคำนวณงานเสาเข็มและงานดินขุด (Earthwork & Piling)
+  totalFootingsCount: number;
+  totalPilesCount: number;
+  totalPileMeters: number;
+  pileMaterialCost: number;
+  pileLaborCost: number;
+  pileCutOffCost: number;
+  excavationCuM: number;
+  backfillCuM: number;
+  sandBeddingCuM: number;
+  leanConcreteCuM: number;
 }

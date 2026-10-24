@@ -119,7 +119,7 @@ export const ExternalWorksModal: React.FC<ExternalWorksModalProps> = ({
   const handleApplyToBOQ = () => {
     const newBOQItems: BOQItem[] = Object.values(selectedItems).map(({ qty, preset }, idx) => ({
       id: `ext-custom-${Date.now()}-${idx}`,
-      category: 'external_works',
+      category: preset.type === 'preliminaries' ? 'preparation' : 'external_works',
       name: preset.name,
       spec: preset.spec,
       quantity: safeNum(qty),
@@ -264,6 +264,17 @@ export const ExternalWorksModal: React.FC<ExternalWorksModalProps> = ({
               }`}
             >
               แคตตาล็อกทั้งหมด ({EXTERNAL_WORKS_CATALOG.length})
+            </button>
+            <button
+              onClick={() => setActiveFilter('preliminaries')}
+              className={`px-3 py-1.5 rounded-xl font-bold flex items-center gap-1.5 transition ${
+                activeFilter === 'preliminaries' 
+                  ? 'bg-amber-500 text-slate-950 font-bold shadow-md' 
+                  : 'bg-slate-900 text-amber-400 hover:text-white border border-amber-500/30'
+              }`}
+            >
+              <span className="material-symbols-outlined text-sm">construction</span>
+              <span>งานเตรียมการ & ไฟ-น้ำชั่วคราว</span>
             </button>
             {/* ปุ่มเปิดเครื่องคิดคำนวณรั้ว */}
             <button

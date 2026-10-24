@@ -1616,7 +1616,13 @@ export function calculateStructureMaterials(params: StructureCalcParams): Struct
     castInPlaceThicknessCm,
     wireMeshDiameterMm,
     castInPlaceRebarType,
-    castInPlaceRebarSpacingM
+    castInPlaceRebarSpacingM,
+    pileType = 'bored_pile_35',
+    pileLengthM = 20,
+    pilesPerFooting = 1,
+    excavationDepthM = 1.50,
+    sandBeddingThicknessM = 0.05,
+    leanConcreteThicknessM = 0.05
   } = params;
 
   let concreteFootingCuM = 0;
@@ -1825,6 +1831,55 @@ export function calculateStructureMaterials(params: StructureCalcParams): Struct
   const estFormLab = totalFormworkSqm * 120;
 
   const wireMeshPricePerSqm = wireMeshDiameterMm === 6 ? 65 : 45;
+  // --- คำนวณงานเสาเข็มและงานดินขุด (Earthwork & Piling) ---
+  const totalFootingsCount = effectiveFootings.reduce((sum, f) => sum + (Number(f.count) || 0), 0) || columnCount;
+  const totalFootingAreaSqm = effectiveFootings.reduce((sum, f) => sum + ((f.widthM || 1) * (f.lengthM || 1) * (Number(f.count) || 1)), 0);
+
+  const isPiled = pileType !== 'spread_footing';
+  const totalPilesCount = isPiled ? totalFootingsCount * (pilesPerFooting || 1) : 0;
+  const effPileLen = isPiled ? (pileType === 'hex_pile_6m' ? 6 : (pileLengthM || 20)) : 0;
+  const totalPileMeters = totalPilesCount * effPileLen;
+
+  let pileUnitMat = 0;
+  let pileUnitLab = 0;
+  if (pileType === 'bored_pile_35') {
+    pileUnitMat = 650;
+    pileUnitLab = 280;
+  } else if (pileType === 'driven_pile_i22') {
+    pileUnitMat = 280;
+    pileUnitLab = 95;
+  } else if (pileType === 'driven_pile_i18') {
+    pileUnitMat = 230;
+    pileUnitLab = 85;
+  } else if (pileType === 'micro_pile_i20') {
+    pileUnitMat = 1100;
+    pileUnitLab = 350;
+  } else if (pileType === 'hex_pile_6m') {
+    pileUnitMat = 380 / 6;
+    pileUnitLab = 120 / 6;
+  }
+
+  const pileMaterialCost = Math.round(totalPileMeters * pileUnitMat);
+  const pileLaborCost = Math.round(totalPileMeters * pileUnitLab);
+  const pileCutOffCost = isPiled ? totalPilesCount * 220 : 0;
+
+  // ดินขุดฐานราก + คานคอดิน (เผื่อขอบหลุมเข้าแบบ +0.30 ม. แต่ละด้าน)
+  const footingExcavationCuM = effectiveFootings.reduce((sum, f) => {
+    const pitW = (f.widthM || 1) + 0.60;
+    const pitL = (f.lengthM || 1) + 0.60;
+    return sum + (pitW * pitL * (excavationDepthM || 1.50) * (Number(f.count) || 1));
+  }, 0);
+
+  const beamExcavationCuM = effectiveBeams.reduce((sum, b) => {
+    return sum + ((b.totalLengthM || 0) * ((b.widthM || 0.20) + 0.20) * ((b.depthM || 0.40) + 0.10));
+  }, 0);
+
+  const excavationCuM = Math.round((footingExcavationCuM + beamExcavationCuM) * 10) / 10;
+  const backfillCuM = Math.max(0, Math.round((excavationCuM - concreteFootingCuM - (concreteBeamCuM * 0.7)) * 10) / 10);
+
+  const sandBeddingCuM = Math.round(totalFootingAreaSqm * (sandBeddingThicknessM || 0.05) * 100) / 100;
+  const leanConcreteCuM = Math.round(totalFootingAreaSqm * (leanConcreteThicknessM || 0.05) * 100) / 100;
+
   const estPrecastPlanksMat = effectivePrecastSqm * 240;
   const estPrecastPlanksLab = effectivePrecastSqm * 55;
   const estWireMeshMat = wireMeshAreaSqm * wireMeshPricePerSqm;
@@ -1872,7 +1927,17 @@ export function calculateStructureMaterials(params: StructureCalcParams): Struct
     estMaterialCost: Math.round(estConcreteMat + estSteelMat + estFormMat + slabExtraMat),
     estLaborCost: Math.round(estConcreteLab + estSteelLab + estFormLab + slabExtraLab),
     footingSummaryList,
-    beamSummaryList
+    beamSummaryList,
+    totalFootingsCount,
+    totalPilesCount,
+    totalPileMeters,
+    pileMaterialCost,
+    pileLaborCost,
+    pileCutOffCost,
+    excavationCuM,
+    backfillCuM,
+    sandBeddingCuM,
+    leanConcreteCuM
   };
 }
 

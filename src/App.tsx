@@ -1,3 +1,4 @@
+import { exportBOQToExcel } from './services/excelExporter';
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { BOQItem, ConstructionCategory, QuotationMeta, ProjectSaveState, PaymentMilestone, ProjectStatus } from './types';
 import { CATEGORY_LABELS, DEFAULT_STANDARD_BOQ, DEFAULT_BASE_AREA_SQM, DEFAULT_QUOTATION_META, DEFAULT_PAYMENT_MILESTONES, formatMilestonesToPaymentTerms } from './constants';
@@ -542,6 +543,26 @@ export default function App() {
       fileInputRef.current.value = '';
     }
   };
+  const handleExportExcel = () => {
+    setIsExporting(true);
+    try {
+      exportBOQToExcel({
+        items,
+        projectName: projectName || 'โครงการก่อสร้าง',
+        houseAreaSqm: houseAreaSqm || 120,
+        quotationMeta,
+        milestones,
+        overheadPercent: 10,
+        vatPercent: 0
+      });
+    } catch (err) {
+      console.error('Failed to export Excel:', err);
+      alert('เกิดข้อผิดพลาดในการสร้างไฟล์ Excel');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   const handleExportCSV = async () => {
     setIsExporting(true);
     try {
@@ -715,6 +736,15 @@ export default function App() {
               >
                 <span className="material-symbols-outlined text-sm text-cyan-400">file_open</span>
                 <span>เปิด</span>
+              </button>
+              <button
+                onClick={handleExportExcel}
+                disabled={isExporting}
+                className="px-2.5 py-1.5 rounded-lg bg-emerald-600/30 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/40 text-xs font-bold flex items-center gap-1.5 transition active:scale-95 shadow-sm"
+                title="ส่งออกรายการเป็นไฟล์ Excel (.xlsx) สวยงามสำหรับยื่นกู้ธนาคาร (ธอส./ออมสิน)"
+              >
+                <span className="material-symbols-outlined text-sm text-emerald-400">description</span>
+                <span>Excel (.xlsx)</span>
               </button>
               <button
                 onClick={handleExportCSV}

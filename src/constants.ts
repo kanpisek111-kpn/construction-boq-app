@@ -821,6 +821,85 @@ export const DECORATION_CATALOG: DecorationItemPreset[] = [
 
 // 🏡 แคตตาล็อกงานภายนอกอาคาร
 export const EXTERNAL_WORKS_CATALOG: ExternalWorksPreset[] = [
+  // 🚧 งานเตรียมการ & สาธารณูปโภคชั่วคราวไซต์งาน (Preliminaries & Utilities)
+  {
+    id: 'ext-temp-electric',
+    type: 'preliminaries',
+    name: 'งานขอติดตั้งมิเตอร์ไฟฟ้าชั่วคราว พร้อมตู้เมนและสายไฟจ่ายไซต์งาน',
+    spec: 'หม้อไฟชั่วคราว 15(45)A 1 เฟส 2 สาย ตู้ควบคุมเบรกเกอร์ Main CB 50A ปลั๊กพ่วงกันน้ำ และสายไฟเมน VAF/NYY 2x16',
+    unit: 'งาน',
+    defaultQty: 1,
+    materialUnitPrice: 8500,
+    laborUnitPrice: 2500,
+    wastePercent: 0,
+    description: 'จ่ายไฟฟ้าให้เครื่องตัดเหล็ก เครื่องผสมปูน ไฟส่องสว่าง และอุปกรณ์ช่างตลอดระยะเวลาก่อสร้าง',
+    popularNote: 'มาตรฐานการไฟฟ้านครหลวง (กฟน.) / ส่วนภูมิภาค (กฟภ.)'
+  },
+  {
+    id: 'ext-temp-water',
+    type: 'preliminaries',
+    name: 'งานขอติดตั้งมิเตอร์น้ำประปาชั่วคราว พร้อมเดินท่อน้ำและก๊อกจ่ายไซต์งาน',
+    spec: 'มาตรวัดน้ำ 1/2 นิ้ว ท่อ PVC ชั้น 13.5 พร้อมบอลวาล์ว ก๊อกน้ำสนาม และสายยางรดน้ำบ่มคอนกรีต',
+    unit: 'งาน',
+    defaultQty: 1,
+    materialUnitPrice: 4800,
+    laborUnitPrice: 1800,
+    wastePercent: 0,
+    description: 'ใช้น้ำสำหรับผสมปูน บ่มคอนกรีต รดน้ำล้างเครื่องมือ และอุปโภคของช่าง',
+    popularNote: 'การประปานครหลวง (กปน.) / ส่วนภูมิภาค (กปภ.)'
+  },
+  {
+    id: 'ext-permit-license',
+    type: 'preliminaries',
+    name: 'งานประสานงานและค่าธรรมเนียมขอใบอนุญาตก่อสร้างอาคาร (แบบ อ.1)',
+    spec: 'ค่าธรรมเนียมตรวจแบบ เทศบาล/อบต. พิมพ์เขียวพิมพ์แบบ 5 ชุด พร้อมจัดทำเอกสารประกอบยื่นขออนุญาต',
+    unit: 'งาน',
+    defaultQty: 1,
+    materialUnitPrice: 3500,
+    laborUnitPrice: 4500,
+    wastePercent: 0,
+    description: 'ยื่นขอใบอนุญาตก่อสร้างตาม พ.ร.บ. ควบคุมอาคาร ให้ถูกต้องตามกฎหมายก่อนเริ่มงาน',
+    popularNote: 'เอกสารสำคัญใช้ประกอบการยื่นกู้เงินสร้างบ้านกับสถาบันการเงิน'
+  },
+  {
+    id: 'ext-site-enclosure',
+    type: 'preliminaries',
+    name: 'งานรั้วชั่วคราวล้อมรอบพื้นที่ก่อสร้าง (แผ่นเมทัลชีท/สังกะสี สูง 1.80-2.00 ม.)',
+    spec: 'โครงสร้างไม้ยูคาลิปตัส/เหล็กกล่อง ยึดแผ่นสังกะสี/เมทัลชีท พร้อมประตูทางเข้า-ออกไซต์งาน',
+    unit: 'ม.',
+    defaultQty: 40,
+    materialUnitPrice: 320,
+    laborUnitPrice: 150,
+    wastePercent: 5,
+    description: 'ป้องกันฝุ่นละออง เศษวัสดุกระเด็น ป้องกันบุคคลภายนอก และควบคุมความปลอดภัยรอบบริเวณบ้านข้างเคียง',
+    popularNote: 'กฎหมายผังเมืองและเทศบัญญัติกำหนดให้ต้องมีแนวกั้นบริเวณก่อสร้าง'
+  },
+  {
+    id: 'ext-temp-toilet',
+    type: 'preliminaries',
+    name: 'งานก่อสร้างห้องน้ำ-สุขาคนงานชั่วคราว พร้อมถังบำบัดหรือบ่อเกรอะวงขอบปูน',
+    spec: 'โครงสร้างไม้ยูคา/สังกะสี โถนั่งยอง ราดน้ำ ถังเก็บกักสิ่งปฏิกูล ขนาด 1 ห้อง',
+    unit: 'ห้อง',
+    defaultQty: 1,
+    materialUnitPrice: 4200,
+    laborUnitPrice: 2000,
+    wastePercent: 0,
+    description: 'สุขอนามัยสำหรับคนงานก่อสร้าง ถูกสุขลักษณะ ป้องกันกลิ่นและความสกปรก',
+    popularNote: 'มาตรฐานความสะอาดสิ่งแวดล้อมไซต์งานก่อสร้าง'
+  },
+  {
+    id: 'ext-site-safety-sign',
+    type: 'preliminaries',
+    name: 'งานป้ายแสดงรายละเอียดโครงการ และป้ายเตือนความปลอดภัย (Safety Sign)',
+    spec: 'ป้ายไวนิลขึงกรอบไม้ ขนาด 1.20 x 2.40 ม. ระบุเลขที่ใบอนุญาต ชื่อเจ้าของ วิศวกร และผู้รับเหมา',
+    unit: 'ชุด',
+    defaultQty: 1,
+    materialUnitPrice: 1800,
+    laborUnitPrice: 600,
+    wastePercent: 0,
+    description: 'ตามพระราชบัญญัติควบคุมอาคาร ต้องติดตั้งบริเวณด้านหน้าทางเข้าโครงการ',
+    popularNote: 'ข้อบังคับทางกฎหมายสำหรับงานก่อสร้างอาคาร'
+  },
   {
     id: 'ext-fence-concrete-block',
     type: 'fence',

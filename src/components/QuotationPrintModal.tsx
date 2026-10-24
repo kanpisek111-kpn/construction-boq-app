@@ -1,3 +1,4 @@
+import { exportBOQToExcel } from '../services/excelExporter';
 import React, { useState } from 'react';
 import { BOQItem, QuotationMeta, ConstructionCategory } from '../types';
 import { CATEGORY_LABELS } from '../constants';
@@ -74,6 +75,23 @@ export const QuotationPrintModal: React.FC<QuotationPrintModalProps> = ({
             >
               <span className="material-symbols-outlined text-sm">edit_note</span>
               <span>{showMetaEdit ? 'ซ่อนการแก้ไขหัวกระดาษ' : 'แก้ไขข้อมูลหัวบิล / ลูกค้า'}</span>
+            </button>
+            <button
+              onClick={() => {
+                exportBOQToExcel({
+                  items,
+                  projectName,
+                  houseAreaSqm,
+                  quotationMeta: meta,
+                  overheadPercent,
+                  vatPercent
+                });
+              }}
+              className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-emerald-600/20 transition active:scale-95"
+              title="ส่งออกไฟล์ Excel (.xlsx) สำหรับยื่นกู้ธนาคาร"
+            >
+              <span className="material-symbols-outlined text-sm">description</span>
+              <span>ดาวน์โหลด Excel</span>
             </button>
             <button
               onClick={handlePrint}
@@ -382,6 +400,22 @@ export const QuotationPrintModal: React.FC<QuotationPrintModalProps> = ({
               className="px-4 py-1.5 rounded-xl text-xs text-slate-300 hover:bg-slate-800 transition"
             >
               ปิด
+            </button>
+            <button
+              onClick={() => {
+                exportBOQToExcel({
+                  items,
+                  projectName,
+                  houseAreaSqm,
+                  quotationMeta: meta,
+                  overheadPercent,
+                  vatPercent
+                });
+              }}
+              className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 transition active:scale-95"
+            >
+              <span className="material-symbols-outlined text-sm">description</span>
+              <span>ส่งออก Excel (.xlsx)</span>
             </button>
             <button
               onClick={handlePrint}
