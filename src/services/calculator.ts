@@ -1789,9 +1789,25 @@ export function calculateStructureMaterials(params: StructureCalcParams): Struct
   const db12Bars = Math.ceil(totalDB12M / 10);
   const db16Bars = Math.ceil(totalDB16M / 10);
 
-  const totalStirrupM = (totalColStirrupM + totalBeamStirrupM) * 1.10;
-  const stirrupKg = Math.round(totalStirrupM * 0.38);
-  const stirrupBars = Math.ceil(totalStirrupM / 10);
+  // 1. แยกคำนวณเหล็กปลอกเสา คสล. (Column Ties)
+  const colStirrupsTotalPcs = columnCount * colStirrupsPerCol;
+  const colStirrupTotalM = Math.round(totalColStirrupM * 1.08 * 10) / 10;
+  const colStirrupKg = Math.round(colStirrupTotalM * 0.388); // RB6/RB9 เฉลี่ย ~0.388 กก./ม.
+  const colStirrupBars = Math.ceil(colStirrupTotalM / 10);
+
+  // 2. แยกคำนวณเหล็กปลอกคาน คสล. (Beam Stirrups)
+  let beamStirrupsTotalPcs = 0;
+  effectiveBeams.forEach(b => {
+    beamStirrupsTotalPcs += (Math.floor(b.totalLengthM / b.stirrupSpacingM) + 1);
+  });
+  const beamStirrupTotalM = Math.round(totalBeamStirrupM * 1.08 * 10) / 10;
+  const beamStirrupKg = Math.round(beamStirrupTotalM * 0.388);
+  const beamStirrupBars = Math.ceil(beamStirrupTotalM / 10);
+
+  // รวมเหล็กปลอกทั้งหมด
+  const stirrupKg = colStirrupKg + beamStirrupKg;
+  const stirrupBars = colStirrupBars + beamStirrupBars;
+  const totalStirrupM = colStirrupTotalM + beamStirrupTotalM;
 
   const totalSteelKg = db12Kg + db16Kg + stirrupKg + (castInPlaceRebarType === 'RB9' ? slabCastRebarKg : 0);
   const tieWireKg = Math.max(5, Math.ceil(totalSteelKg * 0.02));
@@ -1829,6 +1845,14 @@ export function calculateStructureMaterials(params: StructureCalcParams): Struct
     rockCuM,
     concreteSpacersPcs,
     rebarLapAllowanceKg,
+    colStirrupPcs: colStirrupsTotalPcs,
+    colStirrupM: colStirrupTotalM,
+    colStirrupKg,
+    colStirrupBars,
+    beamStirrupPcs: beamStirrupsTotalPcs,
+    beamStirrupM: beamStirrupTotalM,
+    beamStirrupKg,
+    beamStirrupBars,
     formworkFootingSqm: Math.round(formworkFootingSqm * 10) / 10,
     formworkColumnSqm: Math.round(formworkColumnSqm * 10) / 10,
     formworkBeamSqm: Math.round(formworkBeamSqm * 10) / 10,

@@ -611,6 +611,14 @@ export interface StructureCalcResult {
   db12Bars: number;
   db16Kg: number;
   db16Bars: number;
+  colStirrupPcs: number;
+  colStirrupM: number;
+  colStirrupKg: number;
+  colStirrupBars: number;
+  beamStirrupPcs: number;
+  beamStirrupM: number;
+  beamStirrupKg: number;
+  beamStirrupBars: number;
   stirrupKg: number;
   stirrupBars: number;
   precastPlanksCount: number;
