@@ -24,6 +24,7 @@ import { SanitaryFixtureSelectorModal } from './components/SanitaryFixtureSelect
 import { QuotationPrintModal } from './components/QuotationPrintModal';
 import { MilestonesManagerModal } from './components/MilestonesManagerModal';
 import { QuickBOQWizardModal } from './components/QuickBOQWizardModal';
+import { AISanityCheckModal } from './components/AISanityCheckModal';
 import { CostAnalyticsModal } from './components/CostAnalyticsModal';
 import { PaintEstimatorModal } from './components/PaintEstimatorModal';
 import { Flow } from 'flow-sdk';
@@ -140,6 +141,15 @@ export default function App() {
   const [isExporting, setIsExporting] = useState<boolean>(false);
   const [isQuickWizardOpen, setIsQuickWizardOpen] = useState<boolean>(false);
   const [isCostAnalyticsOpen, setIsCostAnalyticsOpen] = useState<boolean>(false);
+  const [isDaylightMode, setIsDaylightMode] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('thai_boq_daylight_mode') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [isSanityCheckOpen, setIsSanityCheckOpen] = useState<boolean>(false);
+
   // Hidden File Input for Loading Project File
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Load Google Fonts & CSS securely
@@ -179,6 +189,135 @@ export default function App() {
             -webkit-font-feature-settings: 'liga';
             -webkit-font-smoothing: antialiased;
           }
+          /* ============================================================ */
+          /* HIGH-CONTRAST DAYLIGHT SITE MODE (สำหรับตรวจหน้างานตากแดด)   */
+          /* ============================================================ */
+          html.daylight-mode,
+          body.daylight-mode,
+          .daylight-mode {
+            background-color: #f1f5f9 !important;
+            color: #0f172a !important;
+          }
+          .daylight-mode body {
+            background-color: #f8fafc !important;
+            color: #0f172a !important;
+          }
+          .daylight-mode .bg-slate-950,
+          .daylight-mode .bg-slate-900 {
+            background-color: #ffffff !important;
+            color: #0f172a !important;
+            box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.08) !important;
+          }
+          .daylight-mode .bg-slate-950\/80,
+          .daylight-mode .bg-slate-950\/85,
+          .daylight-mode .bg-slate-950\/90,
+          .daylight-mode .bg-slate-900\/80,
+          .daylight-mode .bg-slate-900\/90,
+          .daylight-mode .bg-slate-900\/95 {
+            background-color: #ffffff !important;
+            color: #0f172a !important;
+          }
+          .daylight-mode .bg-slate-850,
+          .daylight-mode .bg-slate-800 {
+            background-color: #f8fafc !important;
+            color: #0f172a !important;
+          }
+          .daylight-mode .bg-slate-800\/50,
+          .daylight-mode .bg-slate-800\/60,
+          .daylight-mode .bg-slate-800\/80 {
+            background-color: #e2e8f0 !important;
+            color: #0f172a !important;
+          }
+          .daylight-mode .bg-slate-700 {
+            background-color: #cbd5e1 !important;
+            color: #0f172a !important;
+          }
+          .daylight-mode .border-slate-800,
+          .daylight-mode .border-slate-800\/90,
+          .daylight-mode .border-slate-750,
+          .daylight-mode .border-slate-700,
+          .daylight-mode .border-slate-700\/80 {
+            border-color: #cbd5e1 !important;
+          }
+          .daylight-mode .text-slate-100,
+          .daylight-mode .text-white {
+            color: #0f172a !important;
+          }
+          .daylight-mode .text-slate-200,
+          .daylight-mode .text-slate-300 {
+            color: #1e293b !important;
+            font-weight: 600 !important;
+          }
+          .daylight-mode .text-slate-400,
+          .daylight-mode .text-slate-500 {
+            color: #475569 !important;
+            font-weight: 500 !important;
+          }
+          .daylight-mode table {
+            background-color: #ffffff !important;
+            color: #0f172a !important;
+          }
+          .daylight-mode table thead tr {
+            background-color: #e2e8f0 !important;
+            color: #0f172a !important;
+            font-weight: 800 !important;
+            border-bottom: 2px solid #94a3b8 !important;
+          }
+          .daylight-mode table td {
+            border-color: #e2e8f0 !important;
+            color: #0f172a !important;
+          }
+          .daylight-mode table tr:nth-child(even) td {
+            background-color: #f8fafc !important;
+          }
+          .daylight-mode table tr:hover td {
+            background-color: #e0f2fe !important;
+          }
+          .daylight-mode input,
+          .daylight-mode select,
+          .daylight-mode textarea {
+            background-color: #ffffff !important;
+            color: #0f172a !important;
+            border-color: #94a3b8 !important;
+          }
+          .daylight-mode input:focus,
+          .daylight-mode select:focus,
+          .daylight-mode textarea:focus {
+            border-color: #2563eb !important;
+            outline: 2px solid #bfdbfe !important;
+          }
+          .daylight-mode .bg-cyan-950,
+          .daylight-mode .bg-cyan-950\/70 {
+            background-color: #e0f2fe !important;
+            color: #0369a1 !important;
+            border-color: #7dd3fc !important;
+          }
+          .daylight-mode .bg-amber-950,
+          .daylight-mode .bg-amber-950\/70 {
+            background-color: #fef3c7 !important;
+            color: #92400e !important;
+            border-color: #fcd34d !important;
+          }
+          .daylight-mode .bg-emerald-950,
+          .daylight-mode .bg-emerald-950\/70,
+          .daylight-mode .bg-emerald-950\/80 {
+            background-color: #d1fae5 !important;
+            color: #065f46 !important;
+            border-color: #6ee7b7 !important;
+          }
+          .daylight-mode .bg-rose-950,
+          .daylight-mode .bg-rose-950\/80 {
+            background-color: #ffe4e6 !important;
+            color: #9f1239 !important;
+            border-color: #fca5a5 !important;
+          }
+          .daylight-mode .bg-orange-950,
+          .daylight-mode .bg-orange-950\/70 {
+            background-color: #ffedd5 !important;
+            color: #9a3412 !important;
+            border-color: #fdba74 !important;
+          }
+
         `;
         document.head.appendChild(style);
       }
@@ -750,6 +889,33 @@ export default function App() {
                 <span>เซ็ต 0</span>
               </button>
               
+              
+              {/* AI ตรวจสอบความถูกต้อง BOQ */}
+              <button
+                onClick={() => setIsSanityCheckOpen(true)}
+                className="px-2.5 py-1.5 rounded-lg bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-black flex items-center gap-1 shadow-sm transition active:scale-95"
+                title="AI ตรวจสอบความขัดแย้งของปริมาณงาน สัดส่วนวิศวกรรม วสท. และรายการที่อาจลืมคิด"
+              >
+                <span className="material-symbols-outlined text-sm">verified_user</span>
+                <span>AI ตรวจ BOQ</span>
+              </button>
+
+              {/* โหมดหน้างานกลางแจ้ง (High-Contrast Daylight Site Mode) */}
+              <button
+                onClick={() => setIsDaylightMode(prev => !prev)}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-black flex items-center gap-1 transition active:scale-95 shadow-sm border ${
+                  isDaylightMode
+                    ? 'bg-amber-400 text-slate-950 border-amber-500 shadow-amber-400/40 ring-2 ring-amber-300'
+                    : 'bg-slate-800 hover:bg-slate-700 text-amber-300 border-slate-700'
+                }`}
+                title="สลับโหมดหน้างานกลางแจ้ง (High-Contrast Daylight) พื้นหลังสว่างมองตัวเลขชัดเจนตากแดด"
+              >
+                <span className="material-symbols-outlined text-sm font-bold">
+                  {isDaylightMode ? 'light_mode' : 'wb_sunny'}
+                </span>
+                <span>{isDaylightMode ? 'โหมดสว่างสู้แดด' : 'โหมดกลางแจ้ง'}</span>
+              </button>
+
               <button
                 onClick={() => setIsCostAnalyticsOpen(true)}
                 className="px-2.5 py-1.5 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-black flex items-center gap-1 shadow-sm transition active:scale-95"
@@ -1512,6 +1678,18 @@ export default function App() {
       />
     
       {/* Quick BOQ Wizard Modal */}
+      
+      {/* AI Sanity & Safety Check Modal */}
+      <AISanityCheckModal
+        isOpen={isSanityCheckOpen}
+        onClose={() => setIsSanityCheckOpen(false)}
+        items={items}
+        houseAreaSqm={houseAreaSqm}
+        overheadPercent={overheadPercent}
+        vatPercent={vatPercent}
+        projectName={projectName}
+        onApplyFixes={(updatedItems) => setItems(updatedItems)}
+      />
       <QuickBOQWizardModal
         isOpen={isQuickWizardOpen}
         onClose={() => setIsQuickWizardOpen(false)}
