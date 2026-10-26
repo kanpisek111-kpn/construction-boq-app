@@ -179,7 +179,7 @@ export const ActualCostTrackerView: React.FC<ActualCostTrackerViewProps> = ({
         desc: 'ค่าใช้จ่ายจริงเกินงบหรือกำไรเหลือน้อยกว่า 5% จำเป็นต้องหยุดค่าใช้จ่ายรั่วไหลทันที'
       };
     }
-  }, [profitMarginPercent]);
+  }, [profitMarginPercent, expenses]);
 
   // Categories with budget overruns
   const overrunCategories = useMemo(() => {

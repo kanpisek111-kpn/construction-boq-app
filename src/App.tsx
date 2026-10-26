@@ -99,21 +99,24 @@ function loadProjectsList(): ProjectSaveState[] {
 function saveProjectsList(list: ProjectSaveState[]): void {
   try { localStorage.setItem(PROJECTS_LIST_KEY, JSON.stringify(list)); } catch {}
 }
-export default function App() {
-  // ======== MULTI-PROJECT STATE ========
-  const [projects, setProjects] = useState<ProjectSaveState[]>(() => {
-    const list = loadProjectsList();
-    if (list.length > 0) return list;
+
+function getInitialActiveProject(): { projects: ProjectSaveState[]; activeProject: ProjectSaveState } {
+  let list = loadProjectsList();
+  if (list.length === 0) {
     const defaultProj = makeDefaultProject();
     saveProjectsList([defaultProj]);
-    return [defaultProj];
-  });
-  const [activeProjectId, setActiveProjectId] = useState<string>(() => {
-    const list = loadProjectsList();
-    const savedId = typeof window !== 'undefined' ? localStorage.getItem(ACTIVE_PROJECT_ID_KEY) : null;
-    if (savedId && list.some((p) => p.id === savedId)) return savedId;
-    return list[0]?.id || 'proj-init';
-  });
+    list = [defaultProj];
+  }
+  const savedId = typeof window !== 'undefined' ? localStorage.getItem(ACTIVE_PROJECT_ID_KEY) : null;
+  const active = (savedId && list.find((p) => p.id === savedId)) || list[0] || makeDefaultProject();
+  return { projects: list, activeProject: active };
+}
+
+export default function App() {
+  // ======== MULTI-PROJECT STATE ========
+  const initialData = useMemo(() => getInitialActiveProject(), []);
+  const [projects, setProjects] = useState<ProjectSaveState[]>(initialData.projects);
+  const [activeProjectId, setActiveProjectId] = useState<string>(initialData.activeProject.id);
   const [isProjectManagerOpen, setIsProjectManagerOpen] = useState(false);
 
   // Active project reference
@@ -122,32 +125,32 @@ export default function App() {
   }, [projects, activeProjectId]);
 
   const [activeMainTab, setActiveMainTab] = useState<'dashboard' | 'boq_estimate' | 'site_procurement' | 'gantt_schedule' | 'actual_cost_tracker'>('dashboard');
-  const [houseAreaSqm, setHouseAreaSqm] = useState<number>(120);
-  const [items, setItems] = useState<BOQItem[]>(DEFAULT_STANDARD_BOQ);
+  const [houseAreaSqm, setHouseAreaSqm] = useState<number>(() => initialData.activeProject.houseAreaSqm || 120);
+  const [items, setItems] = useState<BOQItem[]>(() => initialData.activeProject.items || DEFAULT_STANDARD_BOQ);
   const [selectedCategory, setSelectedCategory] = useState<ConstructionCategory | 'all'>('all');
   const [boqSearchQuery, setBoqSearchQuery] = useState<string>('');
-  const [projectName, setProjectName] = useState<string>('บ้านพักอาศัย คสล. 1-2 ชั้น พร้อมรั้วและโรงจอดรถ');
-  const [overheadPercent, setOverheadPercent] = useState<number>(7);
-  const [vatPercent, setVatPercent] = useState<number>(7);
+  const [projectName, setProjectName] = useState<string>(() => initialData.activeProject.projectName || 'บ้านพักอาศัย คสล. 1-2 ชั้น พร้อมรั้วและโรงจอดรถ');
+  const [overheadPercent, setOverheadPercent] = useState<number>(() => initialData.activeProject.overheadPercent ?? 7);
+  const [vatPercent, setVatPercent] = useState<number>(() => initialData.activeProject.vatPercent ?? 7);
   const [procurementCheckedItems, setProcurementCheckedItems] = useState<Record<string, boolean>>(() => {
-    return activeProject?.procurementCheckedItems || {};
+    return initialData.activeProject.procurementCheckedItems || {};
   });
   const [ganttTasks, setGanttTasks] = useState<GanttTask[]>(() => {
-    return activeProject?.customTasks || [];
+    return initialData.activeProject.customTasks || [];
   });
   const [actualExpenses, setActualExpenses] = useState<ActualExpenseItem[]>(() => {
-    if (activeProject && Array.isArray(activeProject.actualExpenses)) {
-      return activeProject.actualExpenses.filter((e: any) => !e.id?.startsWith('exp-init-'));
+    if (initialData.activeProject && Array.isArray(initialData.activeProject.actualExpenses)) {
+      return initialData.activeProject.actualExpenses.filter((e: any) => !e.id?.startsWith('exp-init-'));
     }
     return [];
   });
-  const [quotationMeta, setQuotationMeta] = useState<QuotationMeta>(DEFAULT_QUOTATION_META);
-  const [milestones, setMilestones] = useState<PaymentMilestone[]>(DEFAULT_PAYMENT_MILESTONES);
+  const [quotationMeta, setQuotationMeta] = useState<QuotationMeta>(() => initialData.activeProject.quotationMeta || DEFAULT_QUOTATION_META);
+  const [milestones, setMilestones] = useState<PaymentMilestone[]>(() => initialData.activeProject.milestones || DEFAULT_PAYMENT_MILESTONES);
   const [projectStartDate, setProjectStartDate] = useState<string>(() => {
-    return activeProject?.projectStartDate || new Date().toISOString().split('T')[0];
+    return initialData.activeProject.projectStartDate || new Date().toISOString().split('T')[0];
   });
   const [projectEndDate, setProjectEndDate] = useState<string>(() => {
-    return activeProject?.projectEndDate || '';
+    return initialData.activeProject.projectEndDate || '';
   });
   // Auto-save feedback state
   const [lastAutoSavedTime, setLastAutoSavedTime] = useState<string>('');
@@ -358,52 +361,47 @@ export default function App() {
       console.warn('Font loading non-fatal issue', e);
     }
   }, []);
-  // 1. กู้คืน Draft อัตโนมัติเมื่อเปิดโปรแกรม
+  // 1. กู้คืน Draft อัตโนมัติเฉพาะของโครงการปัจจุบัน (ถ้ามีงานค้างล่าสุดในเซสชัน)
   useEffect(() => {
     try {
       if (typeof window !== 'undefined' && window.sessionStorage) {
         const savedDraft = window.sessionStorage.getItem(DRAFT_STORAGE_KEY);
         if (savedDraft) {
           const parsed: ProjectSaveState = JSON.parse(savedDraft);
-          if (parsed && Array.isArray(parsed.items) && parsed.items.length > 0) {
+          if (parsed && Array.isArray(parsed.items) && parsed.items.length > 0 && (parsed.id === activeProjectId || !parsed.id)) {
             setProjectName(parsed.projectName || 'บ้านพักอาศัย คสล. 1-2 ชั้น');
             setHouseAreaSqm(parsed.houseAreaSqm || 120);
             setOverheadPercent(typeof parsed.overheadPercent === 'number' ? parsed.overheadPercent : 7);
             setVatPercent(typeof parsed.vatPercent === 'number' ? parsed.vatPercent : 7);
             setItems(parsed.items);
             if (parsed.quotationMeta) setQuotationMeta(parsed.quotationMeta);
-          if (Array.isArray(parsed.actualExpenses)) {
-            setActualExpenses(parsed.actualExpenses.filter((e: any) => !e.id?.startsWith('exp-init-')));
-          } else {
-            setActualExpenses([]);
-          }
-          if (parsed.procurementCheckedItems) {
-            setProcurementCheckedItems(parsed.procurementCheckedItems);
-          } else {
-            setProcurementCheckedItems({});
-          }
-          if (Array.isArray(parsed.customTasks)) {
-            setGanttTasks(parsed.customTasks);
-          } else {
-            setGanttTasks([]);
-          }
+            if (Array.isArray(parsed.actualExpenses)) {
+              setActualExpenses(parsed.actualExpenses.filter((e: any) => !e.id?.startsWith('exp-init-')));
+            } else {
+              setActualExpenses([]);
+            }
+            if (parsed.procurementCheckedItems) {
+              setProcurementCheckedItems(parsed.procurementCheckedItems);
+            } else {
+              setProcurementCheckedItems({});
+            }
+            if (Array.isArray(parsed.customTasks)) {
+              setGanttTasks(parsed.customTasks);
+            } else {
+              setGanttTasks([]);
+            }
             if (Array.isArray(parsed.milestones) && parsed.milestones.length > 0) {
               setMilestones(parsed.milestones);
             }
             if (parsed.projectStartDate) setProjectStartDate(parsed.projectStartDate);
             if (parsed.projectEndDate) setProjectEndDate(parsed.projectEndDate);
-          if (parsed.projectEndDate) setProjectEndDate(parsed.projectEndDate);
-            if (parsed.procurementCheckedItems) setProcurementCheckedItems(parsed.procurementCheckedItems);
-            if (Array.isArray(parsed.customTasks)) setGanttTasks(parsed.customTasks);
-            setSaveStatusToast('กู้คืนงานร่างเรียบร้อย ✓');
-            setTimeout(() => setSaveStatusToast(''), 3000);
           }
         }
       }
     } catch (e) {
       console.warn('Draft recovery skipped', e);
     }
-  }, []);
+  }, [activeProjectId]);
   // 2. บันทึก Draft อัตโนมัติ + sync projects list
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -462,6 +460,11 @@ export default function App() {
         quotationMeta,
         milestones,
         projectStartDate,
+        projectEndDate,
+        customTasks: ganttTasks,
+        actualExpenses,
+        procurementCheckedItems,
+        status: activeProject?.status || 'draft'
       };
       const next = prev.map((p) => (p.id === activeProjectId ? currentState : p));
       saveProjectsList(next);
@@ -490,11 +493,7 @@ export default function App() {
     } else {
       setProjectStartDate(new Date().toISOString().split('T')[0]);
     }
-    if (target.projectEndDate) {
-      setProjectEndDate(target.projectEndDate);
-    } else {
-      setProjectEndDate('');
-    }
+    setProjectEndDate(target.projectEndDate || '');
     if (Array.isArray(target.actualExpenses)) {
       setActualExpenses(target.actualExpenses.filter((e: any) => !e.id?.startsWith('exp-init-')));
     } else {
@@ -548,7 +547,11 @@ export default function App() {
     setItems(newProj.items);
     setQuotationMeta(newProj.quotationMeta);
     setMilestones(newProj.milestones || DEFAULT_PAYMENT_MILESTONES);
-    if (newProj.projectStartDate) setProjectStartDate(newProj.projectStartDate);
+    setProjectStartDate(newProj.projectStartDate || new Date().toISOString().split('T')[0]);
+    setProjectEndDate(newProj.projectEndDate || '');
+    setActualExpenses([]);
+    setProcurementCheckedItems({});
+    setGanttTasks([]);
 
     setActiveMainTab('boq_estimate');
     setSaveStatusToast(`สร้างโครงการ "${newProj.projectName}" เรียบร้อย ✓`);
@@ -614,10 +617,14 @@ export default function App() {
         setHouseAreaSqm(first.houseAreaSqm);
         setOverheadPercent(first.overheadPercent ?? 7);
         setVatPercent(first.vatPercent ?? 7);
-        setItems(first.items);
+        setItems(first.items || DEFAULT_STANDARD_BOQ);
         if (first.quotationMeta) setQuotationMeta(first.quotationMeta);
         if (Array.isArray(first.milestones) && first.milestones.length > 0) setMilestones(first.milestones);
-        if (first.projectStartDate) setProjectStartDate(first.projectStartDate);
+        setProjectStartDate(first.projectStartDate || new Date().toISOString().split('T')[0]);
+        setProjectEndDate(first.projectEndDate || '');
+        setActualExpenses(Array.isArray(first.actualExpenses) ? first.actualExpenses.filter((e: any) => !e.id?.startsWith('exp-init-')) : []);
+        setProcurementCheckedItems(first.procurementCheckedItems || {});
+        setGanttTasks(Array.isArray(first.customTasks) ? first.customTasks : []);
       }
       return next;
     });
@@ -802,17 +809,51 @@ export default function App() {
         const text = event.target?.result as string;
         const parsed: ProjectSaveState = JSON.parse(text);
         if (parsed && Array.isArray(parsed.items)) {
-          setProjectName(parsed.projectName || 'โปรเจกต์ที่โหลด');
-          setHouseAreaSqm(parsed.houseAreaSqm || 120);
-          setOverheadPercent(parsed.overheadPercent ?? 7);
-          setVatPercent(parsed.vatPercent ?? 7);
-          setItems(parsed.items);
-          if (parsed.quotationMeta) setQuotationMeta(parsed.quotationMeta);
-          if (Array.isArray(parsed.milestones) && parsed.milestones.length > 0) {
-            setMilestones(parsed.milestones);
-          }
-          if (parsed.projectStartDate) setProjectStartDate(parsed.projectStartDate);
-          setSaveStatusToast(`โหลดโปรเจกต์สำเร็จ (${parsed.items.length} รายการ) ✓`);
+          const importedId = parsed.id && !projects.some(p => p.id === parsed.id) ? parsed.id : generateId();
+          const cleanExpenses = Array.isArray(parsed.actualExpenses) 
+            ? parsed.actualExpenses.filter((e: any) => !e.id?.startsWith('exp-init-')) 
+            : [];
+          const cleanProject: ProjectSaveState = {
+            ...parsed,
+            id: importedId,
+            projectName: parsed.projectName || 'โปรเจกต์นำเข้า',
+            houseAreaSqm: parsed.houseAreaSqm || 120,
+            overheadPercent: parsed.overheadPercent ?? 7,
+            vatPercent: parsed.vatPercent ?? 7,
+            items: parsed.items,
+            quotationMeta: parsed.quotationMeta || DEFAULT_QUOTATION_META,
+            milestones: Array.isArray(parsed.milestones) && parsed.milestones.length > 0 ? parsed.milestones : DEFAULT_PAYMENT_MILESTONES,
+            projectStartDate: parsed.projectStartDate || new Date().toISOString().split('T')[0],
+            projectEndDate: parsed.projectEndDate || '',
+            actualExpenses: cleanExpenses,
+            procurementCheckedItems: parsed.procurementCheckedItems || {},
+            customTasks: Array.isArray(parsed.customTasks) ? parsed.customTasks : [],
+            status: parsed.status || 'draft'
+          };
+
+          setActiveProjectId(cleanProject.id);
+          localStorage.setItem(ACTIVE_PROJECT_ID_KEY, cleanProject.id);
+          setProjectName(cleanProject.projectName);
+          setHouseAreaSqm(cleanProject.houseAreaSqm);
+          setOverheadPercent(cleanProject.overheadPercent);
+          setVatPercent(cleanProject.vatPercent);
+          setItems(cleanProject.items);
+          setQuotationMeta(cleanProject.quotationMeta);
+          setMilestones(cleanProject.milestones || DEFAULT_PAYMENT_MILESTONES);
+          setProjectStartDate(cleanProject.projectStartDate);
+          setProjectEndDate(cleanProject.projectEndDate);
+          setActualExpenses(cleanExpenses);
+          setProcurementCheckedItems(cleanProject.procurementCheckedItems || {});
+          setGanttTasks(cleanProject.customTasks || []);
+
+          setProjects(prev => {
+            const exists = prev.some(p => p.id === cleanProject.id);
+            const next = exists ? prev.map(p => p.id === cleanProject.id ? cleanProject : p) : [...prev, cleanProject];
+            saveProjectsList(next);
+            return next;
+          });
+
+          setSaveStatusToast(`นำเข้าโครงการ "${cleanProject.projectName}" สำเร็จ ✓`);
           setTimeout(() => setSaveStatusToast(''), 3500);
         } else {
           alert('ไฟล์ไม่ถูกต้องหรือไม่ใช่ไฟล์โครงการของระบบนี้');
@@ -836,8 +877,8 @@ export default function App() {
         houseAreaSqm: houseAreaSqm || 120,
         quotationMeta,
         milestones,
-        overheadPercent: 10,
-        vatPercent: 0
+        overheadPercent: overheadPercent ?? 7,
+        vatPercent: vatPercent ?? 7
       });
     } catch (err) {
       console.error('Failed to export Excel:', err);
