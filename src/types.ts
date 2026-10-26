@@ -313,6 +313,21 @@ export interface QuotationMeta {
 
 export type ProjectStatus = 'draft' | 'quotation' | 'construction' | 'completed';
 
+
+export interface ActualExpenseItem {
+  id: string;
+  date: string; // YYYY-MM-DD
+  category: ConstructionCategory;
+  expenseType: 'material' | 'labor' | 'subcontractor' | 'equipment' | 'other';
+  vendorOrPayee: string; // e.g. "ไทวัสดุ บางบัวทอง", "ทีมช่างสมศักดิ์", "ร้านซีแพค"
+  description: string;
+  invoiceNumber?: string;
+  amount: number;
+  linkedMilestoneNumber?: number; // 1, 2, 3...
+  receiptImage?: string; // Base64 slip image
+  notes?: string;
+}
+
 export interface ProjectSaveState {
   id: string;  // unique project id for multi-project support
   version: string;
@@ -327,6 +342,7 @@ export interface ProjectSaveState {
   projectStartDate?: string;
   customTasks?: GanttTask[];
   status?: ProjectStatus;
+  actualExpenses?: ActualExpenseItem[];
 }
 
 export type ExternalItemType = 
@@ -458,6 +474,9 @@ export interface PlanAnalysisResult {
   roofTypeSuggested: string;
   roofPitchDeg: number;
   detailedNotes: string[];
+  detectedRooms?: { name: string; areaSqm: number; dimensions?: string }[];
+  detectedGridSpan?: string;
+  detectedDoorWindowSchedule?: { mark: string; type: 'door' | 'window'; count: number; spec?: string }[];
   suggestedItems: {
     category: ConstructionCategory;
     name: string;

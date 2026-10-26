@@ -1,6 +1,6 @@
 import { exportBOQToExcel } from './services/excelExporter';
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { BOQItem, ConstructionCategory, QuotationMeta, ProjectSaveState, PaymentMilestone, ProjectStatus } from './types';
+import { BOQItem, ConstructionCategory, QuotationMeta, ProjectSaveState, PaymentMilestone, ProjectStatus, ActualExpenseItem } from './types';
 import { CATEGORY_LABELS, DEFAULT_STANDARD_BOQ, DEFAULT_BASE_AREA_SQM, DEFAULT_QUOTATION_META, DEFAULT_PAYMENT_MILESTONES, formatMilestonesToPaymentTerms } from './constants';
 import { computeBOQSummary, scaleBOQByArea, generateSiteMaterialsProcurementList } from './services/calculator';
 import { ProjectManagerModal } from './components/ProjectManagerModal';
@@ -23,6 +23,7 @@ import { SanitaryEstimatorModal } from './components/SanitaryEstimatorModal';
 import { SanitaryFixtureSelectorModal } from './components/SanitaryFixtureSelectorModal';
 import { QuotationPrintModal } from './components/QuotationPrintModal';
 import { MilestonesManagerModal } from './components/MilestonesManagerModal';
+import { ActualCostTrackerView } from './components/ActualCostTrackerView';
 import { QuickBOQWizardModal } from './components/QuickBOQWizardModal';
 import { AISanityCheckModal } from './components/AISanityCheckModal';
 import { CostAnalyticsModal } from './components/CostAnalyticsModal';
@@ -61,6 +62,7 @@ function makeDefaultProject(
     milestones: DEFAULT_PAYMENT_MILESTONES,
     projectStartDate: new Date().toISOString().split('T')[0],
     status,
+    actualExpenses: [],
   };
 }
 function loadProjectsList(): ProjectSaveState[] {
@@ -105,7 +107,7 @@ export default function App() {
     return projects.find((p) => p.id === activeProjectId) || projects[0] || makeDefaultProject();
   }, [projects, activeProjectId]);
 
-  const [activeMainTab, setActiveMainTab] = useState<'dashboard' | 'boq_estimate' | 'site_procurement' | 'gantt_schedule'>('dashboard');
+  const [activeMainTab, setActiveMainTab] = useState<'dashboard' | 'boq_estimate' | 'site_procurement' | 'gantt_schedule' | 'actual_cost_tracker'>('dashboard');
   const [houseAreaSqm, setHouseAreaSqm] = useState<number>(120);
   const [items, setItems] = useState<BOQItem[]>(DEFAULT_STANDARD_BOQ);
   const [selectedCategory, setSelectedCategory] = useState<ConstructionCategory | 'all'>('all');
@@ -113,6 +115,9 @@ export default function App() {
   const [projectName, setProjectName] = useState<string>('บ้านพักอาศัย คสล. 1-2 ชั้น พร้อมรั้วและโรงจอดรถ');
   const [overheadPercent, setOverheadPercent] = useState<number>(7);
   const [vatPercent, setVatPercent] = useState<number>(7);
+  const [actualExpenses, setActualExpenses] = useState<ActualExpenseItem[]>(() => {
+    return activeProject?.actualExpenses || [];
+  });
   const [quotationMeta, setQuotationMeta] = useState<QuotationMeta>(DEFAULT_QUOTATION_META);
   const [milestones, setMilestones] = useState<PaymentMilestone[]>(DEFAULT_PAYMENT_MILESTONES);
   const [projectStartDate, setProjectStartDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
@@ -339,6 +344,11 @@ export default function App() {
             setVatPercent(typeof parsed.vatPercent === 'number' ? parsed.vatPercent : 7);
             setItems(parsed.items);
             if (parsed.quotationMeta) setQuotationMeta(parsed.quotationMeta);
+          if (Array.isArray(parsed.actualExpenses)) {
+            setActualExpenses(parsed.actualExpenses);
+          } else {
+            setActualExpenses([]);
+          }
             if (Array.isArray(parsed.milestones) && parsed.milestones.length > 0) {
               setMilestones(parsed.milestones);
             }
@@ -429,6 +439,11 @@ export default function App() {
       setMilestones(DEFAULT_PAYMENT_MILESTONES);
     }
     if (target.projectStartDate) setProjectStartDate(target.projectStartDate);
+    if (Array.isArray(target.actualExpenses)) {
+      setActualExpenses(target.actualExpenses);
+    } else {
+      setActualExpenses([]);
+    }
     setSelectedCategory('all');
     setBoqSearchQuery('');
     setSaveStatusToast(`เปิดโครงการ "${target.projectName}" เรียบร้อย ✓`);
@@ -673,7 +688,8 @@ export default function App() {
         items,
         quotationMeta,
         milestones,
-        projectStartDate
+        projectStartDate,
+        actualExpenses
       };
       const jsonStr = JSON.stringify(state, null, 2);
       const bytes = new TextEncoder().encode(jsonStr);
@@ -876,6 +892,17 @@ export default function App() {
               >
                 <span className="material-symbols-outlined text-sm">timeline</span>
                 <span>3. แผนงาน Gantt</span>
+              </button>
+              <button
+                onClick={() => setActiveMainTab('actual_cost_tracker')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                  activeMainTab === 'actual_cost_tracker'
+                    ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 shadow-md shadow-emerald-500/30 font-black'
+                    : 'text-emerald-400 hover:text-emerald-300'
+                }`}
+              >
+                <span className="material-symbols-outlined text-sm">account_balance_wallet</span>
+                <span>4. คุมต้นทุนจริง & กำไร ({actualExpenses.length})</span>
               </button>
             </div>
             {/* Actions & Export */}
@@ -1099,14 +1126,15 @@ export default function App() {
               <span>11. สีอาคาร & เหล็ก</span>
             </button>
           </div>
-          {/* AI ผู้ช่วยถอดแบบแปลน */}
+          {/* 📸 AI สแกนแปลนบ้านด้วยภาพถ่าย (Gemini Multimodal Takeoff) */}
           <div className="shrink-0 pl-2 border-l border-slate-800">
             <button
               onClick={() => setIsPlanModalOpen(true)}
-              className="px-3 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition active:scale-95 shrink-0"
+              className="px-3 py-1 rounded-lg bg-gradient-to-r from-cyan-500 via-blue-600 to-indigo-600 hover:brightness-110 text-white text-xs font-black flex items-center gap-1.5 shadow-md shadow-cyan-500/25 transition active:scale-95 shrink-0 animate-pulse hover:animate-none"
+              title="ถ่ายภาพแปลนบ้านด้วยมือถือหรืออัปโหลดแบบ PDF ให้ Gemini AI แกะแบบและคำนวณ BOQ อัตโนมัติ"
             >
-              <span className="material-symbols-outlined text-sm">auto_awesome</span>
-              <span>AI ถอดแบบแปลน</span>
+              <span className="material-symbols-outlined text-sm font-black">document_scanner</span>
+              <span>📸 AI สแกนแปลนบ้าน</span>
             </button>
           </div>
         </div>
