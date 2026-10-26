@@ -240,7 +240,7 @@ export interface ElectricalCircuitConfig {
   phaseWiresSize: WireCrossSection; 
   groundWireSize?: WireCrossSection; 
   conduitType: 'pvc_white' | 'pvc_yellow' | 'emt_steel' | 'clip_nail' | 'none'; 
-  breakerRatingA: number;      
+  breakerRatingA: number;
   notes: string;
 }
 
@@ -308,6 +308,7 @@ export interface QuotationMeta {
   paymentTerms: string;
   warrantyTerms: string;
   notes: string;
+  companyLogo?: string;
 }
 
 export type ProjectStatus = 'draft' | 'quotation' | 'construction' | 'completed';

@@ -21,6 +21,30 @@ export const MilestonesManagerModal: React.FC<MilestonesManagerModalProps> = ({
     return milestones && milestones.length > 0 ? milestones : DEFAULT_4_MILESTONES;
   });
   const [activeEditingId, setActiveEditingId] = useState<string | null>(items[0]?.id || null);
+  const [copiedLine, setCopiedLine] = useState<boolean>(false);
+  const handleCopyLineSummary = () => {
+    let text = '📋 สรุปงวดงานก่อสร้าง & กำหนดการชำระเงิน\n';
+    text += '🏗️ โครงการก่อสร้าง: ' + (items.length) + ' งวดงาน\n';
+    text += '💰 ยอดรวมทั้งสิ้น: ฿' + grandTotal.toLocaleString() + ' บาท\n';
+    text += '------------------------------------\n';
+    items.forEach((m) => {
+      const amount = Math.round(grandTotal * (m.percentage / 100));
+      text += '🔹 งวดที่ ' + m.milestoneNumber + ': ' + m.percentage + '% (฿' + amount.toLocaleString() + ' บาท)\n';
+      text += '   📌 ' + m.title + '\n';
+      if (m.durationDays) text += '   ⏳ ระยะเวลาดำเนินการ: ' + m.durationDays + ' วัน\n';
+      if (m.deliverables && m.deliverables.length > 0) {
+        text += '   ✅ ส่งมอบ: ' + m.deliverables.slice(0, 3).join(', ') + (m.deliverables.length > 3 ? '...' : '') + '\n';
+      }
+      text += '\n';
+    });
+    text += '------------------------------------\n';
+    text += '✨ เอกสารสรุปงวดงานอ้างอิงตามสัญญาจ้างก่อสร้าง';
+    
+    navigator.clipboard.writeText(text);
+    setCopiedLine(true);
+    setTimeout(() => setCopiedLine(false), 3000);
+  };
+
 
   // คำนวณเปอร์เซ็นต์รวม
   const totalPercentage = useMemo(() => {
@@ -507,6 +531,38 @@ export const MilestonesManagerModal: React.FC<MilestonesManagerModalProps> = ({
                   </div>
                 </div>
 
+                
+                {/* Foreman Engineering QC Checklist */}
+                <div className="bg-slate-950/80 p-4 rounded-xl border border-slate-800 flex flex-col gap-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+                      <span className="material-symbols-outlined text-sm">fact_check</span>
+                      Foreman Engineering QC Checklist (เกณฑ์ตรวจรับงานภาคสนาม)
+                    </span>
+                    <span className="text-[10px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded-full font-mono">
+                      วิศวกรผู้คุมงาน
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-slate-300 mt-1">
+                    <label className="flex items-center gap-2 p-2 rounded-lg bg-slate-900/90 border border-slate-800 hover:border-slate-700 cursor-pointer">
+                      <input type="checkbox" className="accent-emerald-500 w-3.5 h-3.5 rounded" defaultChecked />
+                      <span>ตรวจแนวดิ่ง เสา ผนัง (Plumb line & Levels)</span>
+                    </label>
+                    <label className="flex items-center gap-2 p-2 rounded-lg bg-slate-900/90 border border-slate-800 hover:border-slate-700 cursor-pointer">
+                      <input type="checkbox" className="accent-emerald-500 w-3.5 h-3.5 rounded" defaultChecked />
+                      <span>ตรวจระยะทาบเหล็ก & ลูกปูนหนุน (Covering ≥ 3-5 cm)</span>
+                    </label>
+                    <label className="flex items-center gap-2 p-2 rounded-lg bg-slate-900/90 border border-slate-800 hover:border-slate-700 cursor-pointer">
+                      <input type="checkbox" className="accent-emerald-500 w-3.5 h-3.5 rounded" />
+                      <span>จี้ปูนสั่นคอนกรีต (Vibrator) ไม่ให้เกิดโพรงอากาศ</span>
+                    </label>
+                    <label className="flex items-center gap-2 p-2 rounded-lg bg-slate-900/90 border border-slate-800 hover:border-slate-700 cursor-pointer">
+                      <input type="checkbox" className="accent-emerald-500 w-3.5 h-3.5 rounded" />
+                      <span>ทดสอบแรงดันท่อประปา & ทดสอบการรั่วซึมหลังคา</span>
+                    </label>
+                  </div>
+                </div>
+
                 {/* เกณฑ์การตรวจสอบรับมอบงาน */}
                 <div className="bg-slate-950/80 p-4 rounded-xl border border-slate-800 flex flex-col gap-2">
                   <span className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
@@ -545,6 +601,21 @@ export const MilestonesManagerModal: React.FC<MilestonesManagerModalProps> = ({
             </span>
           </div>
           <div className="flex gap-2">
+            
+            <button
+              onClick={handleCopyLineSummary}
+              type="button"
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold border transition flex items-center gap-1.5 ${
+                copiedLine 
+                  ? 'bg-emerald-600 border-emerald-500 text-white shadow-lg shadow-emerald-500/20' 
+                  : 'bg-emerald-950/80 border-emerald-500/40 text-emerald-300 hover:bg-emerald-900'
+              }`}
+              title="คัดลอกข้อความสรุปงวดงานพร้อมอิโมจิสวยงาม สำหรับส่งเข้ากลุ่ม LINE ลูกค้า/ช่าง"
+            >
+              <span className="material-symbols-outlined text-sm">{copiedLine ? 'check' : 'content_copy'}</span>
+              <span>{copiedLine ? 'คัดลอกแล้ว!' : '📲 คัดลอกสรุปส่ง LINE'}</span>
+            </button>
+
             <button
               onClick={onClose}
               className="px-4 py-2 rounded-xl text-xs font-medium text-slate-300 hover:bg-slate-800 transition"

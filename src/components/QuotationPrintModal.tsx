@@ -29,6 +29,26 @@ export const QuotationPrintModal: React.FC<QuotationPrintModalProps> = ({
 }) => {
   const [meta, setMeta] = useState<QuotationMeta>(quotationMeta);
   const [showMetaEdit, setShowMetaEdit] = useState<boolean>(false);
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 2 * 1024 * 1024) {
+        alert('ขนาดไฟล์โลโก้ต้องไม่เกิน 2MB');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const base64 = event.target?.result as string;
+        setMeta(prev => ({ ...prev, companyLogo: base64 }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleRemoveLogo = () => {
+    setMeta(prev => ({ ...prev, companyLogo: '' }));
+  };
+
 
   if (!isOpen) return null;
 
@@ -184,6 +204,39 @@ export const QuotationPrintModal: React.FC<QuotationPrintModalProps> = ({
                 className="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-white"
               />
             </div>
+            
+            {/* โลโก้บริษัท */}
+            <div className="flex flex-col gap-1 md:col-span-3 bg-slate-900/60 p-3 rounded-xl border border-slate-800">
+              <label className="text-[11px] font-bold text-amber-300 flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-sm">image</span>
+                โลโก้บริษัท / ผู้รับเหมา (Company Logo):
+              </label>
+              <div className="flex items-center gap-3 flex-wrap">
+                {meta.companyLogo ? (
+                  <div className="flex items-center gap-2">
+                    <img src={meta.companyLogo} alt="Logo" className="w-12 h-12 object-contain bg-white rounded-lg p-1 border border-slate-700" />
+                    <button
+                      type="button"
+                      onClick={handleRemoveLogo}
+                      className="px-2.5 py-1 rounded-lg bg-rose-950 border border-rose-500/40 text-rose-300 text-xs hover:bg-rose-900 transition flex items-center gap-1"
+                    >
+                      <span className="material-symbols-outlined text-xs">delete</span>
+                      <span>ลบโลโก้</span>
+                    </button>
+                  </div>
+                ) : (
+                  <label className="cursor-pointer px-3 py-1.5 rounded-lg bg-indigo-950 border border-indigo-500/40 text-indigo-300 text-xs font-semibold hover:bg-indigo-900 flex items-center gap-1.5 transition">
+                    <span className="material-symbols-outlined text-sm">cloud_upload</span>
+                    <span>อัปโหลดรูปโลโก้ (.png, .jpg)</span>
+                    <input type="file" accept="image/*" onChange={handleLogoUpload} className="hidden" />
+                  </label>
+                )}
+                <span className="text-[10px] text-slate-400">
+                  (แนะนำไฟล์ PNG พื้นหลังโปร่งใส ขนาดไม่เกิน 2MB จะแสดงที่มุมบนซ้ายของใบเสนอราคาและไฟล์ PDF ที่พิมพ์ออก)
+                </span>
+              </div>
+            </div>
+
             <div className="flex items-end">
               <button
                 onClick={handleSaveMeta}
@@ -207,8 +260,16 @@ export const QuotationPrintModal: React.FC<QuotationPrintModalProps> = ({
             {/* Document Header */}
             <div>
               <div className="flex justify-between items-start border-b-2 border-slate-900 pb-4 mb-5">
-                <div>
-                  <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+                <div className="flex items-start gap-4">
+                  {meta.companyLogo && (
+                    <img 
+                      src={meta.companyLogo} 
+                      alt="Company Logo" 
+                      className="w-16 h-16 object-contain rounded border border-slate-300 p-0.5 bg-white shrink-0" 
+                    />
+                  )}
+                  <div>
+                    <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
                     ใบเสนอราคาค่าก่อสร้าง (QUOTATION)
                   </h1>
                   <p className="text-[11px] text-slate-600 mt-0.5 font-bold">
@@ -218,6 +279,7 @@ export const QuotationPrintModal: React.FC<QuotationPrintModalProps> = ({
                     โทร: {meta.contractorPhone} | เลขประจำตัวผู้เสียภาษี: {meta.contractorTaxId}
                   </p>
                 </div>
+              </div>
                 <div className="text-right flex flex-col items-end">
                   <div className="px-2.5 py-1 bg-slate-100 rounded border border-slate-300 font-mono text-xs font-bold text-slate-800">
                     {meta.quotationNumber}

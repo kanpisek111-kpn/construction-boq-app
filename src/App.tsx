@@ -23,6 +23,8 @@ import { SanitaryEstimatorModal } from './components/SanitaryEstimatorModal';
 import { SanitaryFixtureSelectorModal } from './components/SanitaryFixtureSelectorModal';
 import { QuotationPrintModal } from './components/QuotationPrintModal';
 import { MilestonesManagerModal } from './components/MilestonesManagerModal';
+import { QuickBOQWizardModal } from './components/QuickBOQWizardModal';
+import { CostAnalyticsModal } from './components/CostAnalyticsModal';
 import { PaintEstimatorModal } from './components/PaintEstimatorModal';
 import { Flow } from 'flow-sdk';
 const DRAFT_STORAGE_KEY = 'thai_boq_project_draft_v1';
@@ -136,6 +138,8 @@ export default function App() {
   const [isQuotationModalOpen, setIsQuotationModalOpen] = useState<boolean>(false);
   const [isMilestonesModalOpen, setIsMilestonesModalOpen] = useState<boolean>(false);
   const [isExporting, setIsExporting] = useState<boolean>(false);
+  const [isQuickWizardOpen, setIsQuickWizardOpen] = useState<boolean>(false);
+  const [isCostAnalyticsOpen, setIsCostAnalyticsOpen] = useState<boolean>(false);
   // Hidden File Input for Loading Project File
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Load Google Fonts & CSS securely
@@ -745,6 +749,15 @@ export default function App() {
                 <span className="material-symbols-outlined text-sm text-rose-400">restart_alt</span>
                 <span>เซ็ต 0</span>
               </button>
+              
+              <button
+                onClick={() => setIsCostAnalyticsOpen(true)}
+                className="px-2.5 py-1.5 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-black flex items-center gap-1 shadow-sm transition active:scale-95"
+                title="วิเคราะห์สัดส่วนวัสดุ ค่าแรง กำไร และเรดาร์ความเสี่ยงต้นทุน 5 จุด"
+              >
+                <span className="material-symbols-outlined text-sm">analytics</span>
+                <span>วิเคราะห์ต้นทุน</span>
+              </button>
               <button
                 onClick={() => setIsMilestonesModalOpen(true)}
                 className="px-2.5 py-1.5 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-black flex items-center gap-1 shadow-sm transition active:scale-95"
@@ -805,6 +818,16 @@ export default function App() {
               <span className="material-symbols-outlined text-xs">handyman</span>
               เครื่องมือคำนวณ:
             </span>
+            
+            {/* 🚀 Quick BOQ Wizard 3 นาที */}
+            <button
+              onClick={() => setIsQuickWizardOpen(true)}
+              className="px-3 py-1 rounded-lg bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 hover:brightness-110 text-slate-950 text-xs font-black flex items-center gap-1.5 shadow-md shadow-orange-500/25 transition active:scale-95 shrink-0"
+              title="ตัวช่วยสร้าง BOQ สำเร็จรูป 10 หมวดงาน ครบวงจรใน 3 นาที"
+            >
+              <span className="material-symbols-outlined text-sm text-slate-950 font-black">bolt</span>
+              <span>🚀 สร้าง BOQ ด่วน 3 นาที</span>
+            </button>
             {/* 1. โครงสร้าง: เสา-คาน-พื้น */}
             <button
               onClick={() => setIsStructureModalOpen(true)}
@@ -1486,6 +1509,28 @@ export default function App() {
         onClose={() => setIsPlanModalOpen(false)}
         onMergeItems={handleMergeNewItems}
         onUpdateHouseArea={handleAreaChange}
+      />
+    
+      {/* Quick BOQ Wizard Modal */}
+      <QuickBOQWizardModal
+        isOpen={isQuickWizardOpen}
+        onClose={() => setIsQuickWizardOpen(false)}
+        currentHouseAreaSqm={houseAreaSqm}
+        onApplyBOQ={(newItems, name, area) => {
+          setItems(newItems);
+          setProjectName(name);
+          setHouseAreaSqm(area);
+        }}
+      />
+      {/* Cost Analytics & Profit Visualizer Modal */}
+      <CostAnalyticsModal
+        isOpen={isCostAnalyticsOpen}
+        onClose={() => setIsCostAnalyticsOpen(false)}
+        items={items}
+        houseAreaSqm={houseAreaSqm}
+        overheadPercent={overheadPercent}
+        vatPercent={vatPercent}
+        projectName={projectName}
       />
     </div>
   );
