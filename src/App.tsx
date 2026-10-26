@@ -467,6 +467,46 @@ export default function App() {
     setSaveStatusToast(`เพิ่มวัสดุ ${newItems.length} รายการลง BOQ เรียบร้อย ✓`);
     setTimeout(() => setSaveStatusToast(''), 3000);
   };
+
+  const handleApplyCategoryItems = (newItems: BOQItem[], replaceCategory?: ConstructionCategory | ConstructionCategory[]) => {
+    setItems(prev => {
+      if (!replaceCategory) {
+        return [...prev, ...newItems];
+      }
+      const catsToReplace = Array.isArray(replaceCategory) ? replaceCategory : [replaceCategory];
+      
+      const filtered = prev.filter(item => {
+        if (catsToReplace.includes(item.category)) {
+          return false;
+        }
+        if (catsToReplace.includes('structure') && item.category === 'preparation') {
+          const nameLower = item.name.toLowerCase();
+          const isPileOrFoundation = nameLower.includes('เสาเข็ม') || 
+                                     nameLower.includes('ลีน') || 
+                                     nameLower.includes('ทราย') || 
+                                     nameLower.includes('ขุดหลุม') ||
+                                     nameLower.includes('ขุดดิน') ||
+                                     nameLower.includes('ถมดิน') ||
+                                     item.id.startsWith('prep-pile') || 
+                                     item.id.startsWith('prep-excavation') || 
+                                     item.id.startsWith('prep-backfill') || 
+                                     item.id.startsWith('prep-sand') || 
+                                     item.id.startsWith('prep-lean') ||
+                                     item.id === 'prep-2' || 
+                                     item.id === 'prep-3';
+          if (isPileOrFoundation) {
+            return false;
+          }
+        }
+        return true;
+      });
+
+      return [...filtered, ...newItems];
+    });
+
+    setSaveStatusToast(`อัปเดตคำนวณใหม่ ${newItems.length} รายการลง BOQ เรียบร้อย (ไม่มียอดซ้ำ) ✓`);
+    setTimeout(() => setSaveStatusToast(''), 3000);
+  };
   const handleSaveMilestones = (updatedMilestones: PaymentMilestone[]) => {
     setMilestones(updatedMilestones);
     const formattedTerms = formatMilestonesToPaymentTerms(updatedMilestones, summary.grandTotal);
@@ -1345,7 +1385,7 @@ export default function App() {
       <SanitaryEstimatorModal
         isOpen={isSanitaryModalOpen}
         onClose={() => setIsSanitaryModalOpen(false)}
-        onApplyToBOQ={handleMergeNewItems}
+        onApplyToBOQ={(newItems) => handleApplyCategoryItems(newItems, 'sanitary')}
         currentHouseAreaSqm={houseAreaSqm}
       />
       {/* 🚽 Sanitary Fixtures & Bathroom Accessories Modal 🚽 */}
@@ -1386,7 +1426,7 @@ export default function App() {
       <ElectricalEstimatorModal
         isOpen={isElectricalModalOpen}
         onClose={() => setIsElectricalModalOpen(false)}
-        onApplyToBOQ={handleMergeNewItems}
+        onApplyToBOQ={(newItems) => handleApplyCategoryItems(newItems, 'electrical')}
         currentHouseAreaSqm={houseAreaSqm}
       />
       {/* Decoration Estimator Modal */}
@@ -1406,7 +1446,7 @@ export default function App() {
       <MasonryEstimatorModal
         isOpen={isMasonryModalOpen}
         onClose={() => setIsMasonryModalOpen(false)}
-        onApplyToBOQ={handleMergeNewItems}
+        onApplyToBOQ={(newItems) => handleApplyCategoryItems(newItems, 'masonry_wall')}
         currentHouseAreaSqm={houseAreaSqm}
       />
       {/* Room Door Selector Modal */}
@@ -1431,14 +1471,14 @@ export default function App() {
       <StructureEstimatorModal
         isOpen={isStructureModalOpen}
         onClose={() => setIsStructureModalOpen(false)}
-        onApplyToBOQ={handleMergeNewItems}
+        onApplyToBOQ={(newItems) => handleApplyCategoryItems(newItems, 'structure')}
         currentHouseAreaSqm={houseAreaSqm}
       />
       {/* Roof Estimator Modal */}
       <RoofEstimatorModal
         isOpen={isRoofModalOpen}
         onClose={() => setIsRoofModalOpen(false)}
-        onApplyToBOQ={handleMergeNewItems}
+        onApplyToBOQ={(newItems) => handleApplyCategoryItems(newItems, 'roof')}
       />
       {/* AI Plan Analyzer Modal */}
       <PlanAnalyzerModal

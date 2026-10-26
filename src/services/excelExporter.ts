@@ -71,9 +71,9 @@ export function exportBOQToExcel({
   wsData.push(['ชื่อโครงการ:', projectName, '', 'วันที่ทำรายการ:', docDate]);
   wsData.push(['เจ้าของโครงการ:', clientName, '', 'พื้นที่ใช้สอยรวม:', `${houseAreaSqm} ตารางเมตร`]);
   wsData.push(['สถานที่ก่อสร้าง:', location, '', 'ผู้จัดทำ / ผู้รับเหมา:', contractorName]);
-  wsData.push([]); // แถวว่าง
+  wsData.push([]); // แถวที่ 5: แถวว่าง
 
-  // Table Column Headers
+  // Table Column Headers (แถวที่ 6 ใน Excel)
   const tableHeaders = [
     'ลำดับ',
     'รายการงานก่อสร้าง',
@@ -93,6 +93,7 @@ export function exportBOQToExcel({
   let grandLabTotal = 0;
   let grandTotal = 0;
   let categoryIndex = 1;
+  const categorySubtotalRows: number[] = [];
 
   // วนลูปตามแต่ละหมวดงาน
   categoriesOrder.forEach((catKey) => {
@@ -119,8 +120,10 @@ export function exportBOQToExcel({
     let catMatSum = 0;
     let catLabSum = 0;
     let catTotalSum = 0;
+    const startItemRow = wsData.length + 1; // 1-based row ใน Excel
 
     catItems.forEach((item, itemIdx) => {
+      const currentRow = wsData.length + 1; // 1-based row ใน Excel
       const qty = Number(item.quantity) || 0;
       const wasteFactor = 1 + ((Number(item.wastePercent) || 0) / 100);
       const effectiveQty = qty * wasteFactor;
@@ -136,6 +139,13 @@ export function exportBOQToExcel({
       catLabSum += labTotal;
       catTotalSum += rowTotal;
 
+      const wastePct = Number(item.wastePercent) || 0;
+      const matFormula = wastePct > 0 
+        ? `ROUND(D${currentRow}*F${currentRow}*(1+${wastePct}/100), 0)` 
+        : `ROUND(D${currentRow}*F${currentRow}, 0)`;
+      const labFormula = `ROUND(D${currentRow}*H${currentRow}, 0)`;
+      const totalFormula = `G${currentRow}+I${currentRow}`;
+
       wsData.push([
         `${categoryIndex}.${itemIdx + 1}`,
         item.name || '',
@@ -143,15 +153,19 @@ export function exportBOQToExcel({
         Math.round(qty * 100) / 100,
         item.unit || '',
         matUnit,
-        matTotal,
+        { t: 'n', v: matTotal, f: matFormula },
         labUnit,
-        labTotal,
-        rowTotal,
+        { t: 'n', v: labTotal, f: labFormula },
+        { t: 'n', v: rowTotal, f: totalFormula },
         item.wastePercent ? `เผื่อเศษ ${item.wastePercent}%` : ''
       ]);
     });
 
-    // แถวรวมประจำหมวดงาน
+    const endItemRow = wsData.length; // 1-based row ของไอเทมสุดท้าย
+    const subtotalRow = wsData.length + 1;
+    categorySubtotalRows.push(subtotalRow);
+
+    // แถวรวมประจำหมวดงาน พร้อมสูตร SUM
     wsData.push([
       '',
       `รวม หมวดที่ ${categoryIndex}: ${catLabel}`,
@@ -159,10 +173,10 @@ export function exportBOQToExcel({
       '',
       '',
       '',
-      catMatSum,
+      { t: 'n', v: catMatSum, f: `SUM(G${startItemRow}:G${endItemRow})` },
       '',
-      catLabSum,
-      catTotalSum,
+      { t: 'n', v: catLabSum, f: `SUM(I${startItemRow}:I${endItemRow})` },
+      { t: 'n', v: catTotalSum, f: `SUM(J${startItemRow}:J${endItemRow})` },
       ''
     ]);
     wsData.push([]); // แถวคั่น
@@ -173,27 +187,78 @@ export function exportBOQToExcel({
     categoryIndex++;
   });
 
-  // สรุปยอดรวมท้ายตาราง (Summary Block)
+  // สรุปยอดรวมท้ายตาราง (Summary Block) พร้อมสูตรคำนวณเชื่อมโยง
   wsData.push(['สรุปมูลค่างานก่อสร้าง (SUMMARY)', '', '', '', '', '', '', '', '', '', '']);
-  wsData.push(['1. รวมต้นทุนค่าวัสดุทั้งหมด (Total Material Cost)', '', '', '', '', '', grandMatTotal, '', '', '', 'บาท']);
-  wsData.push(['2. รวมต้นทุนค่าแรงทั้งหมด (Total Labor Cost)', '', '', '', '', '', '', '', grandLabTotal, '', 'บาท']);
-  wsData.push(['3. รวมต้นทุนตรงงานก่อสร้าง (Direct Construction Cost)', '', '', '', '', '', '', '', '', grandTotal, 'บาท']);
+
+  const matSubtotalFormula = categorySubtotalRows.map(r => `G${r}`).join('+');
+  const labSubtotalFormula = categorySubtotalRows.map(r => `I${r}`).join('+');
+
+  const matSumRow = wsData.length + 1;
+  wsData.push([
+    '1. รวมต้นทุนค่าวัสดุทั้งหมด (Total Material Cost)', 
+    '', '', '', '', '', 
+    { t: 'n', v: grandMatTotal, f: matSubtotalFormula || '0' }, 
+    '', '', '', 'บาท'
+  ]);
+
+  const labSumRow = wsData.length + 1;
+  wsData.push([
+    '2. รวมต้นทุนค่าแรงทั้งหมด (Total Labor Cost)', 
+    '', '', '', '', '', '', '', 
+    { t: 'n', v: grandLabTotal, f: labSubtotalFormula || '0' }, 
+    '', 'บาท'
+  ]);
+
+  const directCostRow = wsData.length + 1;
+  wsData.push([
+    '3. รวมต้นทุนตรงงานก่อสร้าง (Direct Construction Cost)', 
+    '', '', '', '', '', '', '', '', 
+    { t: 'n', v: grandTotal, f: `G${matSumRow}+I${labSumRow}` }, 
+    'บาท'
+  ]);
   
   const overheadAmount = Math.round(grandTotal * (overheadPercent / 100));
-  wsData.push([`4. ค่าดำเนินการ, กำไร และการจัดการ (${overheadPercent}%)`, '', '', '', '', '', '', '', '', overheadAmount, 'บาท']);
+  const overheadRow = wsData.length + 1;
+  wsData.push([
+    `4. ค่าดำเนินการ, กำไร และการจัดการ (${overheadPercent}%)`, 
+    '', '', '', '', '', '', '', '', 
+    { t: 'n', v: overheadAmount, f: `ROUND(J${directCostRow}*${overheadPercent}/100, 0)` }, 
+    'บาท'
+  ]);
   
   const subTotalWithOverhead = grandTotal + overheadAmount;
   let vatAmount = 0;
+  let vatRow = 0;
   if (vatPercent > 0) {
     vatAmount = Math.round(subTotalWithOverhead * (vatPercent / 100));
-    wsData.push([`5. ภาษีมูลค่าเพิ่ม VAT (${vatPercent}%)`, '', '', '', '', '', '', '', '', vatAmount, 'บาท']);
+    vatRow = wsData.length + 1;
+    wsData.push([
+      `5. ภาษีมูลค่าเพิ่ม VAT (${vatPercent}%)`, 
+      '', '', '', '', '', '', '', '', 
+      { t: 'n', v: vatAmount, f: `ROUND((J${directCostRow}+J${overheadRow})*${vatPercent}/100, 0)` }, 
+      'บาท'
+    ]);
   }
   
   const finalNetTotal = subTotalWithOverhead + vatAmount;
-  wsData.push(['ยอดรวมค่าก่อสร้างสุทธิทั้งสิ้น (GRAND TOTAL)', '', '', '', '', '', '', '', '', finalNetTotal, 'บาท']);
+  const grandTotalRow = wsData.length + 1;
+  const grandTotalFormula = vatPercent > 0 
+    ? `J${directCostRow}+J${overheadRow}+J${vatRow}` 
+    : `J${directCostRow}+J${overheadRow}`;
+  wsData.push([
+    'ยอดรวมค่าก่อสร้างสุทธิทั้งสิ้น (GRAND TOTAL)', 
+    '', '', '', '', '', '', '', '', 
+    { t: 'n', v: finalNetTotal, f: grandTotalFormula }, 
+    'บาท'
+  ]);
   
   const costPerSqm = houseAreaSqm > 0 ? Math.round(finalNetTotal / houseAreaSqm) : 0;
-  wsData.push(['ราคาเฉลี่ยต่อตารางเมตร (AVERAGE COST PER SQ.M.)', '', '', '', '', '', '', '', '', costPerSqm, 'บาท / ตร.ม.']);
+  wsData.push([
+    'ราคาเฉลี่ยต่อตารางเมตร (AVERAGE COST PER SQ.M.)', 
+    '', '', '', '', '', '', '', '', 
+    { t: 'n', v: costPerSqm, f: `ROUND(J${grandTotalRow}/${Math.max(1, houseAreaSqm)}, 0)` }, 
+    'บาท / ตร.ม.'
+  ]);
 
   // ลายเซ็น
   wsData.push([]);
@@ -229,13 +294,14 @@ export function exportBOQToExcel({
     msData.push([]);
     msData.push(['งวดที่', 'ชื่องวดงาน', 'เปอร์เซ็นต์ (%)', 'จำนวนเงิน (บาท)', 'ระยะเวลาดำเนินงาน', 'รายละเอียดและผลงานที่ส่งมอบ']);
 
-    milestones.forEach(m => {
+    milestones.forEach((m, idx) => {
       const amount = Math.round(finalNetTotal * ((m.percentage || 0) / 100));
+      const rowNum = 5 + idx; // แถวข้อมูลใน Excel
       msData.push([
         `งวดที่ ${m.milestoneNumber || ''}`,
         m.title || '',
         `${m.percentage}%`,
-        amount,
+        { t: 'n', v: amount, f: `ROUND(D2*${m.percentage}/100, 0)` },
         m.durationDays ? `${m.durationDays} วัน` : '-',
         m.deliverables?.join(', ') || ''
       ]);

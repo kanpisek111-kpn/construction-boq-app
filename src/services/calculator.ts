@@ -1081,6 +1081,7 @@ export function generateSiteMaterialsProcurementList(
     }
 
     if (nameLower.includes('เสาเข็ม')) {
+      const isBored = nameLower.includes('เจาะ') || specLower.includes('เจาะ');
       materials.push({
         id: `mat-proc-pile-${item.id}-${index}`,
         materialGroup: 'cement_concrete',
@@ -1089,14 +1090,128 @@ export function generateSiteMaterialsProcurementList(
         netQuantity: item.quantity,
         wastePercent,
         orderQuantity: Math.ceil(item.quantity * wasteMult),
-        unit: 'ต้น',
+        unit: item.unit || 'ต้น',
         unitPriceEstimate: item.materialUnitPrice,
         totalEstimatedCost: lineTotal,
         priorityPhase,
         milestoneNumber,
         milestoneTitle,
         boqCategory: item.category,
-        packageNote: 'สั่งจองล่วงหน้า 3-5 วัน พร้อมปั้นจั่นตอก'
+        packageNote: isBored 
+          ? 'นัดหมายทีมงานเข็มเจาะเข้าหน้างานล่วงหน้า 5-7 วัน พร้อมเช็คแนวสายไฟและระดับอ้างอิง' 
+          : 'สั่งจองล่วงหน้า 3-5 วัน พร้อมประสานงานปั้นจั่นตอกเสาเข็มเข้าพื้นที่'
+      });
+      return;
+    }
+
+    // ลวดผูกเหล็ก เบอร์ 18
+    if (nameLower.includes('ลวดผูกเหล็ก') || nameLower.includes('ลวดผูก')) {
+      materials.push({
+        id: `mat-proc-tie-wire-${item.id}-${index}`,
+        materialGroup: 'steel_rebar',
+        name: item.name,
+        spec: item.spec,
+        netQuantity: item.quantity,
+        wastePercent: 0,
+        orderQuantity: Math.ceil(item.quantity),
+        unit: 'กก.',
+        unitPriceEstimate: item.materialUnitPrice,
+        totalEstimatedCost: lineTotal,
+        priorityPhase,
+        milestoneNumber,
+        milestoneTitle,
+        boqCategory: item.category,
+        packageNote: 'สั่งลวดดำเบอร์ 18 มัดละ 3-5 กก. จัดเตรียมพร้อมคีมผูกเหล็ก'
+      });
+      return;
+    }
+
+    // เหล็กปลอกเสา และ เหล็กปลอกคาน
+    if (nameLower.includes('ปลอกเสา') || nameLower.includes('ปลอกคาน') || nameLower.includes('เหล็กปลอก')) {
+      const totalKg = exactOrderQty;
+      const isBeam = nameLower.includes('คาน');
+      materials.push({
+        id: `mat-proc-stirrup-${item.id}-${index}`,
+        materialGroup: 'steel_rebar',
+        name: item.name,
+        spec: `${item.spec} (น้ำหนักรวม ${Math.round(totalKg).toLocaleString()} กก.)`,
+        netQuantity: Math.round(item.quantity),
+        wastePercent,
+        orderQuantity: Math.round(totalKg),
+        unit: 'กก. (หรือสั่งปลอกสำเร็จรูป)',
+        unitPriceEstimate: item.materialUnitPrice,
+        totalEstimatedCost: lineTotal,
+        priorityPhase,
+        milestoneNumber,
+        milestoneTitle,
+        boqCategory: item.category,
+        packageNote: isBeam 
+          ? 'แนะนำสั่งปลอกคานสำเร็จรูปดัดจากโรงงานตามขนาดคาน หรือสั่งเหล็กเส้นกลม RB6/9 ยาว 10ม. มาดัดหน้างาน'
+          : 'แนะนำสั่งปลอกเสาสำเร็จรูปตามขนาดเสา หรือสั่งเหล็กเส้นกลม RB6/9 ยาว 10ม. มาดัดหน้างาน'
+      });
+      return;
+    }
+
+    // สาธารณูปโภคและงานเตรียมการไซต์
+    if (nameLower.includes('มิเตอร์ไฟฟ้า') || nameLower.includes('ไฟฟ้าชั่วคราว')) {
+      materials.push({
+        id: `mat-proc-temp-elec-${item.id}-${index}`,
+        materialGroup: 'mep_fixtures',
+        name: item.name,
+        spec: item.spec,
+        netQuantity: 1,
+        wastePercent: 0,
+        orderQuantity: 1,
+        unit: 'ชุด',
+        unitPriceEstimate: item.materialUnitPrice,
+        totalEstimatedCost: lineTotal,
+        priorityPhase,
+        milestoneNumber,
+        milestoneTitle,
+        boqCategory: item.category,
+        packageNote: 'ยื่นเรื่องขอติดตั้งมิเตอร์ชั่วคราวกับการไฟฟ้า (กฟน./กฟภ.) ก่อนเริ่มงานก่อสร้าง 7-10 วัน'
+      });
+      return;
+    }
+
+    if (nameLower.includes('มิเตอร์น้ำ') || nameLower.includes('ประปาชั่วคราว')) {
+      materials.push({
+        id: `mat-proc-temp-water-${item.id}-${index}`,
+        materialGroup: 'mep_fixtures',
+        name: item.name,
+        spec: item.spec,
+        netQuantity: 1,
+        wastePercent: 0,
+        orderQuantity: 1,
+        unit: 'ชุด',
+        unitPriceEstimate: item.materialUnitPrice,
+        totalEstimatedCost: lineTotal,
+        priorityPhase,
+        milestoneNumber,
+        milestoneTitle,
+        boqCategory: item.category,
+        packageNote: 'ยื่นเรื่องขอติดตั้งมาตรวัดน้ำชั่วคราวกับการประปา (กปน./กปภ.) ให้พร้อมก่อนวันลงเสาเข็ม'
+      });
+      return;
+    }
+
+    if (nameLower.includes('รั้วชั่วคราว') || nameLower.includes('สุขาคนงาน') || nameLower.includes('ป้ายแสดงรายละเอียด')) {
+      materials.push({
+        id: `mat-proc-prelim-${item.id}-${index}`,
+        materialGroup: 'external_civil',
+        name: item.name,
+        spec: item.spec,
+        netQuantity: item.quantity,
+        wastePercent: 0,
+        orderQuantity: Math.ceil(item.quantity),
+        unit: item.unit,
+        unitPriceEstimate: item.materialUnitPrice,
+        totalEstimatedCost: lineTotal,
+        priorityPhase,
+        milestoneNumber,
+        milestoneTitle,
+        boqCategory: item.category,
+        packageNote: 'จัดเตรียมก่อนช่างเข้าไซต์งานเพื่อความปลอดภัยและถูกสุขลักษณะตามกฎหมาย'
       });
       return;
     }
