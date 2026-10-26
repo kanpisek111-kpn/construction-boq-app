@@ -72,8 +72,8 @@ export const SiteProcurementView: React.FC<SiteProcurementViewProps> = ({
   }, [filteredItems]);
 
   const orderedCount = useMemo(() => {
-    return Object.values(activeChecked).filter(Boolean).length;
-  }, [activeChecked]);
+    return filteredItems.filter(item => Boolean(activeChecked[item.id])).length;
+  }, [filteredItems, activeChecked]);
 
   const handleToggleCheck = (id: string) => {
     if (propOnToggleCheck) {
@@ -291,7 +291,9 @@ export const SiteProcurementView: React.FC<SiteProcurementViewProps> = ({
           </button>
           {milestones.map((m) => {
             const isSelected = selectedMilestoneFilter === m.milestoneNumber;
-            const count = items.filter(i => i.milestoneNumber === m.milestoneNumber).length;
+            const mItems = items.filter(i => i.milestoneNumber === m.milestoneNumber);
+            const count = mItems.length;
+            const mOrdered = mItems.filter(i => Boolean(activeChecked[i.id])).length;
             return (
               <button
                 key={m.id}
@@ -304,10 +306,14 @@ export const SiteProcurementView: React.FC<SiteProcurementViewProps> = ({
               >
                 <span className="font-mono font-bold text-xs">งวด {m.milestoneNumber}</span>
                 <span className="text-[10px] opacity-80">({m.percentage}%)</span>
-                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
-                  isSelected ? 'bg-slate-900/40 text-slate-950 font-bold' : 'bg-slate-800 text-slate-400'
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono ${
+                  isSelected 
+                    ? 'bg-slate-900/50 text-slate-950 font-bold' 
+                    : mOrdered === count && count > 0 
+                    ? 'bg-emerald-950 text-emerald-400 border border-emerald-500/40' 
+                    : 'bg-slate-800 text-slate-400'
                 }`}>
-                  {count}
+                  {mOrdered}/{count}
                 </span>
               </button>
             );

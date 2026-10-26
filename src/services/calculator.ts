@@ -512,50 +512,83 @@ export function generateSiteMaterialsProcurementList(
     const milestoneTitle = milestoneInfo.milestoneTitle;
     const priorityPhase = `phase_${milestoneNumber}`;
 
-    if (item.category === 'roof' && (nameLower.includes('เหล็ก') || specLower.includes('เหล็กซี') || specLower.includes('แป') || item.unit === 'กก.')) {
-      const totalKg = exactOrderQty;
-      
-      const cMatch = item.spec.match(/เหล็กซี\s*(\d+)\s*ท่อน/);
-      const boxMatch = item.spec.match(/เหล็กกล่อง\s*(\d+)\s*ท่อน/);
-      const purlinMatch = item.spec.match(/แป\s*(\d+)\s*ท่อน/);
-
-      let cBars = cMatch ? parseInt(cMatch[1]) : 0;
-      let boxBars = boxMatch ? parseInt(boxMatch[1]) : 0;
-      let purlinBars = purlinMatch ? parseInt(purlinMatch[1]) : 0;
-
-      if (cBars === 0 && boxBars === 0 && purlinBars === 0) {
-        const cKg = totalKg * 0.60;
-        const boxKg = totalKg * 0.25;
-        const purlinKg = totalKg * 0.15;
-
-        cBars = Math.ceil(cKg / 24.3);
-        boxBars = Math.ceil(boxKg / 30.5);
-        purlinBars = Math.ceil(purlinKg / 9.5);
+    // 🌟 หมวดหลังคา: หากเป็นเหล็กรูปพรรณที่มีหน่วยเป็น ท่อน หรือ เส้น ให้คงจำนวนจริงตาม BOQ 100%
+    if (item.category === 'roof') {
+      if (item.unit === 'ท่อน' || item.unit === 'เส้น') {
+        const barsCount = Math.ceil(exactOrderQty);
+        materials.push({
+          id: `mat-proc-${item.id}`,
+          materialGroup: 'steel_rebar',
+          name: item.name,
+          spec: item.spec,
+          netQuantity: item.quantity,
+          wastePercent,
+          orderQuantity: barsCount,
+          unit: 'ท่อน (ยาว 6.00 ม.)',
+          unitPriceEstimate: item.materialUnitPrice,
+          totalEstimatedCost: lineTotal,
+          priorityPhase,
+          milestoneNumber,
+          milestoneTitle,
+          boqCategory: item.category,
+          packageNote: 'สั่งเหล็ก มอก. ยาว 6.00 ม. เข้าหน้างานพร้อมทาสีกันสนิม 2 เที่ยว'
+        });
+        return;
       }
 
-      const totalBars = cBars + boxBars + purlinBars;
+      // หากเป็นวัสดุมุงหลังคา (แผ่นกระเบื้อง หรือ เมทัลชีท)
+      if (nameLower.includes('กระเบื้อง') || nameLower.includes('เมทัลชีท') || nameLower.includes('หลังคา') || item.unit === 'แผ่น') {
+        const orderPieces = Math.ceil(exactOrderQty);
+        materials.push({
+          id: `mat-proc-${item.id}`,
+          materialGroup: 'roof_finishes',
+          name: item.name,
+          spec: item.spec,
+          netQuantity: item.quantity,
+          wastePercent,
+          orderQuantity: orderPieces,
+          unit: item.unit,
+          unitPriceEstimate: item.materialUnitPrice,
+          totalEstimatedCost: lineTotal,
+          priorityPhase,
+          milestoneNumber,
+          milestoneTitle,
+          boqCategory: item.category,
+          packageNote: 'ตรวจสอบเฉดสีและ LOT เดียวกัน พร้อมอุปกรณ์ยึดและครอบ'
+        });
+        return;
+      }
 
-      materials.push({
-        id: `mat-proc-roof-steel-${item.id}-${index}`,
-        materialGroup: 'steel_rebar',
-        name: 'เหล็กโครงหลังคาแปรรูป (เหล็กซี C100, เหล็กกล่อง 100x50, แปโอเมก้า)',
-        spec: `สั่งเป็นเส้นยาว 6.0 ม. รวม ${totalBars} เส้น: [1] เหล็กซี C100x50x20x3.2 มม. = ${cBars} เส้น (จันทัน/อะเส) | [2] เหล็กกล่อง 100x50x3.2 มม. = ${boxBars} เส้น (อกไก่/ขื่อ/ดั้ง) | [3] แปหลังคาโอเมก้ากัลวาไนซ์ = ${purlinBars} เส้น (ยาว 6ม.) (น้ำหนักรวม ${Math.round(totalKg).toLocaleString()} กก.)`,
-        netQuantity: Math.round(item.quantity),
-        wastePercent,
-        orderQuantity: totalBars,
-        unit: 'เส้น (ท่อนละ 6ม.)',
-        unitPriceEstimate: Math.round(lineTotal / Math.max(1, totalBars)),
-        totalEstimatedCost: lineTotal,
-        priorityPhase,
-        milestoneNumber,
-        milestoneTitle,
-        boqCategory: item.category,
-        packageNote: `สั่งเหล็ก มอก. ยาวท่อนละ 6.00 ม. เข้าหน้างานพร้อมสีกันสนิม 2 ถัง (ทา 2 เที่ยว) + ลวดเชื่อมไฟฟ้า + เผื่อค้ำยันชั่วคราว`
-      });
-      return;
+      // หากเป็นเหล็กเหมาเป็น กิโลกรัม (กก.) จาก Wizard
+      if (item.unit === 'กก.') {
+        const totalKg = exactOrderQty;
+        const cBars = Math.ceil((totalKg * 0.60) / 24.3);
+        const boxBars = Math.ceil((totalKg * 0.25) / 30.5);
+        const purlinBars = Math.ceil((totalKg * 0.15) / 9.5);
+        const totalBars = cBars + boxBars + purlinBars;
+
+        materials.push({
+          id: `mat-proc-${item.id}`,
+          materialGroup: 'steel_rebar',
+          name: 'เหล็กโครงหลังคาแปรรูป (เหล็กซี C100, เหล็กกล่อง 100x50, แปโอเมก้า)',
+          spec: `สั่งเป็นเส้นยาว 6.0 ม. รวม ${totalBars} เส้น: เหล็กซี C100=${cBars} เส้น | เหล็กกล่อง=${boxBars} เส้น | แป=${purlinBars} เส้น (รวม ${Math.round(totalKg).toLocaleString()} กก.)`,
+          netQuantity: Math.round(item.quantity),
+          wastePercent,
+          orderQuantity: totalBars,
+          unit: 'เส้น (ท่อนละ 6ม.)',
+          unitPriceEstimate: Math.round(lineTotal / Math.max(1, totalBars)),
+          totalEstimatedCost: lineTotal,
+          priorityPhase,
+          milestoneNumber,
+          milestoneTitle,
+          boqCategory: item.category,
+          packageNote: 'สั่งเหล็ก มอก. ยาว 6.00 ม. เข้าหน้างานพร้อมสีกันสนิม 2 ถัง'
+        });
+        return;
+      }
     }
 
-    if (nameLower.includes('กระเบื้อง') || nameLower.includes('แกรนิตโต้') || nameLower.includes('พอร์ซเลน') || (item.category === 'finishes' && nameLower.includes('tile'))) {
+    if (((nameLower.includes('กระเบื้อง') && item.category !== 'roof') || nameLower.includes('แกรนิตโต้') || nameLower.includes('พอร์ซเลน') || (item.category === 'finishes' && nameLower.includes('tile')))) {
       let sqmPerBox = 1.0;
       let piecesPerBox = 11;
       let tileDimStr = 'ทั่วไป';
@@ -1467,7 +1500,8 @@ export function calculateRoofMaterials(params: RoofCalculationParams): RoofCalcu
     includeBirdStop,
     birdStopType,
     insulationType = 'none',
-    rafterSpacingM = 1.0
+    rafterSpacingM = 1.0,
+    hasValleyGutter = false // 🌟 ค่าตั้งต้น: ไม่มีตะเฆ่รางน้ำ (เฉพาะเมื่อหักมุม L/T)
   } = params;
 
   // 1. ขนาดตัวอาคารและระยะยื่นชายคา
@@ -1498,20 +1532,16 @@ export function calculateRoofMaterials(params: RoofCalculationParams): RoofCalcu
   let bracingPercent = 25;
 
   if (materialType === 'metal_sheet') {
-    // เมทัลชีท (~5 กก./ตร.ม.): C-100x50x20x2.3 มม. (24.3 กก./ท่อน)
     steelWeightPerBar = 24.3;
     bracingRatio = 0.25;
     bracingPercent = 25;
     steelSpecDesc = 'C-100x50x20x2.3 มม. (24.3 กก./ท่อน)';
   } else if (materialType === 'concrete_tile' || materialType === 'shingle') {
-    // กระเบื้องลอนคู่ (~15 กก./ตร.ม.): C-100/125 หนา 3.2 มม. (29.5 กก./ท่อน)
     steelWeightPerBar = 29.5;
     bracingRatio = 0.28;
     bracingPercent = 28;
     steelSpecDesc = 'C-100/125 หนา 3.2 มม. (29.5 กก./ท่อน)';
   } else if (materialType === 'cpac') {
-    // กระเบื้องคอนกรีต ซีแพคโมเนีย (~45 กก./ตร.ม.): C-125/C-150 หนา 3.2 มม. หรือเหล็กคู่ (33.5 กก./ท่อน)
-    // เพิ่มขื่อยึดหัวเสา (Tie Beam) และเพิ่มเหล็กค้ำยันกันลมโยก (Wind Bracing) จาก 28% เป็น 35%
     steelWeightPerBar = 33.5;
     bracingRatio = 0.35;
     bracingPercent = 35;
@@ -1532,47 +1562,35 @@ export function calculateRoofMaterials(params: RoofCalculationParams): RoofCalcu
 
   switch (style) {
     case 'lean_to':
-      // 🌟 Point 1 & 2: ทรงเพิงหมาแหงน
-      // พื้นที่ผิวหลังคา = แนวความยาว x แนวมิติลาดเอียงเต็มช่วง
       surfaceArea = effectiveLength * leanToSlopeLength;
       ridgeLength = effectiveLength;
-      // เชิงชายรอบด้าน: แนวขนาน 2 ฝั่ง (2 x effectiveLength) + ปีกหัวท้ายตามแนวลาดเอียง (2 x leanToSlopeLength)
       eavesPerimeterM = (2 * effectiveLength) + (2 * leanToSlopeLength);
-      // แผ่นปิดกันนกเฉพาะชายน้ำหยดด้านล่าง 1 ด้าน
       birdStopLengthM = effectiveLength;
-      // 🌟 Point 2: อะเส วางตามแนวยาวหัวเสาด้านบนและด้านล่าง (2 x effectiveLength)
       wallPlateM = 2 * effectiveLength;
-      ridgeBeamM = effectiveLength; // อะเสบน / คานรัดหัวเสาแถวสูง
+      ridgeBeamM = effectiveLength;
 
-      // 🌟 Point 1: จันทันพาดเต็มช่วงกว้างลาดเอียงรวมระยะยื่น ไม่หาร 2!
       rafterSlopeLength = leanToSlopeLength;
-      // 🌟 Point 2: วางเรียงตามแนวยาวตัวบ้าน (Roof Run Length)
       rafterCount = Math.ceil(effectiveLength / rafterSpacingM) + 1;
       raftersTotalM = rafterCount * rafterSlopeLength;
 
-      // 🌟 Point 3: อะเสกลาง / คานซอยรับจันทัน (Intermediate Support Beam)
-      // หากช่วงกว้างอาคารเกิน 4.5 เมตร เพิ่มอะเสกลางเพื่อป้องกันจันทันแอ่นตัว (Deflection)
       if (baseWidthM > 4.5) {
         intermediateBeamRows = Math.max(1, Math.floor((baseWidthM - 1.0) / 4.0));
         intermediateBeamM = intermediateBeamRows * effectiveLength;
         intermediateBeamBars = Math.ceil((intermediateBeamM * 1.08) / 6.0);
-        // เสาค้ำยัน/ดั้งรองรับอะเสกลางทุกระยะ 3.5 ม.
         const postsPerBeam = Math.max(2, Math.ceil(baseLengthM / 3.5) + 1);
         const totalIntPosts = postsPerBeam * intermediateBeamRows;
         const avgIntPostHeight = (baseWidthM / (intermediateBeamRows + 1)) * Math.tan(rad);
         intermediatePostBars = Math.ceil((totalIntPosts * (avgIntPostHeight + 1.2) * 1.15) / 6.0);
       }
 
-      // 🌟 Point 4: ความสูงดั้งยกสโลป คิดเต็มช่วงกว้าง SlopeSpan * tan(pitch)
       slopeRiseHeightM = Math.round((baseWidthM * Math.tan(rad)) * 100) / 100;
 
-      // 🌟 Point 5: แป (Purlin) พร้อมระยะทาบต่อท่อน 6.00 ม. (Lap Splice 25 ซม.) เหนือจันทัน
       purlinRowsCount = Math.ceil(rafterSlopeLength / purlinSpacingM) + 1;
       {
         const splicesPerRow = Math.max(0, Math.ceil(effectiveLength / 6.0) - 1);
-        const lapSpliceM = 0.25; // ทาบต่อ 25 ซม.
+        const lapSpliceM = 0.25;
         const totalRowLength = effectiveLength + (splicesPerRow * lapSpliceM);
-        const totalPurlinMeters = purlinRowsCount * totalRowLength * 1.05; // เผื่อตัด 5%
+        const totalPurlinMeters = purlinRowsCount * totalRowLength * 1.05;
         purlinBars = Math.ceil(totalPurlinMeters / 6.0);
       }
       break;
@@ -1591,7 +1609,6 @@ export function calculateRoofMaterials(params: RoofCalculationParams): RoofCalcu
 
       slopeRiseHeightM = Math.round(((effectiveWidth / 2) * Math.tan(rad)) * 100) / 100;
 
-      // แปสำหรับทรงจั่ว 2 ด้าน
       {
         const purlinRowsPerSide = Math.ceil(slopeLengthHalfWidth / purlinSpacingM) + 1;
         purlinRowsCount = purlinRowsPerSide * 2;
@@ -1611,7 +1628,9 @@ export function calculateRoofMaterials(params: RoofCalculationParams): RoofCalcu
       birdStopLengthM = eavesPerimeterM;
       wallPlateM = 2 * (effectiveWidth + effectiveLength);
       ridgeBeamM = Math.max(1, effectiveLength - effectiveWidth);
-      valleyGutterM = Math.round(hipRafterLen * 1.5 * 10) / 10;
+
+      // 🌟 Point 4: ตะเฆ่รางน้ำฝน คิดเฉพาะเมื่อมีหลังคาหักมุม L/T (hasValleyGutter)
+      valleyGutterM = hasValleyGutter ? Math.round(hipRafterLen * 1.5 * 10) / 10 : 0;
 
       rafterSlopeLength = slopeLengthHalfWidth;
       rafterCount = (Math.ceil(effectiveLength / rafterSpacingM) + 1) * 2;
@@ -1643,13 +1662,11 @@ export function calculateRoofMaterials(params: RoofCalculationParams): RoofCalcu
   // คำนวณจำนวนท่อนเหล็กรูปพรรณ (ท่อนละ 6 ม.)
   const wallPlateBars = wallPlateM > 0 ? Math.ceil((wallPlateM * 1.08) / 6.0) : 0;
   const rafterBars = raftersTotalM > 0 ? Math.ceil((raftersTotalM * 1.10) / 6.0) : 0;
-  const ridgeBeamBars = ridgeBeamM > 0 ? Math.ceil((ridgeBeamM * 1.10) / 6.0) * 2 : 0; // ประกบคู่ 2C
+  const ridgeBeamBars = ridgeBeamM > 0 ? Math.ceil((ridgeBeamM * 1.10) / 6.0) * 2 : 0;
 
-  // 🌟 Point 4: ดั้งยกสโลป
   let kingPostBars = 0;
   if (style === 'lean_to') {
     const kingPostCount = Math.max(2, Math.ceil(effectiveLength / 3.5) + 1);
-    // เสาดั้งสูง slopeRiseHeightM + ท้าวแขนค้ำยันรับลม 1.5 ม.
     const kingPostTotalM = kingPostCount * (slopeRiseHeightM + 1.5);
     kingPostBars = Math.ceil((kingPostTotalM * 1.15) / 6.0) + intermediatePostBars;
   } else if (ridgeBeamM > 0) {
@@ -1657,21 +1674,41 @@ export function calculateRoofMaterials(params: RoofCalculationParams): RoofCalcu
     kingPostBars = Math.ceil((kingPostCount * (slopeRiseHeightM + 1.2) * 1.15) / 6.0);
   }
 
-  // 🌟 รวมเหล็ก C-Channel ทั้งหมด (รวมอะเสกลางจาก Point 3)
   const cChannelBars = wallPlateBars + rafterBars + ridgeBeamBars + kingPostBars + intermediateBeamBars;
   const cChannelKg = Math.round(cChannelBars * steelWeightPerBar);
 
-  // 🌟 Point 6: เหล็กกล่อง/ค้ำยัน/ขื่อยึดหัวเสา ตามสัดส่วน bracingRatio
   const boxSteelBars = Math.ceil(cChannelBars * bracingRatio);
   const boxSteelKg = Math.round(boxSteelBars * 28.5);
 
-  const isHeavyRoof = materialType === 'concrete_tile' || materialType === 'cpac';
+  // 🌟 Point 2: คำนวณจำนวนแผ่นหลังคาตามชนิดจริง
   let sheetsCount = surfaceArea;
-  if (isHeavyRoof) {
-    sheetsCount = Math.ceil(surfaceArea * 11); // ซีแพค 11 แผ่น/ตร.ม.
+  if (materialType === 'concrete_tile') {
+    // กระเบื้องลอนคู่มาตรฐาน 0.50x1.20 หรือ 0.54x1.20 ม. หักซ้อนทับแล้วได้พื้นที่ใช้งาน 0.45 ตร.ม./แผ่น = 2.22 แผ่น/ตร.ม.
+    sheetsCount = Math.ceil(surfaceArea * 2.22);
+  } else if (materialType === 'cpac') {
+    // กระเบื้องซีแพคโมเนีย / เพรสทีจ = 11 แผ่น/ตร.ม.
+    sheetsCount = Math.ceil(surfaceArea * 11);
+  } else {
+    // เมทัลชีท / ชิงเกิ้ลบอร์ด = ตามพื้นที่ ตร.ม.
+    sheetsCount = Math.round(surfaceArea);
   }
 
-  // 2. เชิงชาย
+  // 🌟 Point 3: แฟลชชิ่งครอบข้างและครอบบน (Side & Top Flashing)
+  let sideFlashingM = 0;
+  if (style === 'lean_to') {
+    // เพิงหมาแหงน: ครอบข้าง 2 ฝั่ง + ครอบบนปิดหัวเพิง
+    sideFlashingM = Math.round(((2 * leanToSlopeLength) + effectiveLength) * 10) / 10;
+  } else if (style === 'gable') {
+    // ทรงจั่ว: ครอบปั้นลม / บัวครอบข้างจั่ว 4 แนว
+    sideFlashingM = Math.round((4 * slopeLengthHalfWidth) * 10) / 10;
+  }
+  const sideFlashingCost = Math.round(sideFlashingM * 130);
+
+  // 🌟 Point 4: อุปกรณ์ครอบพิเศษของปั้นหยา
+  const threeWayCapPcs = style === 'hip' ? 2 : 0;
+  const hipStarterCapPcs = style === 'hip' ? 4 : 0;
+
+  // เชิงชาย
   let fasciaLength = 0;
   let fasciaPieces = 0;
   let fasciaMatPricePerM = 0;
@@ -1703,7 +1740,7 @@ export function calculateRoofMaterials(params: RoofCalculationParams): RoofCalcu
   const fasciaMaterialCost = Math.round(fasciaLength * fasciaMatPricePerM);
   const fasciaLaborCost = Math.round(fasciaLength * fasciaLabPricePerM);
 
-  // 3. แผ่นปิดกันนก
+  // แผ่นปิดกันนก
   let birdStopLength = 0;
   let birdStopPieces = 0;
   let birdStopMatPricePerM = 0;
@@ -1738,16 +1775,16 @@ export function calculateRoofMaterials(params: RoofCalculationParams): RoofCalcu
   const birdStopMaterialCost = Math.round(birdStopLength * birdStopMatPricePerM);
   const birdStopLaborCost = Math.round(birdStopLength * birdStopLabPricePerM);
 
-  // 4. ระบบครอบแห้ง Dry Ridge & ตะเฆ่ราง
+  // ครอบแห้งและตะเฆ่ราง
   const dryRidgeRolls = ridgeLength > 0 ? Math.ceil(ridgeLength / 3.0) : 0;
   const dryRidgeCost = dryRidgeRolls * 750;
   const valleyGutterCost = Math.round(valleyGutterM * 450);
 
-  // 5. สกรูยึดหลังคา
+  // สกรูยึดหลังคา
   const roofScrewsPcs = Math.ceil(surfaceArea * 5.5);
   const roofScrewsCost = Math.ceil(roofScrewsPcs * 1.5);
 
-  // 6. ฉนวนกันความร้อน
+  // ฉนวนกันความร้อน
   let insulationSqm = 0;
   let insulationMaterialCost = 0;
   let insulationLaborCost = 0;
@@ -1772,6 +1809,7 @@ export function calculateRoofMaterials(params: RoofCalculationParams): RoofCalcu
     insulationLaborCost = Math.round(insulationSqm * labRate);
   }
 
+  const isHeavyRoof = materialType === 'concrete_tile' || materialType === 'cpac';
   const baseMaterialPricePerSqm = isHeavyRoof ? 550 : 380;
   const baseLaborPricePerSqm = isHeavyRoof ? 180 : 120;
   const roofMatTotal = Math.round((surfaceArea * baseMaterialPricePerSqm) + (cChannelKg * 35) + (boxSteelKg * 36) + (purlinBars * 195));
@@ -1784,7 +1822,7 @@ export function calculateRoofMaterials(params: RoofCalculationParams): RoofCalcu
     box_steel_kg: boxSteelKg,
     box_steel_bars: boxSteelBars,
     purlin_bars: purlinBars,
-    roofSheetsCount: Math.round(sheetsCount),
+    roofSheetsCount: sheetsCount,
     ridgeTilesM: Math.round(ridgeLength * 10) / 10,
     eavesPerimeterM,
     fasciaLengthM: fasciaLength,
@@ -1811,6 +1849,10 @@ export function calculateRoofMaterials(params: RoofCalculationParams): RoofCalcu
     bracingPercent,
     valleyGutterM,
     valleyGutterCost,
+    sideFlashingM,
+    sideFlashingCost,
+    threeWayCapPcs,
+    hipStarterCapPcs,
     dryRidgeRolls,
     dryRidgeCost,
     roofScrewsPcs,
@@ -1818,7 +1860,7 @@ export function calculateRoofMaterials(params: RoofCalculationParams): RoofCalcu
     insulationSqm,
     insulationMaterialCost,
     insulationLaborCost,
-    materialEstimateThb: roofMatTotal + fasciaMaterialCost + birdStopMaterialCost + dryRidgeCost + valleyGutterCost + roofScrewsCost + insulationMaterialCost,
+    materialEstimateThb: roofMatTotal + fasciaMaterialCost + birdStopMaterialCost + dryRidgeCost + valleyGutterCost + sideFlashingCost + roofScrewsCost + insulationMaterialCost,
     laborEstimateThb: roofLabTotal + fasciaLaborCost + birdStopLaborCost + insulationLaborCost
   };
 }

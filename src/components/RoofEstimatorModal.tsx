@@ -24,16 +24,55 @@ export const RoofEstimatorModal: React.FC<RoofEstimatorModalProps> = ({ isOpen, 
   const [birdStopType, setBirdStopType] = useState<BirdStopType>('metal_sheet_eaves');
   const [insulationType, setInsulationType] = useState<RoofInsulationType>('none');
   const [rafterSpacingM, setRafterSpacingM] = useState<number>(1.0);
+  const [hasValleyGutter, setHasValleyGutter] = useState<boolean>(false); // 🌟 สวิตช์ตะเฆ่รางน้ำเฉพาะเมื่อแปลน L/T
 
-  // ปรับชนิดแผ่นปิดกันนกอัตโนมัติเมื่อเปลี่ยนวัสดุมุง
+  // 🌟 Point 1: Slope Pitch Safety Guard ตรวจสอบความชันขั้นต่ำตามชนิดวัสดุมุง
+  const pitchGuard = useMemo(() => {
+    let minSafe = 5;
+    let recommended = 10;
+    let matLabel = 'เมทัลชีท';
+    let warningMsg = '';
+
+    if (materialType === 'metal_sheet') {
+      minSafe = 5;
+      recommended = 10;
+      matLabel = 'เมทัลชีท';
+      warningMsg = 'ความชันต่ำกว่า 5° เสี่ยงน้ำฝนไหลย้อนซึมรอยทับซ้อนและหัวสกรู (มาตรฐาน มอก. แนะนำ 7°-10° ขึ้นไป)';
+    } else if (materialType === 'concrete_tile') {
+      minSafe = 15;
+      recommended = 20;
+      matLabel = 'กระเบื้องลอนคู่';
+      warningMsg = 'กระเบื้องลอนคู่ ความชันขั้นต่ำต้องไม่น้อยกว่า 15° หากต่ำกว่านี้น้ำจะซึมรอยทาบและรูยึดสกรู (แนะนำ 18°-20°)';
+    } else if (materialType === 'cpac') {
+      minSafe = 25;
+      recommended = 30;
+      matLabel = 'กระเบื้องคอนกรีต/ซีแพคโมเนีย';
+      warningMsg = 'กระเบื้องคอนกรีต/ซีแพคโมเนีย ความชันขั้นต่ำต้องไม่น้อยกว่า 25° (SCG แนะนำ 30°-35° ป้องกันน้ำรั่วย้อน Backwater Infiltration)';
+    } else if (materialType === 'shingle') {
+      minSafe = 17;
+      recommended = 20;
+      matLabel = 'ชิงเกิ้ลบอร์ด';
+      warningMsg = 'แอสฟัลต์ชิงเกิ้ลบอร์ด ความชันขั้นต่ำต้องไม่น้อยกว่า 17° (แนะนำ 20° ขึ้นไป)';
+    }
+
+    const isUnsafe = pitchDeg < minSafe;
+    return { minSafe, recommended, matLabel, warningMsg, isUnsafe };
+  }, [materialType, pitchDeg]);
+
+  // ปรับชนิดแผ่นปิดกันนกและแนะนำองศาอัตโนมัติเมื่อเปลี่ยนวัสดุมุง
   const handleMaterialChange = (newMat: RoofMaterialType) => {
     setMaterialType(newMat);
     if (newMat === 'metal_sheet') {
       setBirdStopType('metal_sheet_eaves');
       setPurlinSpacingM(1.2);
-    } else if (newMat === 'concrete_tile' || newMat === 'cpac') {
+    } else if (newMat === 'concrete_tile') {
+      setBirdStopType('roman_tile');
+      setPurlinSpacingM(1.0);
+      if (pitchDeg < 15) setPitchDeg(18);
+    } else if (newMat === 'cpac') {
       setBirdStopType('cpac_wave');
       setPurlinSpacingM(0.34);
+      if (pitchDeg < 25) setPitchDeg(30);
     }
   };
 
@@ -52,9 +91,10 @@ export const RoofEstimatorModal: React.FC<RoofEstimatorModalProps> = ({ isOpen, 
       birdStopType,
       insulationType,
       rafterSpacingM,
+      hasValleyGutter,
     };
     return calculateRoofMaterials(params);
-  }, [style, baseWidthM, baseLengthM, overhangM, pitchDeg, materialType, purlinSpacingM, includeFascia, fasciaType, includeBirdStop, birdStopType, insulationType, rafterSpacingM]);
+  }, [style, baseWidthM, baseLengthM, overhangM, pitchDeg, materialType, purlinSpacingM, includeFascia, fasciaType, includeBirdStop, birdStopType, insulationType, rafterSpacingM, hasValleyGutter]);
 
   if (!isOpen) return null;
 
@@ -152,24 +192,93 @@ export const RoofEstimatorModal: React.FC<RoofEstimatorModalProps> = ({ isOpen, 
       });
     }
 
-    // 5. วัสดุมุงหลังคา (Roof Sheets / Tiles)
-    const roofSheetName = materialType === 'metal_sheet'
-      ? 'แผ่นหลังคาเมทัลชีทเคลือบสีอลูซิงค์ (AZ-150) หนา 0.35-0.40 มม. มอก.'
-      : materialType === 'cpac'
-      ? 'กระเบื้องหลังคาคอนกรีตแผ่นเรียบ/ซีแพคโมเนีย ตราช้าง/SCG มอก.'
-      : 'กระเบื้องหลังคาคอนกรีตลอนคู่ มอก.';
+    // 5. วัสดุมุงหลังคา (Roof Sheets / Tiles) - Point 2: ลอนคู่คำนวณเป็นแผ่น (2.22 แผ่น/ตร.ม.)
+    if (materialType === 'concrete_tile') {
+      generatedItems.push({
+        id: `roof-gen-sheet-${timestamp + 4}`,
+        category: 'roof',
+        name: 'กระเบื้องหลังคาไฟเบอร์ซีเมนต์ ลอนคู่ มอก. (หนา 5.5 มม.)',
+        spec: `พื้นที่ผิวลาดเอียง ${result.effectiveRoofAreaSqm} ตร.ม. (องศา ${pitchDeg}°) อัตรา 2.22 แผ่น/ตร.ม. มุงได้พอดีหน้างาน ไม่ขาดเศษ (${result.roofSheetsCount} แผ่น)`,
+        quantity: result.roofSheetsCount,
+        unit: 'แผ่น',
+        materialUnitPrice: 62,
+        laborUnitPrice: 25,
+        wastePercent: 5,
+      });
+    } else if (materialType === 'cpac') {
+      generatedItems.push({
+        id: `roof-gen-sheet-${timestamp + 4}`,
+        category: 'roof',
+        name: 'กระเบื้องหลังคาคอนกรีต ซีแพคโมเนีย / เพรสทีจ ตราช้าง/SCG มอก.',
+        spec: `พื้นที่ผิวลาดเอียง ${result.effectiveRoofAreaSqm} ตร.ม. (องศา ${pitchDeg}°) อัตรา 11 แผ่น/ตร.ม. (${result.roofSheetsCount} แผ่น)`,
+        quantity: result.roofSheetsCount,
+        unit: 'แผ่น',
+        materialUnitPrice: 38,
+        laborUnitPrice: 14,
+        wastePercent: 6,
+      });
+    } else {
+      generatedItems.push({
+        id: `roof-gen-sheet-${timestamp + 4}`,
+        category: 'roof',
+        name: 'แผ่นหลังคาเมทัลชีทเคลือบสีอลูซิงค์ (AZ-150) หนา 0.35-0.40 มม. มอก.',
+        spec: `พื้นที่ผิวลาดเอียง ${result.effectiveRoofAreaSqm} ตร.ม. (องศา ${pitchDeg}°) คำนวณเผื่อซ้อนทับและเศษวัสดุ`,
+        quantity: result.effectiveRoofAreaSqm,
+        unit: 'ตร.ม.',
+        materialUnitPrice: 240,
+        laborUnitPrice: 85,
+        wastePercent: 6,
+      });
+    }
 
-    generatedItems.push({
-      id: `roof-gen-sheet-${timestamp + 4}`,
-      category: 'roof',
-      name: roofSheetName,
-      spec: `พื้นที่ผิวลาดเอียง ${result.effectiveRoofAreaSqm} ตร.ม. (องศา ${pitchDeg}°) คำนวณเผื่อซ้อนทับและเศษวัสดุ`,
-      quantity: result.effectiveRoofAreaSqm,
-      unit: 'ตร.ม.',
-      materialUnitPrice: materialType === 'metal_sheet' ? 240 : 380,
-      laborUnitPrice: materialType === 'metal_sheet' ? 85 : 140,
-      wastePercent: 6,
-    });
+    // 🌟 Point 3: แฟลชชิ่งครอบข้างและครอบบน (Side & Top Flashing / Bargeboard)
+    if (result.sideFlashingM && result.sideFlashingM > 0) {
+      const flashingName = style === 'lean_to'
+        ? 'แฟลชชิ่งครอบข้างและครอบบนปิดหัวเพิงหมาแหงน (พับขึ้นรูปสีเดียวกับหลังคา)'
+        : 'ครอบปั้นลม / แฟลชชิ่งบัวครอบข้างจั่ว (Bargeboard Flashing)';
+      const flashingSpec = style === 'lean_to'
+        ? `ความยาวครอบข้าง 2 ฝั่ง (${Math.round((result.rafterLengthM || 0) * 2 * 10) / 10} ม.) + ครอบบนปิดหัวเพิง (${Math.round((baseLengthM + overhangM * 2) * 10) / 10} ม.) รวม ${result.sideFlashingM} ม.`
+        : `ความยาวครอบปั้นลมปิดขอบจั่ว 4 แนวรวม ${result.sideFlashingM} ม.`;
+
+      generatedItems.push({
+        id: `roof-gen-sideflashing-${timestamp + 13}`,
+        category: 'roof',
+        name: flashingName,
+        spec: flashingSpec,
+        quantity: result.sideFlashingM,
+        unit: 'ม.',
+        materialUnitPrice: 130,
+        laborUnitPrice: 50,
+        wastePercent: 5,
+      });
+    }
+
+    // 🌟 Point 4: อุปกรณ์ครอบพิเศษของปั้นหยา (ครอบ 3 ทาง และ ครอบปิดปลายตะเฆ่)
+    if (style === 'hip' && (materialType === 'cpac' || materialType === 'concrete_tile')) {
+      generatedItems.push({
+        id: `roof-gen-threeway-${timestamp + 14}`,
+        category: 'roof',
+        name: 'กระเบื้องครอบ 3 ทาง SCG (Apex Three-Way Cap) สันปั้นหยา',
+        spec: 'ติดตั้งจุดบรรจบระหว่างสันอกไก่และตะเฆ่สัน 2 ฝั่ง (2 ชิ้น)',
+        quantity: 2,
+        unit: 'ชิ้น',
+        materialUnitPrice: 280,
+        laborUnitPrice: 80,
+        wastePercent: 0,
+      });
+
+      generatedItems.push({
+        id: `roof-gen-hipstarter-${timestamp + 15}`,
+        category: 'roof',
+        name: 'กระเบื้องครอบปิดปลายตะเฆ่ SCG (Hip Starter Cap) ชายน้ำปั้นหยา',
+        spec: 'ติดตั้งปิดปลายสันตะเฆ่รับน้ำฝนทั้ง 4 มุมชายคา ป้องกันนก หนู และน้ำย้อน (4 ชิ้น)',
+        quantity: 4,
+        unit: 'ชิ้น',
+        materialUnitPrice: 220,
+        laborUnitPrice: 60,
+        wastePercent: 0,
+      });
+    }
 
     // 6. ครอบสันหลังคาและครอบตะเฆ่สัน (Ridge & Hip Caps)
     if (result.ridgeTilesM > 0) {
@@ -441,6 +550,46 @@ export const RoofEstimatorModal: React.FC<RoofEstimatorModalProps> = ({ isOpen, 
               </div>
             </div>
 
+            {/* 🌟 Point 1: Slope Pitch Safety Guard Banner */}
+            {pitchGuard.isUnsafe && (
+              <div className="p-3 bg-rose-500/15 border border-rose-500/50 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 animate-in fade-in">
+                <div className="flex items-start gap-2 text-rose-300">
+                  <span className="material-symbols-outlined text-rose-400 shrink-0 text-base mt-0.5">warning</span>
+                  <div>
+                    <span className="text-xs font-bold block">เตือนระดับความชันอันตราย ({pitchDeg}° &lt; ขั้นต่ำ {pitchGuard.minSafe}°)</span>
+                    <span className="text-[11px] text-rose-200/90 leading-tight block">{pitchGuard.warningMsg}</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPitchDeg(pitchGuard.recommended)}
+                  className="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-bold shrink-0 flex items-center gap-1 shadow transition active:scale-95"
+                >
+                  <span className="material-symbols-outlined text-xs">auto_fix_high</span>
+                  <span>ปรับเป็น {pitchGuard.recommended}° อัตโนมัติ</span>
+                </button>
+              </div>
+            )}
+
+            {/* 🌟 Point 4: สวิตช์เปิดตะเฆ่รางน้ำเฉพาะเมื่อแปลนหักมุม L/T ทรงปั้นหยา */}
+            {style === 'hip' && (
+              <div className="bg-slate-900/90 p-3 rounded-xl border border-slate-800 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-sm text-teal-400">water_damage</span>
+                  <div>
+                    <span className="text-xs font-bold text-slate-200 block">แปลนหักมุม L/T มีตะเฆ่รางน้ำ (Valley Gutter)</span>
+                    <span className="text-[10px] text-slate-400">เปิดเฉพาะเมื่อเป็นหลังคาตัดที่มีร่องน้ำบรรจบกัน</span>
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={hasValleyGutter}
+                  onChange={(e) => setHasValleyGutter(e.target.checked)}
+                  className="w-4 h-4 accent-teal-400 cursor-pointer rounded"
+                />
+              </div>
+            )}
+
             {/* วัสดุมุง */}
             <div>
               <label className="text-xs text-slate-300 block mb-1 font-medium">ชนิดวัสดุมุง</label>
@@ -690,16 +839,51 @@ export const RoofEstimatorModal: React.FC<RoofEstimatorModalProps> = ({ isOpen, 
                 <div className="flex justify-between items-center py-1.5 border-b border-slate-850">
                   <div className="flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-                    <span className="text-slate-300 font-medium">แผ่นมุงหลังคา + ครอบสันจั่ว/แฟลชชิ่ง:</span>
+                    <span className="text-slate-300 font-medium">แผ่นมุงหลังคา:</span>
                   </div>
                   <div className="text-right">
                     <span className="font-mono font-bold text-emerald-300">
                       {materialType === 'concrete_tile' || materialType === 'cpac'
-                        ? `${result.roofSheetsCount.toLocaleString()} แผ่น (ครอบ ${result.ridgeTilesM} ม.)`
-                        : `${result.roofSheetsCount} ตร.ม. (ครอบ ${result.ridgeTilesM} ม.)`}
+                        ? `${result.roofSheetsCount.toLocaleString()} แผ่น (${materialType === 'concrete_tile' ? 'ลอนคู่ @ 2.22 แผ่น/ตร.ม.' : 'ซีแพค @ 11 แผ่น/ตร.ม.'})`
+                        : `${result.roofSheetsCount} ตร.ม. (เมทัลชีท)`}
                     </span>
                   </div>
                 </div>
+
+                {/* 🌟 Point 3: แฟลชชิ่งครอบข้างและครอบบน */}
+                {result.sideFlashingM && result.sideFlashingM > 0 ? (
+                  <div className="flex justify-between items-center py-1.5 border-b border-slate-850">
+                    <div className="flex flex-col">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-orange-400"></span>
+                        <span className="text-slate-300 font-medium">
+                          {style === 'lean_to' ? 'แฟลชชิ่งครอบข้าง & ครอบบนหัวเพิง:' : 'ครอบปั้นลม / บัวข้างจั่ว 4 แนว:'}
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-slate-500 ml-4">
+                        {style === 'lean_to' ? 'ครอบข้าง 2 ด้าน + ครอบบนติดผนัง' : 'ครอบปั้นลมขอบจั่ว 4 แนว'}
+                      </span>
+                    </div>
+                    <div className="text-right">
+                      <span className="font-mono font-bold text-orange-300 mr-1">{result.sideFlashingM} ม.</span>
+                      <span className="text-slate-500 font-mono text-[10px]">(฿{result.sideFlashingCost?.toLocaleString()})</span>
+                    </div>
+                  </div>
+                ) : null}
+
+                {/* 🌟 Point 4: อุปกรณ์ครอบพิเศษของปั้นหยา (ครอบ 3 ทาง และ ครอบปิดปลายตะเฆ่) */}
+                {style === 'hip' && (materialType === 'cpac' || materialType === 'concrete_tile') && (
+                  <div className="flex justify-between items-center py-1.5 border-b border-slate-850">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+                      <span className="text-slate-300 font-medium">อุปกรณ์ครอบพิเศษ (ครอบ 3 ทาง & ปิดปลายตะเฆ่):</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="font-mono font-bold text-amber-300 mr-1">ครอบ 3 ทาง 2 ชิ้น | ครอบปลาย 4 ชิ้น</span>
+                      <span className="text-slate-500 font-mono text-[10px]">(฿1,440)</span>
+                    </div>
+                  </div>
+                )}
 
                 {/* 🌟 5. ไม้เชิงชาย 🌟 */}
                 <div className={`p-2.5 rounded-lg border flex justify-between items-center ${

@@ -520,6 +520,7 @@ export interface RoofCalculationParams {
   birdStopType: BirdStopType;
   insulationType?: RoofInsulationType;
   rafterSpacingM?: number;
+  hasValleyGutter?: boolean;          // 🌟 สวิตช์เปิดใช้ตะเฆ่รางน้ำเฉพาะเมื่อแปลนหักมุม L/T
 }
 
 export interface RoofCalculationResult {
@@ -558,6 +559,10 @@ export interface RoofCalculationResult {
   bracingPercent?: number;            // 🌟 สัดส่วนเหล็กค้ำยัน/ขื่อยึด (%)
   valleyGutterM: number;
   valleyGutterCost: number;
+  sideFlashingM?: number;             // 🌟 แฟลชชิ่งครอบข้างและครอบบน (เพิงแหงน/จั่ว)
+  sideFlashingCost?: number;
+  threeWayCapPcs?: number;            // 🌟 ครอบ 3 ทางปั้นหยา
+  hipStarterCapPcs?: number;          // 🌟 ครอบปิดปลายตะเฆ่ปั้นหยา
   dryRidgeRolls: number;
   dryRidgeCost: number;
   roofScrewsPcs: number;
