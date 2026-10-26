@@ -15,13 +15,13 @@ interface ActualCostTrackerViewProps {
 }
 
 export const ActualCostTrackerView: React.FC<ActualCostTrackerViewProps> = ({
-  items,
-  overheadPercent,
-  vatPercent,
-  projectName,
-  houseAreaSqm,
-  milestones,
-  expenses,
+  items = [],
+  overheadPercent = 7,
+  vatPercent = 7,
+  projectName = 'โครงการก่อสร้าง',
+  houseAreaSqm = 120,
+  milestones = [],
+  expenses = [],
   onUpdateExpenses
 }) => {
   // Expense Form State
@@ -98,7 +98,7 @@ export const ActualCostTrackerView: React.FC<ActualCostTrackerViewProps> = ({
       external_works: { material: 0, labor: 0, other: 0, total: 0, count: 0 },
     };
 
-    expenses.forEach(exp => {
+    (expenses || []).forEach(exp => {
       const amt = Number(exp.amount) || 0;
       if (map[exp.category]) {
         map[exp.category].count += 1;
@@ -118,15 +118,15 @@ export const ActualCostTrackerView: React.FC<ActualCostTrackerViewProps> = ({
 
   // 4. Overall Financial Metrics
   const totalActualSpent = useMemo(() => {
-    return expenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+    return (expenses || []).reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
   }, [expenses]);
 
   const totalActualMaterial = useMemo(() => {
-    return expenses.filter(e => e.expenseType === 'material').reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+    return (expenses || []).filter(e => e.expenseType === 'material').reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
   }, [expenses]);
 
   const totalActualLabor = useMemo(() => {
-    return expenses.filter(e => e.expenseType === 'labor').reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+    return (expenses || []).filter(e => e.expenseType === 'labor').reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
   }, [expenses]);
 
   // Projected Profit: Contract Grand Total - Total Actual Expenses
@@ -252,7 +252,7 @@ export const ActualCostTrackerView: React.FC<ActualCostTrackerViewProps> = ({
 
   // Filtered Expenses
   const filteredExpenses = useMemo(() => {
-    return expenses.filter(e => {
+    return (expenses || []).filter(e => {
       const matchCat = filterCategory === 'all' || e.category === filterCategory;
       const matchType = filterType === 'all' || e.expenseType === filterType;
       const matchSearch = !searchTerm || 
