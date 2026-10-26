@@ -1,7 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { ProjectSaveState, ConstructionCategory, ActualExpenseItem } from '../types';
 import { CATEGORY_LABELS } from '../constants';
-import { computeBOQSummary } from '../services/calculator';
 
 interface ProjectSnapshotSectionProps {
   projects: ProjectSaveState[];
@@ -11,6 +10,7 @@ interface ProjectSnapshotSectionProps {
 }
 
 type SnapshotViewTab = 'chart' | 'matrix' | 'table';
+type CategoryFilter = 'all' | 'over' | 'watchlist' | 'safe';
 
 export const ProjectSnapshotSection: React.FC<ProjectSnapshotSectionProps> = ({
   projects,
@@ -19,6 +19,7 @@ export const ProjectSnapshotSection: React.FC<ProjectSnapshotSectionProps> = ({
   onUpdateProjectExpenses,
 }) => {
   const [activeTab, setActiveTab] = useState<SnapshotViewTab>('chart');
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all');
   const [isEditorOpen, setIsEditorOpen] = useState<boolean>(false);
 
   // Selected project object
@@ -26,7 +27,6 @@ export const ProjectSnapshotSection: React.FC<ProjectSnapshotSectionProps> = ({
     return projects.find((p) => p.id === selectedProjectId) || projects[0] || null;
   }, [projects, selectedProjectId]);
 
-  // Categories list
   const categoryKeys = useMemo(() => {
     return Object.keys(CATEGORY_LABELS) as ConstructionCategory[];
   }, []);
@@ -92,10 +92,9 @@ export const ProjectSnapshotSection: React.FC<ProjectSnapshotSectionProps> = ({
   const financialKPIs = useMemo(() => {
     const totalPlanned = Object.values(categoryBudgets).reduce((a, b) => a + b, 0);
     const totalActual = Object.values(categoryActuals).reduce((a, b) => a + b, 0);
-    const variance = totalPlanned - totalActual; // +: remaining, -: over budget
+    const variance = totalPlanned - totalActual; // +: เหลือ, -: เกิน
     const burnRate = totalPlanned > 0 ? (totalActual / totalPlanned) * 100 : 0;
 
-    // CPI (Cost Performance Index) = Planned / Actual
     let cpi = 1.0;
     if (totalActual > 0) {
       cpi = totalPlanned / totalActual;
@@ -103,25 +102,25 @@ export const ProjectSnapshotSection: React.FC<ProjectSnapshotSectionProps> = ({
 
     let cpiStatus: 'on_track' | 'watchlist' | 'high_risk' = 'on_track';
     let cpiLabel = 'ปลอดภัย (On-Track)';
-    let cpiColor = 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30';
-    let cpiBadgeColor = 'bg-emerald-400';
+    let cpiBg = 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400';
+    let cpiDot = 'bg-emerald-400';
 
     if (totalActual > 0) {
       if (cpi >= 1.0) {
         cpiStatus = 'on_track';
         cpiLabel = 'ปลอดภัย (On-Track)';
-        cpiColor = 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30';
-        cpiBadgeColor = 'bg-emerald-400';
+        cpiBg = 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400';
+        cpiDot = 'bg-emerald-400';
       } else if (cpi >= 0.85) {
         cpiStatus = 'watchlist';
         cpiLabel = 'เฝ้าระวัง (Watchlist)';
-        cpiColor = 'text-amber-400 bg-amber-500/10 border-amber-500/30';
-        cpiBadgeColor = 'bg-amber-400';
+        cpiBg = 'bg-amber-500/15 border-amber-500/30 text-amber-400';
+        cpiDot = 'bg-amber-400';
       } else {
         cpiStatus = 'high_risk';
         cpiLabel = 'ความเสี่ยงสูง (High Risk)';
-        cpiColor = 'text-rose-400 bg-rose-500/10 border-rose-500/30';
-        cpiBadgeColor = 'bg-rose-400';
+        cpiBg = 'bg-rose-500/15 border-rose-500/30 text-rose-400';
+        cpiDot = 'bg-rose-400';
       }
     }
 
@@ -133,8 +132,8 @@ export const ProjectSnapshotSection: React.FC<ProjectSnapshotSectionProps> = ({
       cpi,
       cpiStatus,
       cpiLabel,
-      cpiColor,
-      cpiBadgeColor,
+      cpiBg,
+      cpiDot,
     };
   }, [categoryBudgets, categoryActuals]);
 
@@ -144,7 +143,7 @@ export const ProjectSnapshotSection: React.FC<ProjectSnapshotSectionProps> = ({
       const planned = categoryBudgets[catKey] || 0;
       const actual = categoryActuals[catKey] || 0;
       const diff = planned - actual; // +: เหลือ, -: เกิน
-      const spentPercent = planned > 0 ? (actual / planned) * 100 : actual > 0 ? 999 : 0;
+      const spentPercent = planned > 0 ? (actual / planned) * 100 : actual > 0 ? 100 : 0;
       const isOver = actual > planned && planned > 0;
       const isWatchlist = !isOver && spentPercent >= 85;
       const isSafe = !isOver && !isWatchlist;
@@ -164,15 +163,13 @@ export const ProjectSnapshotSection: React.FC<ProjectSnapshotSectionProps> = ({
     });
   }, [categoryKeys, categoryBudgets, categoryActuals]);
 
-  // Max value among categories for bar chart scale
-  const maxCategoryValue = useMemo(() => {
-    let max = 1000;
-    categoryComparisons.forEach((c) => {
-      if (c.planned > max) max = c.planned;
-      if (c.actual > max) max = c.actual;
-    });
-    return max;
-  }, [categoryComparisons]);
+  // Filtered categories
+  const filteredCategoryList = useMemo(() => {
+    if (categoryFilter === 'over') return categoryComparisons.filter((c) => c.isOver);
+    if (categoryFilter === 'watchlist') return categoryComparisons.filter((c) => c.isWatchlist);
+    if (categoryFilter === 'safe') return categoryComparisons.filter((c) => c.isSafe);
+    return categoryComparisons;
+  }, [categoryComparisons, categoryFilter]);
 
   // Editor Temporary Inputs
   const [editorInputs, setEditorInputs] = useState<Record<ConstructionCategory, number>>(() => {
@@ -191,13 +188,11 @@ export const ProjectSnapshotSection: React.FC<ProjectSnapshotSectionProps> = ({
     return init;
   });
 
-  // Open editor and load current values
   const handleOpenEditor = () => {
     setEditorInputs({ ...categoryActuals });
     setIsEditorOpen(true);
   };
 
-  // Smart presets for simulation
   const handleApplyPreset = (preset: 'structure' | 'progress60' | 'sync100' | 'reset0') => {
     const updated: Record<ConstructionCategory, number> = {
       preparation: 0,
@@ -233,7 +228,6 @@ export const ProjectSnapshotSection: React.FC<ProjectSnapshotSectionProps> = ({
     setEditorInputs(updated);
   };
 
-  // Save edited actual costs
   const handleSaveEditor = () => {
     if (!currentProject) return;
 
@@ -259,45 +253,47 @@ export const ProjectSnapshotSection: React.FC<ProjectSnapshotSectionProps> = ({
     setIsEditorOpen(false);
   };
 
-  // Print Report Handler
-  const handlePrintReport = () => {
-    window.print();
-  };
-
   if (!currentProject) return null;
 
+  const countOver = categoryComparisons.filter((c) => c.isOver).length;
+  const countWatchlist = categoryComparisons.filter((c) => c.isWatchlist).length;
+  const countSafe = categoryComparisons.filter((c) => c.isSafe).length;
+
   return (
-    <div id="project-snapshot-section" className="flex flex-col gap-5 scroll-mt-6">
+    <div id="project-snapshot-section" className="flex flex-col gap-4 scroll-mt-6">
       
-      {/* Header Bar */}
-      <div className="bg-gradient-to-r from-slate-900 via-indigo-950/40 to-slate-900 border border-indigo-500/30 rounded-2xl p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl">
-        <div className="flex items-center gap-3.5">
-          <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-indigo-500 to-cyan-500 flex items-center justify-center shadow-lg shadow-indigo-500/20 shrink-0">
-            <span className="material-symbols-outlined text-white text-2xl">analytics</span>
+      {/* 🌟 1. HERO TOP BAR: CLEAN & MODERN */}
+      <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shrink-0">
+            <span className="material-symbols-outlined text-xl">analytics</span>
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/40">
+              <span className="text-xs font-black uppercase tracking-wider text-indigo-400">
                 Project Snapshot
               </span>
-              <span className="text-xs text-slate-400">เปรียบเทียบงบประมาณ vs ต้นทุนจริง & ดัชนีความเสี่ยง</span>
+              <span className="text-slate-600">•</span>
+              <span className="text-xs text-slate-400">คุมต้นทุนและวิเคราะห์ความเสี่ยง</span>
             </div>
-            <h2 className="text-lg sm:text-xl font-black text-white mt-0.5 flex items-center gap-2">
+            <h2 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
               <span>{currentProject.projectName}</span>
-              <span className="text-xs font-mono font-normal text-slate-400">({currentProject.houseAreaSqm} ตร.ม.)</span>
+              <span className="text-xs font-mono font-normal text-cyan-400 bg-cyan-950/40 px-2 py-0.5 rounded-full border border-cyan-800/40">
+                {currentProject.houseAreaSqm} ตร.ม.
+              </span>
             </h2>
           </div>
         </div>
 
         {/* Action Controls */}
-        <div className="flex items-center gap-2.5 flex-wrap">
-          {/* Project Switcher Dropdown */}
-          <div className="flex items-center gap-1.5 bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 focus-within:border-indigo-400 transition">
-            <span className="material-symbols-outlined text-slate-400 text-sm">home_work</span>
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Dropdown switch project */}
+          <div className="flex items-center gap-1.5 bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 focus-within:border-indigo-400 transition">
+            <span className="material-symbols-outlined text-slate-400 text-xs">home_work</span>
             <select
               value={currentProject.id}
               onChange={(e) => onSelectProject(e.target.value)}
-              className="bg-transparent text-xs text-slate-200 font-semibold focus:outline-none cursor-pointer max-w-[200px] truncate"
+              className="bg-transparent text-xs text-slate-200 font-medium focus:outline-none cursor-pointer max-w-[180px] truncate"
             >
               {projects.map((p) => (
                 <option key={p.id} value={p.id} className="bg-slate-900 text-slate-100">
@@ -307,376 +303,425 @@ export const ProjectSnapshotSection: React.FC<ProjectSnapshotSectionProps> = ({
             </select>
           </div>
 
-          {/* Record / Adjust Actual Cost Button */}
+          {/* Quick Edit Cost Button */}
           <button
             onClick={handleOpenEditor}
-            className="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-indigo-600/30 transition active:scale-95"
+            className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold flex items-center gap-1.5 shadow transition active:scale-95"
           >
-            <span className="material-symbols-outlined text-sm">edit_note</span>
-            <span>✏️ บันทึก/ปรับต้นทุนจริง</span>
+            <span className="material-symbols-outlined text-xs">edit</span>
+            <span>ปรับต้นทุนจริง</span>
           </button>
 
-          {/* Print Report Button */}
+          {/* Print Button */}
           <button
-            onClick={handlePrintReport}
-            className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold flex items-center gap-1.5 transition active:scale-95"
-            title="พิมพ์รายงานสรุปผลภาพรวมโครงการ"
+            onClick={() => window.print()}
+            className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs transition"
+            title="พิมพ์รายงาน"
           >
-            <span className="material-symbols-outlined text-sm text-cyan-400">print</span>
-            <span>พิมพ์รายงาน</span>
+            <span className="material-symbols-outlined text-sm">print</span>
           </button>
         </div>
       </div>
 
-      {/* 4 Key Financial Health KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+      {/* 🌟 2. AT-A-GLANCE FINANCIAL HEALTH ROW: 1 GAUGE + 3 NUMBERS */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5">
         
-        {/* KPI 1: Planned BOQ Budget */}
-        <div className="bg-slate-900/90 border border-slate-800 p-4 rounded-2xl flex flex-col justify-between shadow-sm relative overflow-hidden group">
-          <div className="absolute top-0 right-0 w-24 h-24 bg-blue-500/5 rounded-full blur-2xl group-hover:bg-blue-500/10 transition" />
-          <div className="flex items-center justify-between text-slate-400 text-xs">
-            <span className="font-semibold">งบประมาณที่ตั้งไว้ (Planned)</span>
-            <span className="material-symbols-outlined text-blue-400 text-base">account_balance</span>
-          </div>
-          <div className="my-2.5">
-            <span className="text-2xl sm:text-3xl font-black font-mono text-white">
-              ฿{financialKPIs.totalPlanned.toLocaleString()}
+        {/* Left: Overall Health & Burn Rate Gauge (5 cols) */}
+        <div className="lg:col-span-5 bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950/30 border border-slate-800 p-4 rounded-2xl flex flex-col justify-between shadow-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-400 flex items-center gap-1.5">
+              <span className="material-symbols-outlined text-sm text-cyan-400">speed</span>
+              สุขภาพงบประมาณโครงการ (Burn Rate)
+            </span>
+            <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border flex items-center gap-1 ${financialKPIs.cpiBg}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${financialKPIs.cpiDot}`} />
+              <span>CPI {financialKPIs.cpi.toFixed(2)}: {financialKPIs.cpiLabel}</span>
             </span>
           </div>
-          <div className="flex items-center justify-between text-[11px] text-slate-500">
-            <span>BOQ รวม 10 หมวดงาน</span>
-            <span className="font-mono text-slate-400">
+
+          <div className="my-3 flex items-center gap-4">
+            {/* Circular / Big Percent Indicator */}
+            <div className="flex flex-col items-center justify-center w-20 h-20 rounded-2xl bg-slate-950 border border-slate-800 shrink-0">
+              <span className={`text-2xl font-black font-mono ${
+                financialKPIs.burnRate > 100 ? 'text-rose-400' : 'text-cyan-400'
+              }`}>
+                {Math.round(financialKPIs.burnRate)}%
+              </span>
+              <span className="text-[10px] text-slate-500 font-mono">ใช้ไปแล้ว</span>
+            </div>
+
+            {/* Quick Context Summary */}
+            <div className="flex-1 flex flex-col justify-center gap-1">
+              <div className="w-full bg-slate-950 rounded-full h-2 overflow-hidden border border-slate-800">
+                <div
+                  className={`h-full rounded-full transition-all duration-500 ${
+                    financialKPIs.burnRate > 100 
+                      ? 'bg-rose-500' 
+                      : financialKPIs.burnRate > 85 
+                      ? 'bg-amber-400' 
+                      : 'bg-gradient-to-r from-cyan-400 to-emerald-400'
+                  }`}
+                  style={{ width: `${Math.min(100, financialKPIs.burnRate)}%` }}
+                />
+              </div>
+
+              <div className="flex justify-between items-center text-[11px] text-slate-400 pt-0.5">
+                <span>ความเสี่ยงโดยรวม:</span>
+                {countOver > 0 ? (
+                  <span className="text-rose-400 font-bold flex items-center gap-0.5">
+                    <span className="material-symbols-outlined text-xs">warning</span>
+                    เกินงบ {countOver} หมวดงาน
+                  </span>
+                ) : countWatchlist > 0 ? (
+                  <span className="text-amber-400 font-bold flex items-center gap-0.5">
+                    <span className="material-symbols-outlined text-xs">info</span>
+                    เฝ้าระวัง {countWatchlist} หมวด
+                  </span>
+                ) : (
+                  <span className="text-emerald-400 font-bold flex items-center gap-0.5">
+                    <span className="material-symbols-outlined text-xs">check</span>
+                    ทุกหมวดอยู่ในเกณฑ์ปลอดภัย
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <span className="text-[10px] text-slate-500">
+            คำนวณจากยอดงบประมาณ BOQ เทียบกับบิลและค่าใช้จ่ายจริงที่บันทึก
+          </span>
+        </div>
+
+        {/* Right: 3 Clean KPI Cards (7 cols) */}
+        <div className="lg:col-span-7 grid grid-cols-1 sm:grid-cols-3 gap-3">
+          
+          {/* Card 1: Planned Budget */}
+          <div className="bg-slate-900/90 border border-slate-800 p-3.5 rounded-2xl flex flex-col justify-between">
+            <span className="text-[11px] text-slate-400 font-medium flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-blue-400 inline-block" />
+              1. งบตั้งไว้ (Planned)
+            </span>
+            <div className="my-1.5">
+              <span className="text-xl sm:text-2xl font-black font-mono text-white">
+                ฿{financialKPIs.totalPlanned.toLocaleString()}
+              </span>
+            </div>
+            <span className="text-[10px] text-slate-500 font-mono">
               ~฿{Math.round(financialKPIs.totalPlanned / (currentProject.houseAreaSqm || 1)).toLocaleString()} / ตร.ม.
             </span>
           </div>
-        </div>
 
-        {/* KPI 2: Actual Incurred Cost */}
-        <div className="bg-slate-900/90 border border-slate-800 p-4 rounded-2xl flex flex-col justify-between shadow-sm relative overflow-hidden group">
-          <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500/5 rounded-full blur-2xl group-hover:bg-indigo-500/10 transition" />
-          <div className="flex items-center justify-between text-slate-400 text-xs">
-            <span className="font-semibold">ต้นทุนจริงที่บันทึกแล้ว (Actual)</span>
-            <span className="material-symbols-outlined text-indigo-400 text-base">payments</span>
-          </div>
-          <div className="my-2.5 flex items-baseline justify-between">
-            <span className="text-2xl sm:text-3xl font-black font-mono text-cyan-300">
-              ฿{financialKPIs.totalActual.toLocaleString()}
+          {/* Card 2: Actual Cost */}
+          <div className="bg-slate-900/90 border border-slate-800 p-3.5 rounded-2xl flex flex-col justify-between">
+            <span className="text-[11px] text-slate-400 font-medium flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-cyan-400 inline-block" />
+              2. จ่ายจริง (Actual)
             </span>
-            <span className={`text-xs font-bold font-mono px-2 py-0.5 rounded-full ${
-              financialKPIs.burnRate > 100 
-                ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' 
-                : 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'
-            }`}>
-              {Math.round(financialKPIs.burnRate * 10) / 10}%
-            </span>
-          </div>
-          <div>
-            <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden mb-1">
-              <div
-                className={`h-full transition-all duration-300 ${
-                  financialKPIs.burnRate > 100 ? 'bg-rose-400' : 'bg-gradient-to-r from-cyan-400 to-indigo-400'
-                }`}
-                style={{ width: `${Math.min(100, financialKPIs.burnRate)}%` }}
-              />
+            <div className="my-1.5">
+              <span className="text-xl sm:text-2xl font-black font-mono text-cyan-300">
+                ฿{financialKPIs.totalActual.toLocaleString()}
+              </span>
             </div>
-            <span className="text-[10px] text-slate-500 block">อัตราการเบิกจ่ายจริง (% Burn Rate)</span>
+            <span className="text-[10px] text-slate-500 font-mono">
+              บันทึกแล้ว {currentProject.actualExpenses?.length || 0} รายการ
+            </span>
           </div>
-        </div>
 
-        {/* KPI 3: Variance / Remaining */}
-        <div className="bg-slate-900/90 border border-slate-800 p-4 rounded-2xl flex flex-col justify-between shadow-sm relative overflow-hidden group">
-          <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-full blur-2xl group-hover:bg-emerald-500/10 transition" />
-          <div className="flex items-center justify-between text-slate-400 text-xs">
-            <span className="font-semibold">ส่วนต่างงบประมาณ (Variance)</span>
-            <span className="material-symbols-outlined text-amber-400 text-base">balance</span>
-          </div>
-          <div className="my-2.5">
-            <span className={`text-2xl sm:text-3xl font-black font-mono ${
-              financialKPIs.variance >= 0 ? 'text-emerald-400' : 'text-rose-400'
+          {/* Card 3: Remaining / Variance */}
+          <div className={`p-3.5 rounded-2xl border flex flex-col justify-between ${
+            financialKPIs.variance >= 0
+              ? 'bg-slate-900/90 border-slate-800'
+              : 'bg-rose-950/20 border-rose-500/40'
+          }`}>
+            <span className="text-[11px] text-slate-400 font-medium flex items-center gap-1">
+              <span className={`w-2 h-2 rounded-full inline-block ${financialKPIs.variance >= 0 ? 'bg-emerald-400' : 'bg-rose-500'}`} />
+              3. ส่วนต่าง (Variance)
+            </span>
+            <div className="my-1.5">
+              <span className={`text-xl sm:text-2xl font-black font-mono ${
+                financialKPIs.variance >= 0 ? 'text-emerald-400' : 'text-rose-400'
+              }`}>
+                {financialKPIs.variance >= 0 ? '+' : ''}฿{financialKPIs.variance.toLocaleString()}
+              </span>
+            </div>
+            <span className={`text-[10px] font-medium font-mono ${
+              financialKPIs.variance >= 0 ? 'text-emerald-400/90' : 'text-rose-300 font-bold'
             }`}>
-              {financialKPIs.variance >= 0 ? '+' : ''}฿{financialKPIs.variance.toLocaleString()}
+              {financialKPIs.variance >= 0 ? '✓ เหลืองบในเป้าหมาย' : '⚠️ ใช้งบเกินเป้าหมาย'}
             </span>
           </div>
-          <div className="flex items-center gap-1.5 text-[11px]">
-            {financialKPIs.variance >= 0 ? (
-              <span className="text-emerald-400 flex items-center gap-1 font-semibold">
-                <span className="material-symbols-outlined text-xs">check_circle</span>
-                <span>คงเหลืองบประมาณในเป้าหมาย</span>
-              </span>
-            ) : (
-              <span className="text-rose-400 flex items-center gap-1 font-bold animate-pulse">
-                <span className="material-symbols-outlined text-xs">warning</span>
-                <span>ใช้งบเกินเป้าหมาย ({Math.abs(Math.round(financialKPIs.variance / (financialKPIs.totalPlanned || 1) * 100))}%)</span>
-              </span>
-            )}
-          </div>
-        </div>
 
-        {/* KPI 4: CPI (Cost Performance Index) */}
-        <div className={`border p-4 rounded-2xl flex flex-col justify-between shadow-sm relative overflow-hidden ${financialKPIs.cpiColor}`}>
-          <div className="flex items-center justify-between text-xs font-semibold opacity-90">
-            <span>ดัชนีประสิทธิภาพต้นทุน CPI</span>
-            <span className="material-symbols-outlined text-base">speed</span>
-          </div>
-          <div className="my-2.5 flex items-baseline gap-2">
-            <span className="text-2xl sm:text-3xl font-black font-mono">
-              {financialKPIs.totalActual > 0 ? financialKPIs.cpi.toFixed(2) : '1.00'}
-            </span>
-            <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-slate-900/60 font-mono">
-              {financialKPIs.cpiLabel}
-            </span>
-          </div>
-          <div className="text-[10px] opacity-80 font-mono">
-            <span>CPI = Planned / Actual (เกณฑ์สากล: &ge; 1.0 ดีเยี่ยม)</span>
-          </div>
         </div>
 
       </div>
 
-      {/* Main Breakdown Container with Multi-View Tabs */}
+      {/* 🌟 3. MAIN SECTION: SIMPLIFIED VISUAL COMPARISON & TABS */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-lg flex flex-col">
         
-        {/* View Tabs Selector */}
-        <div className="px-5 py-3.5 border-b border-slate-800 bg-slate-900/80 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-slate-300">วิเคราะห์ต้นทุนรายหมวด (10 หมวดงาน):</span>
-          </div>
-
-          <div className="flex items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800">
+        {/* Navigation & Filter Bar */}
+        <div className="px-4 py-3 border-b border-slate-800 bg-slate-900/90 flex flex-wrap items-center justify-between gap-3">
+          
+          {/* View Mode Tabs */}
+          <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
             <button
               onClick={() => setActiveTab('chart')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition ${
+              className={`px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 transition ${
                 activeTab === 'chart'
                   ? 'bg-indigo-600 text-white shadow'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-850'
+                  : 'text-slate-400 hover:text-white'
               }`}
             >
-              <span className="material-symbols-outlined text-sm">bar_chart</span>
-              <span>กราฟแท่งเปรียบเทียบ</span>
+              <span className="material-symbols-outlined text-sm">view_stream</span>
+              <span>กราฟแท่งแถบเดี่ยว</span>
             </button>
 
             <button
               onClick={() => setActiveTab('matrix')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition ${
+              className={`px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 transition ${
                 activeTab === 'matrix'
                   ? 'bg-indigo-600 text-white shadow'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-850'
+                  : 'text-slate-400 hover:text-white'
               }`}
             >
-              <span className="material-symbols-outlined text-sm">shield</span>
-              <span>เมทริกซ์ความเสี่ยง (Risk Matrix)</span>
+              <span className="material-symbols-outlined text-sm">grid_view</span>
+              <span>เมทริกซ์ 3 กลุ่มความเสี่ยง</span>
             </button>
 
             <button
               onClick={() => setActiveTab('table')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition ${
+              className={`px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 transition ${
                 activeTab === 'table'
                   ? 'bg-indigo-600 text-white shadow'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-850'
+                  : 'text-slate-400 hover:text-white'
               }`}
             >
-              <span className="material-symbols-outlined text-sm">table_chart</span>
-              <span>ตารางตัวเลขละเอียด</span>
+              <span className="material-symbols-outlined text-sm">table_rows</span>
+              <span>ตารางตัวเลข</span>
             </button>
           </div>
+
+          {/* Quick Filter Chips (All, Over, Watchlist, Safe) */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[11px] text-slate-500 mr-1 hidden sm:inline">กรองดู:</span>
+            <button
+              onClick={() => setCategoryFilter('all')}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition ${
+                categoryFilter === 'all'
+                  ? 'bg-slate-800 text-white border border-slate-700'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              ทั้งหมด (10)
+            </button>
+            <button
+              onClick={() => setCategoryFilter('over')}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition flex items-center gap-1 ${
+                categoryFilter === 'over'
+                  ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40 font-bold'
+                  : 'text-slate-400 hover:text-rose-300'
+              }`}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+              <span>เกินงบ ({countOver})</span>
+            </button>
+            <button
+              onClick={() => setCategoryFilter('watchlist')}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition flex items-center gap-1 ${
+                categoryFilter === 'watchlist'
+                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold'
+                  : 'text-slate-400 hover:text-amber-300'
+              }`}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+              <span>เฝ้าระวัง ({countWatchlist})</span>
+            </button>
+            <button
+              onClick={() => setCategoryFilter('safe')}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition flex items-center gap-1 ${
+                categoryFilter === 'safe'
+                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold'
+                  : 'text-slate-400 hover:text-emerald-300'
+              }`}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+              <span>ปลอดภัย ({countSafe})</span>
+            </button>
+          </div>
+
         </div>
 
-        {/* Tab 1: Dual Comparative Bar Chart */}
+        {/* VIEW 1: SLEEK UNIFIED COMPARISON ROWS (Cleanest & Easiest to read) */}
         {activeTab === 'chart' && (
-          <div className="p-5 flex flex-col gap-4">
-            {/* Legend */}
-            <div className="flex items-center gap-4 text-xs font-medium pb-2 border-b border-slate-800/80 text-slate-400">
-              <div className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded bg-blue-500 inline-block" />
-                <span>งบที่ตั้งไว้ (Planned BOQ)</span>
+          <div className="p-4 sm:p-5 flex flex-col gap-2.5">
+            {filteredCategoryList.length === 0 ? (
+              <div className="py-12 text-center text-xs text-slate-500">
+                ไม่พบหมวดงานในหมวดหมู่ที่เลือก
               </div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded bg-emerald-400 inline-block" />
-                <span>ต้นทุนจริงในงบ (Actual &le; Planned)</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded bg-rose-500 inline-block" />
-                <span>ต้นทุนจริงเกินงบ (Actual &gt; Planned) ⚠️</span>
-              </div>
-            </div>
-
-            {/* Bars List */}
-            <div className="flex flex-col gap-3.5">
-              {categoryComparisons.map((cat) => {
-                const plannedWidth = maxCategoryValue > 0 ? (cat.planned / maxCategoryValue) * 100 : 0;
-                const actualWidth = maxCategoryValue > 0 ? (cat.actual / maxCategoryValue) * 100 : 0;
+            ) : (
+              filteredCategoryList.map((cat, idx) => {
+                const percent = Math.round(cat.spentPercent);
+                const isOver = cat.isOver;
 
                 return (
-                  <div key={cat.key} className="bg-slate-950/60 p-3 rounded-xl border border-slate-800/70 flex flex-col gap-2">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <span className="material-symbols-outlined text-amber-400 text-base">{cat.icon}</span>
-                        <span className="text-xs font-bold text-white">{cat.title}</span>
+                  <div
+                    key={cat.key}
+                    className={`p-3 rounded-xl border transition-all ${
+                      isOver 
+                        ? 'bg-rose-950/15 border-rose-500/30 hover:border-rose-500/50' 
+                        : cat.isWatchlist 
+                        ? 'bg-amber-950/10 border-amber-500/25 hover:border-amber-500/40' 
+                        : 'bg-slate-950/60 border-slate-800/80 hover:border-slate-700'
+                    }`}
+                  >
+                    {/* Top Row: Title + Variance Badge */}
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="material-symbols-outlined text-sm text-amber-400 shrink-0">{cat.icon}</span>
+                        <span className="text-xs font-bold text-white truncate">{cat.title}</span>
                       </div>
 
-                      {/* Variance Badges */}
-                      <div className="flex items-center gap-2">
-                        {cat.isOver ? (
-                          <span className="text-[11px] font-bold font-mono px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40 flex items-center gap-1">
-                            <span>เกินงบ +฿{Math.abs(cat.diff).toLocaleString()} (+{Math.round(((cat.actual - cat.planned) / (cat.planned || 1)) * 100)}%) ⚠️</span>
+                      {/* Clean Badge */}
+                      <div className="shrink-0">
+                        {isOver ? (
+                          <span className="text-[11px] font-bold font-mono px-2 py-0.5 rounded-md bg-rose-500/20 text-rose-300 border border-rose-500/40">
+                            เกินงบ +฿{Math.abs(cat.diff).toLocaleString()} (+{Math.round(((cat.actual - cat.planned) / (cat.planned || 1)) * 100)}%) ⚠️
                           </span>
                         ) : cat.actual > 0 ? (
-                          <span className="text-[11px] font-semibold font-mono px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
-                            <span>ในงบ ใช้ไป {Math.round(cat.spentPercent)}% (เหลือ ฿{cat.diff.toLocaleString()}) ✓</span>
+                          <span className="text-[11px] font-semibold font-mono px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-300 border border-emerald-500/25">
+                            ใช้ไป {percent}% (เหลือ ฿{cat.diff.toLocaleString()}) ✓
                           </span>
                         ) : (
-                          <span className="text-[10px] font-mono text-slate-500">
-                            ยังไม่มีค่าใช้จ่ายบันทึก
+                          <span className="text-[10px] text-slate-500 font-mono">
+                            ยังไม่มีค่าใช้จ่าย
                           </span>
                         )}
                       </div>
                     </div>
 
-                    {/* Dual Bars */}
-                    <div className="flex flex-col gap-1.5 pt-1">
-                      {/* Bar 1: Planned (Blue) */}
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-mono text-slate-400 w-16 text-right shrink-0">Planned:</span>
-                        <div className="flex-1 bg-slate-900 rounded-full h-3 overflow-hidden">
-                          <div
-                            className="bg-blue-500 h-full rounded-full transition-all duration-300"
-                            style={{ width: `${Math.max(2, plannedWidth)}%` }}
-                          />
-                        </div>
-                        <span className="text-xs font-mono font-bold text-blue-300 w-24 text-right shrink-0">
-                          ฿{cat.planned.toLocaleString()}
+                    {/* Middle: Sleek Unified Progress Bar */}
+                    <div className="relative w-full bg-slate-900 rounded-full h-2.5 overflow-hidden border border-slate-800">
+                      {/* Target reference 100% line */}
+                      <div
+                        className={`h-full rounded-full transition-all duration-300 ${
+                          isOver 
+                            ? 'bg-rose-500' 
+                            : cat.isWatchlist 
+                            ? 'bg-amber-400' 
+                            : 'bg-emerald-400'
+                        }`}
+                        style={{ width: `${Math.min(100, percent)}%` }}
+                      />
+                    </div>
+
+                    {/* Bottom Row: Compact Numbers in 1 Line */}
+                    <div className="flex items-center justify-between text-[11px] font-mono text-slate-400 mt-1.5">
+                      <div className="flex items-center gap-3">
+                        <span>
+                          จ่ายจริง: <strong className={isOver ? 'text-rose-400' : 'text-slate-200'}>฿{cat.actual.toLocaleString()}</strong>
+                        </span>
+                        <span className="text-slate-600">/</span>
+                        <span>
+                          งบตั้งไว้: <span className="text-slate-300">฿{cat.planned.toLocaleString()}</span>
                         </span>
                       </div>
 
-                      {/* Bar 2: Actual (Green/Red) */}
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-mono text-slate-400 w-16 text-right shrink-0">Actual:</span>
-                        <div className="flex-1 bg-slate-900 rounded-full h-3 overflow-hidden">
-                          <div
-                            className={`h-full rounded-full transition-all duration-300 ${
-                              cat.isOver ? 'bg-rose-500' : 'bg-emerald-400'
-                            }`}
-                            style={{ width: `${Math.max(cat.actual > 0 ? 2 : 0, actualWidth)}%` }}
-                          />
-                        </div>
-                        <span className={`text-xs font-mono font-bold w-24 text-right shrink-0 ${
-                          cat.isOver ? 'text-rose-400' : 'text-emerald-300'
-                        }`}>
-                          ฿{cat.actual.toLocaleString()}
-                        </span>
-                      </div>
+                      <span className="text-slate-400">
+                        {percent}%
+                      </span>
                     </div>
+
                   </div>
                 );
-              })}
-            </div>
+              })
+            )}
           </div>
         )}
 
-        {/* Tab 2: Risk Matrix (3 Columns) */}
+        {/* VIEW 2: RISK MATRIX (3 Columns) */}
         {activeTab === 'matrix' && (
-          <div className="p-5 grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="p-4 sm:p-5 grid grid-cols-1 md:grid-cols-3 gap-3.5">
             
-            {/* Column 1: High Risk (Over Budget > 100%) */}
-            <div className="bg-rose-950/20 border border-rose-500/30 rounded-2xl p-4 flex flex-col gap-3">
+            {/* Column 1: Over Budget */}
+            <div className="bg-rose-950/15 border border-rose-500/25 rounded-xl p-3.5 flex flex-col gap-2.5">
               <div className="flex items-center justify-between pb-2 border-b border-rose-500/20 text-rose-300">
-                <div className="flex items-center gap-1.5 font-bold text-xs">
-                  <span className="material-symbols-outlined text-rose-400 text-sm">error</span>
-                  <span>1. เกินงบ (High Risk &gt; 100%)</span>
-                </div>
-                <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-rose-500/20 font-bold">
-                  {categoryComparisons.filter(c => c.isOver).length} หมวด
+                <span className="font-bold text-xs flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-sm text-rose-400">error</span>
+                  🔴 เกินงบ (&gt; 100%)
                 </span>
+                <span className="text-xs font-mono font-bold">{countOver} หมวด</span>
               </div>
-
-              <div className="flex flex-col gap-2.5">
-                {categoryComparisons.filter(c => c.isOver).length === 0 ? (
-                  <div className="py-8 text-center text-xs text-rose-300/60">
-                    ✓ ไม่มีหมวดงานใดที่ต้นทุนเกินงบประมาณ
-                  </div>
+              <div className="flex flex-col gap-2">
+                {countOver === 0 ? (
+                  <span className="text-xs text-rose-300/60 py-6 text-center">✓ ไม่มีหมวดงานที่เกินงบ</span>
                 ) : (
                   categoryComparisons.filter(c => c.isOver).map((c) => (
-                    <div key={c.key} className="bg-slate-950 p-3 rounded-xl border border-rose-500/30 flex flex-col gap-1.5">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="font-bold text-white truncate">{c.title}</span>
-                        <span className="font-mono text-rose-400 font-bold text-xs">{Math.round(c.spentPercent)}%</span>
+                    <div key={c.key} className="bg-slate-950 p-2.5 rounded-lg border border-rose-500/30 flex flex-col gap-1">
+                      <div className="flex items-center justify-between text-xs font-bold text-white">
+                        <span className="truncate">{c.title}</span>
+                        <span className="text-rose-400 font-mono">{Math.round(c.spentPercent)}%</span>
                       </div>
-                      <div className="flex justify-between text-[11px] text-slate-400 font-mono">
-                        <span>งบ: ฿{c.planned.toLocaleString()}</span>
-                        <span className="text-rose-300 font-bold">จริง: ฿{c.actual.toLocaleString()}</span>
+                      <div className="flex justify-between text-[11px] font-mono text-slate-400">
+                        <span>งบ ฿{c.planned.toLocaleString()}</span>
+                        <span className="text-rose-300 font-bold">จริง ฿{c.actual.toLocaleString()}</span>
                       </div>
-                      <div className="text-[10px] text-rose-400 font-mono">
-                        เกินงบ +฿{Math.abs(c.diff).toLocaleString()}
-                      </div>
+                      <span className="text-[10px] text-rose-400 font-mono">เกินงบ +฿{Math.abs(c.diff).toLocaleString()}</span>
                     </div>
                   ))
                 )}
               </div>
             </div>
 
-            {/* Column 2: Watchlist (85% - 100%) */}
-            <div className="bg-amber-950/20 border border-amber-500/30 rounded-2xl p-4 flex flex-col gap-3">
+            {/* Column 2: Watchlist */}
+            <div className="bg-amber-950/15 border border-amber-500/25 rounded-xl p-3.5 flex flex-col gap-2.5">
               <div className="flex items-center justify-between pb-2 border-b border-amber-500/20 text-amber-300">
-                <div className="flex items-center gap-1.5 font-bold text-xs">
-                  <span className="material-symbols-outlined text-amber-400 text-sm">visibility</span>
-                  <span>2. เฝ้าระวัง (Watchlist 85-100%)</span>
-                </div>
-                <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-amber-500/20 font-bold">
-                  {categoryComparisons.filter(c => c.isWatchlist).length} หมวด
+                <span className="font-bold text-xs flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-sm text-amber-400">visibility</span>
+                  🟡 เฝ้าระวัง (85% - 100%)
                 </span>
+                <span className="text-xs font-mono font-bold">{countWatchlist} หมวด</span>
               </div>
-
-              <div className="flex flex-col gap-2.5">
-                {categoryComparisons.filter(c => c.isWatchlist).length === 0 ? (
-                  <div className="py-8 text-center text-xs text-amber-300/60">
-                    ไม่มีหมวดงานที่ใช้งบแตะ 85% - 100%
-                  </div>
+              <div className="flex flex-col gap-2">
+                {countWatchlist === 0 ? (
+                  <span className="text-xs text-amber-300/60 py-6 text-center">ไม่มีหมวดงานในกลุ่มเฝ้าระวัง</span>
                 ) : (
                   categoryComparisons.filter(c => c.isWatchlist).map((c) => (
-                    <div key={c.key} className="bg-slate-950 p-3 rounded-xl border border-amber-500/30 flex flex-col gap-1.5">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="font-bold text-white truncate">{c.title}</span>
-                        <span className="font-mono text-amber-400 font-bold text-xs">{Math.round(c.spentPercent)}%</span>
+                    <div key={c.key} className="bg-slate-950 p-2.5 rounded-lg border border-amber-500/30 flex flex-col gap-1">
+                      <div className="flex items-center justify-between text-xs font-bold text-white">
+                        <span className="truncate">{c.title}</span>
+                        <span className="text-amber-400 font-mono">{Math.round(c.spentPercent)}%</span>
                       </div>
-                      <div className="flex justify-between text-[11px] text-slate-400 font-mono">
-                        <span>งบ: ฿{c.planned.toLocaleString()}</span>
-                        <span className="text-amber-300 font-bold">จริง: ฿{c.actual.toLocaleString()}</span>
+                      <div className="flex justify-between text-[11px] font-mono text-slate-400">
+                        <span>งบ ฿{c.planned.toLocaleString()}</span>
+                        <span className="text-amber-300 font-bold">จริง ฿{c.actual.toLocaleString()}</span>
                       </div>
-                      <div className="text-[10px] text-slate-400 font-mono">
-                        เหลืองบ ฿{c.diff.toLocaleString()}
-                      </div>
+                      <span className="text-[10px] text-amber-400 font-mono">เหลืองบ ฿{c.diff.toLocaleString()}</span>
                     </div>
                   ))
                 )}
               </div>
             </div>
 
-            {/* Column 3: Safe (< 85%) */}
-            <div className="bg-emerald-950/20 border border-emerald-500/30 rounded-2xl p-4 flex flex-col gap-3">
+            {/* Column 3: Safe */}
+            <div className="bg-emerald-950/15 border border-emerald-500/25 rounded-xl p-3.5 flex flex-col gap-2.5">
               <div className="flex items-center justify-between pb-2 border-b border-emerald-500/20 text-emerald-300">
-                <div className="flex items-center gap-1.5 font-bold text-xs">
-                  <span className="material-symbols-outlined text-emerald-400 text-sm">check_circle</span>
-                  <span>3. ในงบปลอดภัย (Safe &lt; 85%)</span>
-                </div>
-                <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 font-bold">
-                  {categoryComparisons.filter(c => c.isSafe).length} หมวด
+                <span className="font-bold text-xs flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-sm text-emerald-400">check_circle</span>
+                  🟢 ปลอดภัย (&lt; 85%)
                 </span>
+                <span className="text-xs font-mono font-bold">{countSafe} หมวด</span>
               </div>
-
-              <div className="flex flex-col gap-2.5">
+              <div className="flex flex-col gap-2 max-h-[350px] overflow-y-auto pr-1">
                 {categoryComparisons.filter(c => c.isSafe).map((c) => (
-                  <div key={c.key} className="bg-slate-950 p-3 rounded-xl border border-slate-800 flex flex-col gap-1.5">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-bold text-white truncate">{c.title}</span>
-                      <span className="font-mono text-emerald-400 font-bold text-xs">{Math.round(c.spentPercent)}%</span>
+                  <div key={c.key} className="bg-slate-950 p-2.5 rounded-lg border border-slate-800 flex flex-col gap-1">
+                    <div className="flex items-center justify-between text-xs font-bold text-slate-200">
+                      <span className="truncate">{c.title}</span>
+                      <span className="text-emerald-400 font-mono">{Math.round(c.spentPercent)}%</span>
                     </div>
-                    <div className="flex justify-between text-[11px] text-slate-400 font-mono">
-                      <span>งบ: ฿{c.planned.toLocaleString()}</span>
-                      <span className="text-emerald-300 font-bold">จริง: ฿{c.actual.toLocaleString()}</span>
+                    <div className="flex justify-between text-[11px] font-mono text-slate-400">
+                      <span>งบ ฿{c.planned.toLocaleString()}</span>
+                      <span>จริง ฿{c.actual.toLocaleString()}</span>
                     </div>
-                    <div className="text-[10px] text-slate-400 font-mono">
-                      เหลืองบ ฿{c.diff.toLocaleString()}
-                    </div>
+                    <span className="text-[10px] text-emerald-400 font-mono">เหลืองบ ฿{c.diff.toLocaleString()}</span>
                   </div>
                 ))}
               </div>
@@ -685,64 +730,55 @@ export const ProjectSnapshotSection: React.FC<ProjectSnapshotSectionProps> = ({
           </div>
         )}
 
-        {/* Tab 3: Detailed Table */}
+        {/* VIEW 3: DETAILED TABLE */}
         {activeTab === 'table' && (
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse text-xs">
               <thead>
-                <tr className="bg-slate-950/90 text-slate-400 border-b border-slate-800 text-[11px] uppercase tracking-wider font-semibold">
-                  <th className="py-3 px-4">ลำดับ & หมวดงานก่อสร้าง</th>
-                  <th className="py-3 px-4 text-right">งบที่ตั้งไว้ (Planned)</th>
-                  <th className="py-3 px-4 text-right">ต้นทุนจริง (Actual)</th>
-                  <th className="py-3 px-4 text-right">ส่วนต่างคงเหลือ (Variance)</th>
-                  <th className="py-3 px-4 text-center">% ใช้ไป</th>
-                  <th className="py-3 px-4 text-center">สถานะความเสี่ยง</th>
+                <tr className="bg-slate-950/80 text-slate-400 border-b border-slate-800 text-[11px] uppercase tracking-wider font-semibold">
+                  <th className="py-2.5 px-4">หมวดงานก่อสร้าง</th>
+                  <th className="py-2.5 px-4 text-right">งบตั้งไว้ (Planned)</th>
+                  <th className="py-2.5 px-4 text-right">จ่ายจริง (Actual)</th>
+                  <th className="py-2.5 px-4 text-right">ส่วนต่างคงเหลือ</th>
+                  <th className="py-2.5 px-4 text-center">% ใช้ไป</th>
+                  <th className="py-2.5 px-4 text-center">สถานะ</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-850">
                 {categoryComparisons.map((c, idx) => (
-                  <tr key={c.key} className="hover:bg-slate-850/50 transition">
-                    <td className="py-3 px-4 font-medium text-slate-200 flex items-center gap-2">
-                      <span className="text-slate-500 font-mono text-[11px] w-4">{idx + 1}.</span>
+                  <tr key={c.key} className="hover:bg-slate-850/40 transition">
+                    <td className="py-2.5 px-4 font-medium text-slate-200 flex items-center gap-2">
                       <span className="material-symbols-outlined text-amber-400 text-sm">{c.icon}</span>
                       <span>{c.title}</span>
                     </td>
-                    <td className="py-3 px-4 text-right font-mono text-blue-300 font-bold">
+                    <td className="py-2.5 px-4 text-right font-mono text-slate-300 font-semibold">
                       ฿{c.planned.toLocaleString()}
                     </td>
-                    <td className={`py-3 px-4 text-right font-mono font-bold ${
-                      c.isOver ? 'text-rose-400' : 'text-emerald-300'
+                    <td className={`py-2.5 px-4 text-right font-mono font-bold ${
+                      c.isOver ? 'text-rose-400' : 'text-cyan-300'
                     }`}>
                       ฿{c.actual.toLocaleString()}
                     </td>
-                    <td className={`py-3 px-4 text-right font-mono font-bold ${
+                    <td className={`py-2.5 px-4 text-right font-mono font-bold ${
                       c.diff >= 0 ? 'text-emerald-400' : 'text-rose-400'
                     }`}>
                       {c.diff >= 0 ? '+' : ''}฿{c.diff.toLocaleString()}
                     </td>
-                    <td className="py-3 px-4 text-center font-mono">
-                      <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${
-                        c.isOver 
-                          ? 'bg-rose-500/20 text-rose-300' 
-                          : c.isWatchlist 
-                          ? 'bg-amber-500/20 text-amber-300' 
-                          : 'bg-slate-800 text-slate-300'
-                      }`}>
-                        {Math.round(c.spentPercent)}%
-                      </span>
+                    <td className="py-2.5 px-4 text-center font-mono">
+                      {Math.round(c.spentPercent)}%
                     </td>
-                    <td className="py-3 px-4 text-center">
+                    <td className="py-2.5 px-4 text-center">
                       {c.isOver ? (
-                        <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40">
-                          🔴 เกินงบ
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-rose-500/20 text-rose-300">
+                          เกินงบ
                         </span>
                       ) : c.isWatchlist ? (
-                        <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40">
-                          🟡 เฝ้าระวัง
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-500/20 text-amber-300">
+                          เฝ้าระวัง
                         </span>
                       ) : (
-                        <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-                          🟢 ปลอดภัย
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300">
+                          ปลอดภัย
                         </span>
                       )}
                     </td>
@@ -750,26 +786,24 @@ export const ProjectSnapshotSection: React.FC<ProjectSnapshotSectionProps> = ({
                 ))}
               </tbody>
               <tfoot>
-                <tr className="bg-slate-950 font-bold text-white border-t-2 border-slate-700 text-xs">
-                  <td className="py-3.5 px-4 text-amber-400 font-black">รวมทั้งหมด 10 หมวดงาน:</td>
-                  <td className="py-3.5 px-4 text-right font-mono text-blue-300">
+                <tr className="bg-slate-950 font-bold text-white border-t border-slate-700 text-xs">
+                  <td className="py-3 px-4 text-amber-400">รวม 10 หมวดงาน:</td>
+                  <td className="py-3 px-4 text-right font-mono text-slate-200">
                     ฿{financialKPIs.totalPlanned.toLocaleString()}
                   </td>
-                  <td className="py-3.5 px-4 text-right font-mono text-cyan-300">
+                  <td className="py-3 px-4 text-right font-mono text-cyan-300">
                     ฿{financialKPIs.totalActual.toLocaleString()}
                   </td>
-                  <td className={`py-3.5 px-4 text-right font-mono ${
+                  <td className={`py-3 px-4 text-right font-mono ${
                     financialKPIs.variance >= 0 ? 'text-emerald-400' : 'text-rose-400'
                   }`}>
                     {financialKPIs.variance >= 0 ? '+' : ''}฿{financialKPIs.variance.toLocaleString()}
                   </td>
-                  <td className="py-3.5 px-4 text-center font-mono text-indigo-300">
-                    {Math.round(financialKPIs.burnRate * 10) / 10}%
+                  <td className="py-3 px-4 text-center font-mono text-indigo-300">
+                    {Math.round(financialKPIs.burnRate)}%
                   </td>
-                  <td className="py-3.5 px-4 text-center">
-                    <span className={`px-2.5 py-0.5 rounded-full text-xs font-mono font-bold ${financialKPIs.cpiColor}`}>
-                      CPI {financialKPIs.totalActual > 0 ? financialKPIs.cpi.toFixed(2) : '1.00'}
-                    </span>
+                  <td className="py-3 px-4 text-center font-mono text-emerald-400">
+                    CPI {financialKPIs.cpi.toFixed(2)}
                   </td>
                 </tr>
               </tfoot>
@@ -779,18 +813,18 @@ export const ProjectSnapshotSection: React.FC<ProjectSnapshotSectionProps> = ({
 
       </div>
 
-      {/* Editor Modal: ✏️ บันทึก/ปรับต้นทุนจริง & ทางลัดจำลองข้อมูล */}
+      {/* 🌟 4. INTERACTIVE ACTUAL COSTS EDITOR MODAL */}
       {isEditorOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-slate-900 border border-slate-700 w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden text-slate-100">
+          <div className="bg-slate-900 border border-slate-700 w-full max-w-xl rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden text-slate-100">
             
-            {/* Modal Header */}
-            <div className="px-6 py-4 border-b border-slate-800 bg-slate-900/90 flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <span className="material-symbols-outlined text-indigo-400 text-xl">edit_note</span>
+            {/* Header */}
+            <div className="px-5 py-3.5 border-b border-slate-800 bg-slate-900/90 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-indigo-400 text-lg">edit_note</span>
                 <div>
-                  <h3 className="text-base font-bold text-white">บันทึกและจำลองต้นทุนจริง (Actual Costs Editor)</h3>
-                  <p className="text-xs text-slate-400">กรอกตัวเลขค่าใช้จ่ายจริงของแต่ละหมวดงาน เพื่อเปรียบเทียบกับงบ BOQ</p>
+                  <h3 className="text-sm font-bold text-white">บันทึกและจำลองต้นทุนจริง</h3>
+                  <p className="text-[11px] text-slate-400">ปรับตัวเลขค่าใช้จ่ายจริงเทียบกับงบ BOQ</p>
                 </div>
               </div>
               <button
@@ -801,109 +835,104 @@ export const ProjectSnapshotSection: React.FC<ProjectSnapshotSectionProps> = ({
               </button>
             </div>
 
-            {/* Smart Presets Bar */}
-            <div className="px-6 py-3 bg-slate-950/80 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2">
-              <span className="text-xs font-semibold text-slate-400 flex items-center gap-1">
-                <span className="material-symbols-outlined text-xs text-amber-400">bolt</span>
-                ทางลัดจำลองข้อมูล (Smart Presets):
-              </span>
-              <div className="flex items-center gap-1.5 flex-wrap">
+            {/* Presets */}
+            <div className="px-5 py-2.5 bg-slate-950/80 border-b border-slate-800 flex items-center justify-between gap-2 overflow-x-auto">
+              <span className="text-[11px] font-semibold text-slate-400 shrink-0">ทางลัดจำลอง:</span>
+              <div className="flex items-center gap-1.5 shrink-0">
                 <button
                   type="button"
                   onClick={() => handleApplyPreset('structure')}
-                  className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-[11px] font-semibold text-slate-200 border border-slate-700 transition"
+                  className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-[10px] font-semibold text-slate-200 border border-slate-700"
                 >
-                  ⚡ ระยะโครงสร้าง
+                  ⚡ โครงสร้าง
                 </button>
                 <button
                   type="button"
                   onClick={() => handleApplyPreset('progress60')}
-                  className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-[11px] font-semibold text-slate-200 border border-slate-700 transition"
+                  className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-[10px] font-semibold text-slate-200 border border-slate-700"
                 >
-                  ⚡ งานคืบหน้า 60%
+                  ⚡ คืบหน้า 60%
                 </button>
                 <button
                   type="button"
                   onClick={() => handleApplyPreset('sync100')}
-                  className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-[11px] font-semibold text-slate-200 border border-slate-700 transition"
+                  className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-[10px] font-semibold text-slate-200 border border-slate-700"
                 >
-                  ⚡ ซิงก์เท่างบ BOQ (100%)
+                  ⚡ เท่างบ BOQ
                 </button>
                 <button
                   type="button"
                   onClick={() => handleApplyPreset('reset0')}
-                  className="px-2.5 py-1 rounded-lg bg-rose-950/40 hover:bg-rose-900/60 text-[11px] font-semibold text-rose-300 border border-rose-500/30 transition"
+                  className="px-2 py-1 rounded bg-rose-950/40 hover:bg-rose-900/60 text-[10px] font-semibold text-rose-300 border border-rose-500/30"
                 >
-                  ⚡ รีเซ็ตเป็น 0
+                  ⚡ รีเซ็ต 0
                 </button>
               </div>
             </div>
 
-            {/* Modal Body: Category Inputs */}
-            <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-3">
+            {/* Inputs List */}
+            <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-2">
               {categoryKeys.map((catKey) => {
                 const planned = categoryBudgets[catKey] || 0;
                 const actual = editorInputs[catKey] || 0;
                 const isOver = actual > planned && planned > 0;
 
                 return (
-                  <div key={catKey} className="bg-slate-950 p-3 rounded-xl border border-slate-800 flex items-center justify-between gap-3">
+                  <div key={catKey} className="bg-slate-950 p-2.5 rounded-xl border border-slate-800 flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2 flex-1 min-w-0">
                       <span className="material-symbols-outlined text-amber-400 text-sm shrink-0">
                         {CATEGORY_LABELS[catKey]?.icon || 'layers'}
                       </span>
                       <div className="truncate">
-                        <span className="text-xs font-bold text-white block truncate">
+                        <span className="text-xs font-semibold text-white block truncate">
                           {CATEGORY_LABELS[catKey]?.title || catKey}
                         </span>
                         <span className="text-[10px] text-slate-500 font-mono">
-                          งบ BOQ ที่ตั้งไว้: ฿{planned.toLocaleString()}
+                          งบ: ฿{planned.toLocaleString()}
                         </span>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2 shrink-0">
-                      <div className="relative">
-                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-mono text-slate-500">฿</span>
-                        <input
-                          type="number"
-                          min="0"
-                          step="1000"
-                          value={actual}
-                          onChange={(e) => {
-                            const val = Math.max(0, parseFloat(e.target.value) || 0);
-                            setEditorInputs((prev) => ({ ...prev, [catKey]: val }));
-                          }}
-                          className={`w-36 bg-slate-900 border rounded-lg pl-6 pr-2.5 py-1.5 text-xs font-mono font-bold text-right focus:outline-none transition ${
-                            isOver 
-                              ? 'border-rose-500 text-rose-400 focus:border-rose-400' 
-                              : 'border-slate-700 text-white focus:border-indigo-400'
-                          }`}
-                        />
-                      </div>
+                    <div className="relative shrink-0">
+                      <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[11px] font-mono text-slate-500">฿</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1000"
+                        value={actual}
+                        onChange={(e) => {
+                          const val = Math.max(0, parseFloat(e.target.value) || 0);
+                          setEditorInputs((prev) => ({ ...prev, [catKey]: val }));
+                        }}
+                        className={`w-32 bg-slate-900 border rounded-lg pl-5 pr-2 py-1 text-xs font-mono font-bold text-right focus:outline-none ${
+                          isOver 
+                            ? 'border-rose-500 text-rose-400' 
+                            : 'border-slate-700 text-white focus:border-indigo-400'
+                        }`}
+                      />
                     </div>
                   </div>
                 );
               })}
             </div>
 
-            {/* Modal Footer */}
-            <div className="px-6 py-4 border-t border-slate-800 bg-slate-900/90 flex items-center justify-between">
-              <div className="text-xs font-mono text-slate-400">
-                รวมต้นทุนจริงที่จำลอง: <span className="font-bold text-cyan-300">฿{Object.values(editorInputs).reduce((a, b) => a + b, 0).toLocaleString()}</span>
-              </div>
+            {/* Footer */}
+            <div className="px-5 py-3 border-t border-slate-800 bg-slate-900/90 flex items-center justify-between">
+              <span className="text-xs font-mono text-slate-400">
+                รวม: <strong className="text-cyan-300">฿{Object.values(editorInputs).reduce((a, b) => a + b, 0).toLocaleString()}</strong>
+              </span>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setIsEditorOpen(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:bg-slate-800 transition"
+                  className="px-3 py-1.5 rounded-lg text-xs text-slate-400 hover:text-white"
                 >
                   ยกเลิก
                 </button>
                 <button
                   type="button"
                   onClick={handleSaveEditor}
-                  className="px-5 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/30 transition active:scale-95"
+                  className="px-4 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow"
                 >
                   บันทึกลงโครงการ
                 </button>
