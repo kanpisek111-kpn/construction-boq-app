@@ -1,6 +1,6 @@
 import { exportBOQToExcel } from './services/excelExporter';
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { BOQItem, ConstructionCategory, QuotationMeta, ProjectSaveState, PaymentMilestone, ProjectStatus, ActualExpenseItem } from './types';
+import { BOQItem, ConstructionCategory, QuotationMeta, ProjectSaveState, PaymentMilestone, ProjectStatus, ActualExpenseItem, GanttTask } from './types';
 import { CATEGORY_LABELS, DEFAULT_STANDARD_BOQ, DEFAULT_BASE_AREA_SQM, DEFAULT_QUOTATION_META, DEFAULT_PAYMENT_MILESTONES, formatMilestonesToPaymentTerms } from './constants';
 import { computeBOQSummary, scaleBOQByArea, generateSiteMaterialsProcurementList } from './services/calculator';
 import { ProjectManagerModal } from './components/ProjectManagerModal';
@@ -165,6 +165,12 @@ export default function App() {
   const [projectName, setProjectName] = useState<string>('บ้านพักอาศัย คสล. 1-2 ชั้น พร้อมรั้วและโรงจอดรถ');
   const [overheadPercent, setOverheadPercent] = useState<number>(7);
   const [vatPercent, setVatPercent] = useState<number>(7);
+  const [procurementCheckedItems, setProcurementCheckedItems] = useState<Record<string, boolean>>(() => {
+    return activeProject?.procurementCheckedItems || {};
+  });
+  const [ganttTasks, setGanttTasks] = useState<GanttTask[]>(() => {
+    return activeProject?.customTasks || [];
+  });
   const [actualExpenses, setActualExpenses] = useState<ActualExpenseItem[]>(() => {
     if (activeProject && Array.isArray(activeProject.actualExpenses) && activeProject.actualExpenses.length > 0) {
       return activeProject.actualExpenses;
@@ -402,10 +408,22 @@ export default function App() {
           } else {
             setActualExpenses([]);
           }
+          if (parsed.procurementCheckedItems) {
+            setProcurementCheckedItems(parsed.procurementCheckedItems);
+          } else {
+            setProcurementCheckedItems({});
+          }
+          if (Array.isArray(parsed.customTasks)) {
+            setGanttTasks(parsed.customTasks);
+          } else {
+            setGanttTasks([]);
+          }
             if (Array.isArray(parsed.milestones) && parsed.milestones.length > 0) {
               setMilestones(parsed.milestones);
             }
             if (parsed.projectStartDate) setProjectStartDate(parsed.projectStartDate);
+            if (parsed.procurementCheckedItems) setProcurementCheckedItems(parsed.procurementCheckedItems);
+            if (Array.isArray(parsed.customTasks)) setGanttTasks(parsed.customTasks);
             setSaveStatusToast('กู้คืนงานร่างเรียบร้อย ✓');
             setTimeout(() => setSaveStatusToast(''), 3000);
           }
@@ -430,7 +448,11 @@ export default function App() {
           items,
           quotationMeta,
           milestones,
-          projectStartDate
+          projectStartDate,
+          customTasks: ganttTasks,
+          actualExpenses,
+          procurementCheckedItems,
+          status: activeProject?.status || 'draft'
         };
 
         // Sync into projects list & localStorage
@@ -451,7 +473,7 @@ export default function App() {
       }
     }, 1000);
     return () => clearTimeout(timer);
-  }, [projectName, houseAreaSqm, overheadPercent, vatPercent, items, quotationMeta, milestones, projectStartDate, activeProjectId]);
+  }, [projectName, houseAreaSqm, overheadPercent, vatPercent, items, quotationMeta, milestones, projectStartDate, activeProjectId, actualExpenses, procurementCheckedItems, ganttTasks]);
   // ======== MULTI-PROJECT HANDLERS ========
   const handleSwitchProject = (id: string) => {
     // 1. Save current active project state first
@@ -496,6 +518,16 @@ export default function App() {
       setActualExpenses(target.actualExpenses);
     } else {
       setActualExpenses(DEFAULT_SAMPLE_EXPENSES);
+    }
+    if (target.procurementCheckedItems) {
+      setProcurementCheckedItems(target.procurementCheckedItems);
+    } else {
+      setProcurementCheckedItems({});
+    }
+    if (Array.isArray(target.customTasks)) {
+      setGanttTasks(target.customTasks);
+    } else {
+      setGanttTasks([]);
     }
     setSelectedCategory('all');
     setBoqSearchQuery('');
@@ -742,7 +774,10 @@ export default function App() {
         quotationMeta,
         milestones,
         projectStartDate,
-        actualExpenses
+        actualExpenses,
+        customTasks: ganttTasks,
+        procurementCheckedItems,
+        status: activeProject?.status || 'draft'
       };
       const jsonStr = JSON.stringify(state, null, 2);
       const bytes = new TextEncoder().encode(jsonStr);
@@ -1573,6 +1608,11 @@ export default function App() {
               projectName={projectName}
               houseAreaSqm={houseAreaSqm}
               milestones={milestones}
+              checkedItems={procurementCheckedItems}
+              onToggleCheck={(id) => {
+                setProcurementCheckedItems(prev => ({ ...prev, [id]: !prev[id] }));
+              }}
+              onBulkCheck={(updated) => setProcurementCheckedItems(updated)}
             />
             </div>
           )}
@@ -1585,6 +1625,9 @@ export default function App() {
               projectStartDate={projectStartDate}
               onUpdateMilestones={handleSaveMilestones}
               grandTotal={summary.grandTotal}
+              tasks={ganttTasks}
+              onUpdateTasks={setGanttTasks}
+              onUpdateProjectStartDate={setProjectStartDate}
               />
             </div>
           )}

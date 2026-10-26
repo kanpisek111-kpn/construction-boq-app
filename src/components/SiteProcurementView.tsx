@@ -7,6 +7,9 @@ interface SiteProcurementViewProps {
   projectName: string;
   houseAreaSqm: number;
   milestones?: PaymentMilestone[];
+  checkedItems?: Record<string, boolean>;
+  onToggleCheck?: (id: string) => void;
+  onBulkCheck?: (newChecked: Record<string, boolean>) => void;
 }
 
 const safeToLocaleString = (val: number | undefined | null): string => {
@@ -29,12 +32,17 @@ export const SiteProcurementView: React.FC<SiteProcurementViewProps> = ({
   items,
   projectName,
   houseAreaSqm,
-  milestones = []
+  milestones = [],
+  checkedItems: propCheckedItems,
+  onToggleCheck: propOnToggleCheck,
+  onBulkCheck: propOnBulkCheck
 }) => {
   const [selectedMilestoneFilter, setSelectedMilestoneFilter] = useState<'all' | number>('all');
   const [selectedGroup, setSelectedGroup] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [checkedItems, setCheckedItems] = useState<Record<string, boolean>>({});
+  const [localChecked, setLocalChecked] = useState<Record<string, boolean>>({});
+
+  const activeChecked = propCheckedItems !== undefined ? propCheckedItems : localChecked;
   const [isExporting, setIsExporting] = useState<boolean>(false);
   const [copiedToast, setCopiedToast] = useState<boolean>(false);
 
@@ -64,22 +72,30 @@ export const SiteProcurementView: React.FC<SiteProcurementViewProps> = ({
   }, [filteredItems]);
 
   const orderedCount = useMemo(() => {
-    return Object.values(checkedItems).filter(Boolean).length;
-  }, [checkedItems]);
+    return Object.values(activeChecked).filter(Boolean).length;
+  }, [activeChecked]);
 
   const handleToggleCheck = (id: string) => {
-    setCheckedItems(prev => ({
-      ...prev,
-      [id]: !prev[id]
-    }));
+    if (propOnToggleCheck) {
+      propOnToggleCheck(id);
+    } else {
+      setLocalChecked(prev => ({
+        ...prev,
+        [id]: !prev[id]
+      }));
+    }
   };
 
   const handleCheckAll = (status: boolean) => {
-    const updated: Record<string, boolean> = {};
+    const updated: Record<string, boolean> = { ...activeChecked };
     filteredItems.forEach(i => {
       updated[i.id] = status;
     });
-    setCheckedItems(updated);
+    if (propOnBulkCheck) {
+      propOnBulkCheck(updated);
+    } else {
+      setLocalChecked(updated);
+    }
   };
 
   // Export Purchase Order CSV
@@ -95,7 +111,7 @@ export const SiteProcurementView: React.FC<SiteProcurementViewProps> = ({
       filteredItems.forEach((item, idx) => {
         const phaseName = `งวดที่ ${item.milestoneNumber}: ${item.milestoneTitle}`;
         const groupName = GROUP_LABELS[item.materialGroup]?.label || item.materialGroup;
-        const isChecked = checkedItems[item.id] ? 'สั่งแล้ว ✓' : 'รอดำเนินการ';
+        const isChecked = activeChecked[item.id] ? 'สั่งแล้ว ✓' : 'รอดำเนินการ';
         csv += `${idx + 1},"${phaseName}","${groupName}","${item.name.replace(/"/g, '""')}","${item.spec.replace(/"/g, '""')}",${item.netQuantity},${item.wastePercent}%,${item.orderQuantity},"${item.unit}",${item.unitPriceEstimate},${item.totalEstimatedCost},"${item.packageNote.replace(/"/g, '""')}","${isChecked}"\n`;
       });
 
@@ -396,7 +412,7 @@ export const SiteProcurementView: React.FC<SiteProcurementViewProps> = ({
                 </tr>
               ) : (
                 filteredItems.map((item) => {
-                  const isChecked = !!checkedItems[item.id];
+                  const isChecked = !!activeChecked[item.id];
                   return (
                     <tr 
                       key={item.id} 

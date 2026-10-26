@@ -343,6 +343,7 @@ export interface ProjectSaveState {
   customTasks?: GanttTask[];
   status?: ProjectStatus;
   actualExpenses?: ActualExpenseItem[];
+  procurementCheckedItems?: Record<string, boolean>;
 }
 
 export type ExternalItemType = 

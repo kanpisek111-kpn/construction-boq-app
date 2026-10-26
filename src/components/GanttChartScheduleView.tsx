@@ -9,6 +9,9 @@ interface GanttChartScheduleViewProps {
   projectStartDate?: string;
   onUpdateMilestones?: (updated: PaymentMilestone[]) => void;
   grandTotal?: number;
+  tasks?: GanttTask[];
+  onUpdateTasks?: (updated: GanttTask[]) => void;
+  onUpdateProjectStartDate?: (newDate: string) => void;
 }
 
 // สร้างงานก่อสร้างมาตรฐานอัตโนมัติตามเนื้องานของแต่ละงวด
@@ -46,14 +49,27 @@ export const GanttChartScheduleView: React.FC<GanttChartScheduleViewProps> = ({
   projectName,
   projectStartDate: initialStartDate,
   onUpdateMilestones,
-  grandTotal = 0
+  grandTotal = 0,
+  tasks: propTasks,
+  onUpdateTasks,
+  onUpdateProjectStartDate
 }) => {
   const [projectStartDate, setProjectStartDate] = useState<string>(
     initialStartDate || new Date().toISOString().split('T')[0]
   );
   const [viewZoom, setViewZoom] = useState<'day' | 'week' | 'month'>('week');
   const [activeMilestoneFilter, setActiveMilestoneFilter] = useState<'all' | number>('all');
-  const [tasks, setTasks] = useState<GanttTask[]>(() => generateDefaultGanttTasks(milestones));
+  const [tasks, setTasks] = useState<GanttTask[]>(() => {
+    if (propTasks && propTasks.length > 0) return propTasks;
+    return generateDefaultGanttTasks(milestones);
+  });
+
+  // Sync when propTasks change externally
+  React.useEffect(() => {
+    if (propTasks && propTasks.length > 0) {
+      setTasks(propTasks);
+    }
+  }, [propTasks]);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState<boolean>(false);
 
@@ -152,7 +168,13 @@ export const GanttChartScheduleView: React.FC<GanttChartScheduleViewProps> = ({
   }, [tasks]);
 
   const handleUpdateTask = (id: string, patch: Partial<GanttTask>) => {
-    setTasks(prev => prev.map(t => t.id === id ? { ...t, ...patch } : t));
+    setTasks(prev => {
+      const nextTasks = prev.map(t => t.id === id ? { ...t, ...patch } : t);
+      if (onUpdateTasks) {
+        onUpdateTasks(nextTasks);
+      }
+      return nextTasks;
+    });
   };
 
   const handlePrintGantt = () => {

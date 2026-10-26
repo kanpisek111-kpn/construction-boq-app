@@ -385,6 +385,47 @@ export const ProjectDashboardView: React.FC<ProjectDashboardViewProps> = ({
                   </div>
                 </div>
 
+                {/* Progress Bar (ความคืบหน้าหน้างานจริง) */}
+                <div className="flex flex-col gap-1 text-[11px] bg-slate-950/60 p-2.5 rounded-xl border border-slate-800/60">
+                  <div className="flex justify-between items-center text-slate-400">
+                    <span className="flex items-center gap-1 font-medium">
+                      <span className="material-symbols-outlined text-xs text-emerald-400">trending_up</span>
+                      <span>ความคืบหน้าหน้างาน</span>
+                    </span>
+                    <span className="font-mono font-bold text-emerald-400">
+                      {(() => {
+                        if (proj.customTasks && proj.customTasks.length > 0) {
+                          const sum = proj.customTasks.reduce((s, t) => s + (t.progressPercent || 0), 0);
+                          return Math.round(sum / proj.customTasks.length);
+                        }
+                        if (proj.milestones && proj.milestones.length > 0) {
+                          const completed = proj.milestones.filter(m => m.status === 'paid' || m.status === 'approved').length;
+                          return Math.round((completed / proj.milestones.length) * 100);
+                        }
+                        return 0;
+                      })()}%
+                    </span>
+                  </div>
+                  <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                    <div 
+                      className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full transition-all duration-300"
+                      style={{
+                        width: `${(() => {
+                          if (proj.customTasks && proj.customTasks.length > 0) {
+                            const sum = proj.customTasks.reduce((s, t) => s + (t.progressPercent || 0), 0);
+                            return Math.round(sum / proj.customTasks.length);
+                          }
+                          if (proj.milestones && proj.milestones.length > 0) {
+                            const completed = proj.milestones.filter(m => m.status === 'paid' || m.status === 'approved').length;
+                            return Math.round((completed / proj.milestones.length) * 100);
+                          }
+                          return 0;
+                        })()}%`
+                      }}
+                    />
+                  </div>
+                </div>
+
                 {/* Footer: Date & Action Buttons */}
                 <div className="flex items-center justify-between pt-2 border-t border-slate-800/80 gap-2">
                   <span className="text-[10px] text-slate-500 font-mono">
