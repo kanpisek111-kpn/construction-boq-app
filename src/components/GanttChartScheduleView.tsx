@@ -7,11 +7,13 @@ interface GanttChartScheduleViewProps {
   milestones: PaymentMilestone[];
   projectName: string;
   projectStartDate?: string;
+  projectEndDate?: string;
   onUpdateMilestones?: (updated: PaymentMilestone[]) => void;
   grandTotal?: number;
   tasks?: GanttTask[];
   onUpdateTasks?: (updated: GanttTask[]) => void;
   onUpdateProjectStartDate?: (newDate: string) => void;
+  onUpdateProjectEndDate?: (newDate: string) => void;
 }
 
 // สร้างงานก่อสร้างมาตรฐานอัตโนมัติตามเนื้องานของแต่ละงวด
@@ -48,11 +50,13 @@ export const GanttChartScheduleView: React.FC<GanttChartScheduleViewProps> = ({
   milestones,
   projectName,
   projectStartDate: initialStartDate,
+  projectEndDate: initialEndDate,
   onUpdateMilestones,
   grandTotal = 0,
   tasks: propTasks,
   onUpdateTasks,
-  onUpdateProjectStartDate
+  onUpdateProjectStartDate,
+  onUpdateProjectEndDate
 }) => {
   const [projectStartDate, setProjectStartDate] = useState<string>(
     initialStartDate || new Date().toISOString().split('T')[0]
@@ -63,6 +67,13 @@ export const GanttChartScheduleView: React.FC<GanttChartScheduleViewProps> = ({
     if (propTasks && propTasks.length > 0) return propTasks;
     return generateDefaultGanttTasks(milestones);
   });
+
+  // Sync when project or initial dates change externally
+  React.useEffect(() => {
+    if (initialStartDate) {
+      setProjectStartDate(initialStartDate);
+    }
+  }, [initialStartDate, projectName]);
 
   // Sync when propTasks change externally
   React.useEffect(() => {
@@ -80,10 +91,76 @@ export const GanttChartScheduleView: React.FC<GanttChartScheduleViewProps> = ({
 
   // คำนวณวันสิ้นสุดโครงการ
   const projectEndDate = useMemo(() => {
+    if (initialEndDate) return initialEndDate;
     const d = new Date(projectStartDate);
     d.setDate(d.getDate() + totalProjectDays);
     return d.toISOString().split('T')[0];
-  }, [projectStartDate, totalProjectDays]);
+  }, [projectStartDate, totalProjectDays, initialEndDate]);
+
+  // Handler: เมื่อผู้ใช้แก้วันเริ่มโครงการ
+  const handleStartDateChange = (newStartDate: string) => {
+    setProjectStartDate(newStartDate);
+    if (onUpdateProjectStartDate) {
+      onUpdateProjectStartDate(newStartDate);
+    }
+    const d = new Date(newStartDate);
+    d.setDate(d.getDate() + totalProjectDays);
+    const calculatedEnd = d.toISOString().split('T')[0];
+    if (onUpdateProjectEndDate) {
+      onUpdateProjectEndDate(calculatedEnd);
+    }
+  };
+
+  // Handler: เมื่อผู้ใช้แก้วันสิ้นสุดโครงการโดยตรง
+  const handleEndDateChange = (newEndDate: string) => {
+    if (!newEndDate) return;
+    const startObj = new Date(projectStartDate);
+    const endObj = new Date(newEndDate);
+    const diffTime = endObj.getTime() - startObj.getTime();
+    const newTotalDays = Math.max(1, Math.round(diffTime / (1000 * 60 * 60 * 24)));
+
+    if (newTotalDays === totalProjectDays) return;
+
+    if (milestones.length > 0 && onUpdateMilestones) {
+      const currentSum = milestones.reduce((s, m) => s + (m.durationDays || 30), 0);
+      let distributedDays = 0;
+      const updatedMilestones = milestones.map((m, idx) => {
+        if (idx === milestones.length - 1) {
+          const lastDuration = Math.max(1, newTotalDays - distributedDays);
+          return { ...m, durationDays: lastDuration };
+        }
+        const proportion = (m.durationDays || 30) / (currentSum || 1);
+        const newDur = Math.max(1, Math.round(proportion * newTotalDays));
+        distributedDays += newDur;
+        return { ...m, durationDays: newDur };
+      });
+      onUpdateMilestones(updatedMilestones);
+
+      if (tasks.length > 0 && onUpdateTasks) {
+        const factor = newTotalDays / (currentSum || 1);
+        const updatedTasks = tasks.map(t => ({
+          ...t,
+          startDayOffset: Math.round(t.startDayOffset * factor),
+          durationDays: Math.max(1, Math.round(t.durationDays * factor))
+        }));
+        setTasks(updatedTasks);
+        onUpdateTasks(updatedTasks);
+      }
+    }
+
+    if (onUpdateProjectEndDate) {
+      onUpdateProjectEndDate(newEndDate);
+    }
+  };
+
+  // Handler: เมื่อผู้ใช้แก้จำนวนวันทำงานรวมโดยตรง
+  const handleTotalDaysChange = (newDays: number) => {
+    const cleanDays = Math.max(1, newDays);
+    const d = new Date(projectStartDate);
+    d.setDate(d.getDate() + cleanDays);
+    const newEnd = d.toISOString().split('T')[0];
+    handleEndDateChange(newEnd);
+  };
 
   // คำนวณระยะเวลาสะสมของแต่ละงวดงาน
   const milestoneTimeRanges = useMemo(() => {
@@ -233,12 +310,19 @@ export const GanttChartScheduleView: React.FC<GanttChartScheduleViewProps> = ({
               {milestones.length} งวดงาน
             </span>
           </div>
-          <div className="flex items-baseline gap-2 my-1">
-            <span className="text-2xl font-black font-mono text-white">{totalProjectDays}</span>
+          <div className="flex items-center gap-2 my-1">
+            <input
+              type="number"
+              min="1"
+              value={totalProjectDays}
+              onChange={(e) => handleTotalDaysChange(parseInt(e.target.value) || 1)}
+              className="w-20 bg-slate-950 border border-indigo-500/50 rounded-lg px-2 py-0.5 font-mono text-xl font-black text-white focus:outline-none focus:border-cyan-400 text-center"
+              title="แก้ไขจำนวนวันรวมโครงการ ระบบจะคำนวณวันส่งมอบและเกลี่ยวันทำงานในแต่ละงวดงานให้อัตโนมัติ"
+            />
             <span className="text-xs text-slate-400 font-medium">วัน (~{Math.round(totalProjectDays / 30 * 10) / 10} เดือน)</span>
           </div>
           <div className="flex items-center justify-between text-[11px] text-slate-300 pt-2 border-t border-indigo-500/20 font-mono">
-            <span>เริ่ม: <strong>{projectStartDate}</strong></span>
+            <span>เริ่ม: <strong className="text-cyan-300">{projectStartDate}</strong></span>
             <span>เสร็จ: <strong className="text-amber-300">{projectEndDate}</strong></span>
           </div>
         </div>
@@ -263,21 +347,39 @@ export const GanttChartScheduleView: React.FC<GanttChartScheduleViewProps> = ({
           </div>
         </div>
 
-        {/* Card 3: Date Picker & Settings */}
-        <div className="bg-slate-900 p-3.5 rounded-xl border border-slate-800 flex flex-col justify-between text-xs">
-          <span className="font-semibold text-slate-300 flex items-center gap-1.5 mb-1">
-            <span className="material-symbols-outlined text-sm text-cyan-400">event</span>
-            วันเริ่มเข้าทำงานหน้างาน (Day 0)
-          </span>
-          <input
-            type="date"
-            value={projectStartDate}
-            onChange={(e) => setProjectStartDate(e.target.value)}
-            className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-cyan-400"
-          />
-          <div className="flex items-center justify-between pt-2 border-t border-slate-800/80 text-[10px] text-slate-400">
-            <span>ส่งมอบบ้าน: {projectEndDate}</span>
-            <span className="text-emerald-400 font-bold">ตรงตามเกณฑ์ วสท.</span>
+        {/* Card 3: กำหนดวันเริ่มและวันสิ้นสุดโครงการ */}
+        <div className="bg-slate-900 p-3.5 rounded-xl border border-slate-800 flex flex-col justify-between text-xs gap-1.5">
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-[10px] font-semibold text-cyan-300 flex items-center gap-1 mb-0.5">
+                <span className="material-symbols-outlined text-xs">event</span>
+                วันเริ่มโครงการ:
+              </label>
+              <input
+                type="date"
+                value={projectStartDate}
+                onChange={(e) => handleStartDateChange(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-700 hover:border-cyan-400 rounded-lg px-2 py-1 text-xs text-white font-mono focus:outline-none focus:border-cyan-400"
+                title="แก้ไขวันเริ่มโครงการ"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] font-semibold text-amber-300 flex items-center gap-1 mb-0.5">
+                <span className="material-symbols-outlined text-xs">event_available</span>
+                วันสิ้นสุดส่งมอบ:
+              </label>
+              <input
+                type="date"
+                value={projectEndDate}
+                onChange={(e) => handleEndDateChange(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-700 hover:border-amber-400 rounded-lg px-2 py-1 text-xs text-white font-mono focus:outline-none focus:border-amber-400"
+                title="แก้ไขวันสิ้นสุดโครงการ ระบบจะคำนวณเกลี่ยวันทำงานและระยะเวลางวดงานให้อัตโนมัติ"
+              />
+            </div>
+          </div>
+          <div className="flex items-center justify-between pt-1.5 border-t border-slate-800/80 text-[10px] text-slate-400">
+            <span>ระยะเวลา: <strong>{totalProjectDays} วัน</strong></span>
+            <span className="text-emerald-400 font-bold">จำค่าเฉพาะโครงการนี้ ✓</span>
           </div>
         </div>
 

@@ -340,6 +340,7 @@ export interface ProjectSaveState {
   quotationMeta: QuotationMeta;
   milestones?: PaymentMilestone[];
   projectStartDate?: string;
+  projectEndDate?: string;
   customTasks?: GanttTask[];
   status?: ProjectStatus;
   actualExpenses?: ActualExpenseItem[];

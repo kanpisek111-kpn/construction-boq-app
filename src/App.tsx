@@ -63,6 +63,11 @@ function makeDefaultProject(
     },
     milestones: DEFAULT_PAYMENT_MILESTONES,
     projectStartDate: new Date().toISOString().split('T')[0],
+    projectEndDate: (() => {
+      const d = new Date();
+      d.setDate(d.getDate() + 120);
+      return d.toISOString().split('T')[0];
+    })(),
     status,
     actualExpenses: [],
   };
@@ -138,7 +143,12 @@ export default function App() {
   });
   const [quotationMeta, setQuotationMeta] = useState<QuotationMeta>(DEFAULT_QUOTATION_META);
   const [milestones, setMilestones] = useState<PaymentMilestone[]>(DEFAULT_PAYMENT_MILESTONES);
-  const [projectStartDate, setProjectStartDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [projectStartDate, setProjectStartDate] = useState<string>(() => {
+    return activeProject?.projectStartDate || new Date().toISOString().split('T')[0];
+  });
+  const [projectEndDate, setProjectEndDate] = useState<string>(() => {
+    return activeProject?.projectEndDate || '';
+  });
   // Auto-save feedback state
   const [lastAutoSavedTime, setLastAutoSavedTime] = useState<string>('');
   const [saveStatusToast, setSaveStatusToast] = useState<string>('');
@@ -381,6 +391,8 @@ export default function App() {
               setMilestones(parsed.milestones);
             }
             if (parsed.projectStartDate) setProjectStartDate(parsed.projectStartDate);
+            if (parsed.projectEndDate) setProjectEndDate(parsed.projectEndDate);
+          if (parsed.projectEndDate) setProjectEndDate(parsed.projectEndDate);
             if (parsed.procurementCheckedItems) setProcurementCheckedItems(parsed.procurementCheckedItems);
             if (Array.isArray(parsed.customTasks)) setGanttTasks(parsed.customTasks);
             setSaveStatusToast('กู้คืนงานร่างเรียบร้อย ✓');
@@ -408,6 +420,7 @@ export default function App() {
           quotationMeta,
           milestones,
           projectStartDate,
+          projectEndDate,
           customTasks: ganttTasks,
           actualExpenses,
           procurementCheckedItems,
@@ -432,7 +445,7 @@ export default function App() {
       }
     }, 1000);
     return () => clearTimeout(timer);
-  }, [projectName, houseAreaSqm, overheadPercent, vatPercent, items, quotationMeta, milestones, projectStartDate, activeProjectId, actualExpenses, procurementCheckedItems, ganttTasks]);
+  }, [projectName, houseAreaSqm, overheadPercent, vatPercent, items, quotationMeta, milestones, projectStartDate, projectEndDate, activeProjectId, actualExpenses, procurementCheckedItems, ganttTasks]);
   // ======== MULTI-PROJECT HANDLERS ========
   const handleSwitchProject = (id: string) => {
     // 1. Save current active project state first
@@ -472,7 +485,16 @@ export default function App() {
     } else {
       setMilestones(DEFAULT_PAYMENT_MILESTONES);
     }
-    if (target.projectStartDate) setProjectStartDate(target.projectStartDate);
+    if (target.projectStartDate) {
+      setProjectStartDate(target.projectStartDate);
+    } else {
+      setProjectStartDate(new Date().toISOString().split('T')[0]);
+    }
+    if (target.projectEndDate) {
+      setProjectEndDate(target.projectEndDate);
+    } else {
+      setProjectEndDate('');
+    }
     if (Array.isArray(target.actualExpenses)) {
       setActualExpenses(target.actualExpenses.filter((e: any) => !e.id?.startsWith('exp-init-')));
     } else {
@@ -733,6 +755,7 @@ export default function App() {
         quotationMeta,
         milestones,
         projectStartDate,
+        projectEndDate,
         actualExpenses,
         customTasks: ganttTasks,
         procurementCheckedItems,
@@ -1582,11 +1605,13 @@ export default function App() {
               milestones={milestones}
               projectName={projectName}
               projectStartDate={projectStartDate}
+              projectEndDate={projectEndDate}
               onUpdateMilestones={handleSaveMilestones}
               grandTotal={summary.grandTotal}
               tasks={ganttTasks}
               onUpdateTasks={setGanttTasks}
               onUpdateProjectStartDate={setProjectStartDate}
+              onUpdateProjectEndDate={setProjectEndDate}
               />
             </div>
           )}
