@@ -30,55 +30,7 @@ import { CostAnalyticsModal } from './components/CostAnalyticsModal';
 import { PaintEstimatorModal } from './components/PaintEstimatorModal';
 import { Flow } from 'flow-sdk';
 
-export const DEFAULT_SAMPLE_EXPENSES: ActualExpenseItem[] = [
-  {
-    id: 'exp-init-1',
-    date: new Date().toISOString().split('T')[0],
-    category: 'preparation',
-    expenseType: 'material',
-    vendorOrPayee: 'บจก. เสาเข็มสยามคอนกรีต',
-    description: 'สั่งซื้อเสาเข็มเจาะ Ø0.35 ม. ลึก 20 ม. (16 ต้น พร้อมส่งเข้าไซต์)',
-    invoiceNumber: 'INV-SP-68041',
-    amount: 154000,
-    linkedMilestoneNumber: 1,
-    notes: 'ส่งครบตามสเปก ตรวจสอบสภาพหัวเข็มสมบูรณ์'
-  },
-  {
-    id: 'exp-init-2',
-    date: new Date().toISOString().split('T')[0],
-    category: 'structure',
-    expenseType: 'material',
-    vendorOrPayee: 'ซีแพค CPAC ชลบุรี',
-    description: 'คอนกรีตผสมเสร็จ ค.240 เทฐานราก Footings และตอม่อ',
-    invoiceNumber: 'TAX-CPAC-9921',
-    amount: 48500,
-    linkedMilestoneNumber: 1
-  },
-  {
-    id: 'exp-init-3',
-    date: new Date().toISOString().split('T')[0],
-    category: 'structure',
-    expenseType: 'material',
-    vendorOrPayee: 'ร้านเหล็กแสงทองการค้า',
-    description: 'เหล็กข้ออ้อย มอก. DB12 และ DB16 SD40 (ล็อตงานฐานราก)',
-    invoiceNumber: 'ST-00452',
-    amount: 86200,
-    linkedMilestoneNumber: 1
-  },
-  {
-    id: 'exp-init-4',
-    date: new Date().toISOString().split('T')[0],
-    category: 'structure',
-    expenseType: 'labor',
-    vendorOrPayee: 'ทีมช่างสมศักดิ์ (หัวหน้าช่างโครงสร้าง)',
-    description: 'จ่ายค่าแรงผูกเหล็ก เข้าแบบ และเทคอนกรีตฐานราก งวดที่ 1',
-    invoiceNumber: 'VOUCHER-01',
-    amount: 42000,
-    linkedMilestoneNumber: 1,
-    notes: 'ตรวจรับงานฐานรากผ่านเรียบร้อย'
-  }
-];
-
+export const DEFAULT_SAMPLE_EXPENSES: ActualExpenseItem[] = [];
 const DRAFT_STORAGE_KEY = 'thai_boq_project_draft_v1';
 const PROJECTS_LIST_KEY = 'thai_boq_projects_list_v1';
 const ACTIVE_PROJECT_ID_KEY = 'thai_boq_active_project_id_v1';
@@ -112,7 +64,7 @@ function makeDefaultProject(
     milestones: DEFAULT_PAYMENT_MILESTONES,
     projectStartDate: new Date().toISOString().split('T')[0],
     status,
-    actualExpenses: DEFAULT_SAMPLE_EXPENSES,
+    actualExpenses: [],
   };
 }
 function loadProjectsList(): ProjectSaveState[] {
@@ -120,7 +72,14 @@ function loadProjectsList(): ProjectSaveState[] {
     const raw = localStorage.getItem(PROJECTS_LIST_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed.map((p: any) => ({
+          ...p,
+          actualExpenses: Array.isArray(p.actualExpenses) 
+            ? p.actualExpenses.filter((e: any) => !e.id?.startsWith('exp-init-'))
+            : []
+        }));
+      }
     }
     // migrate legacy single project
     const legacy = sessionStorage.getItem(DRAFT_STORAGE_KEY);
@@ -172,10 +131,10 @@ export default function App() {
     return activeProject?.customTasks || [];
   });
   const [actualExpenses, setActualExpenses] = useState<ActualExpenseItem[]>(() => {
-    if (activeProject && Array.isArray(activeProject.actualExpenses) && activeProject.actualExpenses.length > 0) {
-      return activeProject.actualExpenses;
+    if (activeProject && Array.isArray(activeProject.actualExpenses)) {
+      return activeProject.actualExpenses.filter((e: any) => !e.id?.startsWith('exp-init-'));
     }
-    return DEFAULT_SAMPLE_EXPENSES;
+    return [];
   });
   const [quotationMeta, setQuotationMeta] = useState<QuotationMeta>(DEFAULT_QUOTATION_META);
   const [milestones, setMilestones] = useState<PaymentMilestone[]>(DEFAULT_PAYMENT_MILESTONES);
@@ -404,7 +363,7 @@ export default function App() {
             setItems(parsed.items);
             if (parsed.quotationMeta) setQuotationMeta(parsed.quotationMeta);
           if (Array.isArray(parsed.actualExpenses)) {
-            setActualExpenses(parsed.actualExpenses);
+            setActualExpenses(parsed.actualExpenses.filter((e: any) => !e.id?.startsWith('exp-init-')));
           } else {
             setActualExpenses([]);
           }
@@ -514,10 +473,10 @@ export default function App() {
       setMilestones(DEFAULT_PAYMENT_MILESTONES);
     }
     if (target.projectStartDate) setProjectStartDate(target.projectStartDate);
-    if (Array.isArray(target.actualExpenses) && target.actualExpenses.length > 0) {
-      setActualExpenses(target.actualExpenses);
+    if (Array.isArray(target.actualExpenses)) {
+      setActualExpenses(target.actualExpenses.filter((e: any) => !e.id?.startsWith('exp-init-')));
     } else {
-      setActualExpenses(DEFAULT_SAMPLE_EXPENSES);
+      setActualExpenses([]);
     }
     if (target.procurementCheckedItems) {
       setProcurementCheckedItems(target.procurementCheckedItems);

@@ -137,6 +137,17 @@ export const ActualCostTrackerView: React.FC<ActualCostTrackerViewProps> = ({
 
   // Profit Health Status
   const healthStatus = useMemo(() => {
+    if (!expenses || expenses.length === 0) {
+      return {
+        level: 'initial',
+        label: 'พร้อมบันทึก (ยังไม่เริ่มเบิกจ่าย)',
+        badgeColor: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30',
+        textColor: 'text-indigo-300',
+        barColor: 'bg-indigo-500',
+        icon: 'info',
+        desc: 'ยังไม่มีประวัติการเบิกจ่ายจริง งบประมาณคงเหลือ 100%'
+      };
+    }
     if (profitMarginPercent >= 15) {
       return {
         level: 'good',
@@ -335,6 +346,21 @@ export const ActualCostTrackerView: React.FC<ActualCostTrackerViewProps> = ({
               <span className="material-symbols-outlined text-base font-black">add_circle</span>
               <span>+ บันทึกบิลซื้อของ / ค่าแรง</span>
             </button>
+            {expenses.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (confirm('คุณต้องการล้างประวัติการจ่ายเงินทั้งหมดให้เป็น 0 ใช่หรือไม่?')) {
+                    onUpdateExpenses([]);
+                  }
+                }}
+                className="px-3 py-1.5 rounded-xl bg-rose-950/60 hover:bg-rose-900 border border-rose-500/30 text-rose-300 text-xs font-semibold flex items-center gap-1 transition active:scale-95"
+                title="ล้างประวัติบิลทั้งหมดให้เป็น 0"
+              >
+                <span className="material-symbols-outlined text-xs">delete_sweep</span>
+                <span>ล้างทั้งหมด</span>
+              </button>
+            )}
           </div>
         </div>
 
