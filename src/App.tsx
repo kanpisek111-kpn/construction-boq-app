@@ -900,22 +900,6 @@ export default function App() {
                 <span>AI ตรวจ BOQ</span>
               </button>
 
-              {/* โหมดหน้างานกลางแจ้ง (High-Contrast Daylight Site Mode) */}
-              <button
-                onClick={() => setIsDaylightMode(prev => !prev)}
-                className={`px-2.5 py-1.5 rounded-lg text-xs font-black flex items-center gap-1 transition active:scale-95 shadow-sm border ${
-                  isDaylightMode
-                    ? 'bg-amber-400 text-slate-950 border-amber-500 shadow-amber-400/40 ring-2 ring-amber-300'
-                    : 'bg-slate-800 hover:bg-slate-700 text-amber-300 border-slate-700'
-                }`}
-                title="สลับโหมดหน้างานกลางแจ้ง (High-Contrast Daylight) พื้นหลังสว่างมองตัวเลขชัดเจนตากแดด"
-              >
-                <span className="material-symbols-outlined text-sm font-bold">
-                  {isDaylightMode ? 'light_mode' : 'wb_sunny'}
-                </span>
-                <span>{isDaylightMode ? 'โหมดสว่างสู้แดด' : 'โหมดกลางแจ้ง'}</span>
-              </button>
-
               <button
                 onClick={() => setIsCostAnalyticsOpen(true)}
                 className="px-2.5 py-1.5 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-black flex items-center gap-1 shadow-sm transition active:scale-95"
@@ -975,6 +959,21 @@ export default function App() {
                 <span>CSV</span>
               </button>
             </div>
+
+            {/* โหมดหน้างานกลางแจ้ง Icon เล็กๆ มุมขวาบนสุด */}
+            <button
+              onClick={() => setIsDaylightMode(prev => !prev)}
+              className={`w-8 h-8 rounded-xl flex items-center justify-center transition active:scale-90 border shrink-0 ${
+                isDaylightMode
+                  ? 'bg-amber-400 text-slate-950 border-amber-500 shadow-md shadow-amber-400/40 ring-2 ring-amber-300'
+                  : 'bg-slate-900 hover:bg-slate-800 text-amber-400 hover:text-amber-300 border-slate-700/80 shadow-sm'
+              }`}
+              title={isDaylightMode ? 'โหมดสว่างสู้แดด (คลิกเพื่อสลับกลับสู่โหมดปกติ)' : 'โหมดหน้างานกลางแจ้ง (High-Contrast Daylight สำหรับตรวจหน้างานตากแดด)'}
+            >
+              <span className="material-symbols-outlined text-lg font-bold">
+                {isDaylightMode ? 'light_mode' : 'wb_sunny'}
+              </span>
+            </button>
           </div>
         </div>
         {/* Row 2: แถบเครื่องมือคำนวณวัสดุครบวงจร */}
