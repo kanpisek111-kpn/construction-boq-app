@@ -76,7 +76,7 @@ export const UpgradePromptModal: React.FC<UpgradePromptModalProps> = ({
               <span>อัปเกรดเป็น Pro Lifetime:</span>
             </span>
             <span className="font-prompt font-extrabold text-white bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded border border-amber-400/30 text-xs">
-              ฿790 (ตลอดชีพ)
+              ฿1,290 (ตลอดชีพ)
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -132,7 +132,7 @@ export const UpgradePromptModal: React.FC<UpgradePromptModalProps> = ({
             rel="noopener noreferrer"
             className="w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-prompt font-bold text-xs shadow-md transition"
           >
-            <span>⚡ สั่งซื้อสิทธิ์ Pro ฿790 & รับโบนัสทันที</span>
+            <span>⚡ สั่งซื้อสิทธิ์ Pro ฿1,290 & รับโบนัสทันที</span>
             <span className="material-symbols-outlined text-sm">open_in_new</span>
           </a>
           <a
