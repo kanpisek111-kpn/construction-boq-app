@@ -1077,7 +1077,7 @@ export default function App() {
               </button>
               <button
                 onClick={() => {
-                  if (licenseSession.tier === 'demo') {
+                  if (!canAccessFeature('site_procurement', licenseSession.tier)) {
                     setUpgradeModalFeature('ระบบสั่งซื้อวัสดุหน้างาน (Site Procurement)');
                     return;
                   }
@@ -1091,11 +1091,13 @@ export default function App() {
               >
                 <span className="material-symbols-outlined text-sm">local_shipping</span>
                 <span>2. สั่งซื้อหน้างาน ({siteMaterialItems.length})</span>
-                {licenseSession.tier === 'demo' && <span className="text-[10px] text-amber-400">🔒</span>}
+                {!canAccessFeature('site_procurement', licenseSession.tier) && (
+                  <span className="text-[10px] text-amber-400 font-normal">🔒</span>
+                )}
               </button>
               <button
                 onClick={() => {
-                  if (licenseSession.tier === 'demo') {
+                  if (!canAccessFeature('gantt_schedule', licenseSession.tier)) {
                     setUpgradeModalFeature('ระบบตารางแผนงาน Gantt Chart');
                     return;
                   }
@@ -1109,11 +1111,13 @@ export default function App() {
               >
                 <span className="material-symbols-outlined text-sm">timeline</span>
                 <span>3. แผนงาน Gantt</span>
-                {licenseSession.tier === 'demo' && <span className="text-[10px] text-amber-400">🔒</span>}
+                {!canAccessFeature('gantt_schedule', licenseSession.tier) && (
+                  <span className="text-[10px] text-amber-400 font-normal">🔒</span>
+                )}
               </button>
               <button
                 onClick={() => {
-                  if (licenseSession.tier === 'demo') {
+                  if (!canAccessFeature('actual_cost_tracker', licenseSession.tier)) {
                     setUpgradeModalFeature('ระบบคุมต้นทุนจริง & กำไรหน้างาน (Actual Cost)');
                     return;
                   }
@@ -1127,7 +1131,9 @@ export default function App() {
               >
                 <span className="material-symbols-outlined text-sm">account_balance_wallet</span>
                 <span>4. คุมต้นทุนจริง & กำไร ({actualExpenses.length})</span>
-                {licenseSession.tier === 'demo' && <span className="text-[10px] text-amber-400">🔒</span>}
+                {!canAccessFeature('actual_cost_tracker', licenseSession.tier) && (
+                  <span className="text-[10px] text-amber-400 font-normal">🔒</span>
+                )}
               </button>
             </div>
             {/* Actions & Export */}
@@ -1155,7 +1161,9 @@ export default function App() {
               >
                 <span className="material-symbols-outlined text-sm">verified_user</span>
                 <span>AI ตรวจ BOQ</span>
-                {licenseSession.tier === 'demo' && <span className="text-[10px]">🔒</span>}
+                {!canAccessFeature('ai_sanity_check', licenseSession.tier) && (
+                  <span className="text-[10px] text-amber-400 font-normal">🔒</span>
+                )}
               </button>
 
               <button
@@ -1449,13 +1457,21 @@ export default function App() {
           {/* 📸 AI สแกนแปลนบ้านด้วยภาพถ่าย (Gemini Multimodal Takeoff) */}
           <div className="shrink-0 pl-2 border-l border-slate-800">
             <button
-              onClick={() => openEstimatorIfAllowed(setIsPlanModalOpen, '📸 AI สแกนแปลนบ้าน')}
+              onClick={() => {
+                if (!canAccessFeature('plan_analyzer', licenseSession.tier)) {
+                  setUpgradeModalFeature('📸 AI สแกนแบบแปลนบ้าน (Gemini Multimodal Takeoff)');
+                  return;
+                }
+                setIsPlanModalOpen(true);
+              }}
               className="px-3 py-1 rounded-lg bg-gradient-to-r from-cyan-500 via-blue-600 to-indigo-600 hover:brightness-110 text-white text-xs font-black flex items-center gap-1.5 shadow-md shadow-cyan-500/25 transition active:scale-95 shrink-0 animate-pulse hover:animate-none"
               title="ถ่ายภาพแปลนบ้านด้วยมือถือหรืออัปโหลดแบบ PDF ให้ Gemini AI แกะแบบและคำนวณ BOQ อัตโนมัติ"
             >
               <span className="material-symbols-outlined text-sm font-black">document_scanner</span>
               <span>📸 AI สแกนแปลนบ้าน</span>
-              {licenseSession.tier === 'demo' && <span className="text-[10px]">🔒</span>}
+              {!canAccessFeature('plan_analyzer', licenseSession.tier) && (
+                <span className="text-[10px] text-amber-400 font-normal">🔒</span>
+              )}
             </button>
           </div>
         </div>
@@ -2098,6 +2114,7 @@ export default function App() {
       <UpgradePromptModal
         isOpen={!!upgradeModalFeature}
         featureName={upgradeModalFeature || ''}
+        currentTier={licenseSession.tier}
         onClose={() => setUpgradeModalFeature(null)}
         onUnlocked={handleAuthSuccess}
       />

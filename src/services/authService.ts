@@ -194,14 +194,15 @@ export function canAccessFeature(
       case 'advanced_calculators':
       case 'multi_projects':
         return true;
+      // The following advanced management & AI tools are strictly ENTERPRISE & OWNER only:
       case 'gantt_schedule':
       case 'actual_cost_tracker':
       case 'site_procurement':
       case 'ai_sanity_check':
       case 'plan_analyzer':
-        return true; // Pro has access, or you can limit to Enterprise if desired
+        return false;
       default:
-        return true;
+        return false;
     }
   }
 
