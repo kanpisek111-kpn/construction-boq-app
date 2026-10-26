@@ -546,6 +546,16 @@ export interface RoofCalculationResult {
   rafterBars: number;
   ridgeBeamBars: number;
   kingPostBars: number;
+  intermediateBeamBars?: number;      // 🌟 อะเสกลาง/คานซอยรับจันทัน (ถ้าสแปน > 4.5 ม.)
+  intermediateBeamM?: number;         // 🌟 ความยาวอะเสกลางรวม
+  intermediatePostBars?: number;      // 🌟 เสาค้ำยัน/ดั้งรองรับอะเสกลาง
+  rafterLengthM?: number;             // 🌟 ความยาวจันทันต่อท่อน (พาดเต็มช่วงสโลป)
+  rafterCount?: number;               // 🌟 จำนวนแนวแถวจันทัน
+  slopeRiseHeightM?: number;          // 🌟 ความสูงยกสโลปดั้ง
+  purlinRowsCount?: number;           // 🌟 จำนวนแถวแป
+  steelSpecDesc?: string;             // 🌟 สเปกเหล็กตามเกรดน้ำหนักบรรทุก
+  steelWeightPerBar?: number;         // 🌟 น้ำหนักเหล็กต่อท่อน (กก./ท่อน 6ม.)
+  bracingPercent?: number;            // 🌟 สัดส่วนเหล็กค้ำยัน/ขื่อยึด (%)
   valleyGutterM: number;
   valleyGutterCost: number;
   dryRidgeRolls: number;

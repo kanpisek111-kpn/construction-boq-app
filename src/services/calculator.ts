@@ -1470,6 +1470,7 @@ export function calculateRoofMaterials(params: RoofCalculationParams): RoofCalcu
     rafterSpacingM = 1.0
   } = params;
 
+  // 1. ขนาดตัวอาคารและระยะยื่นชายคา
   const effectiveWidth = Math.max(1, baseWidthM + (overhangM * 2));
   const effectiveLength = Math.max(1, baseLengthM + (overhangM * 2));
   const rad = (pitchDeg * Math.PI) / 180;
@@ -1480,31 +1481,128 @@ export function calculateRoofMaterials(params: RoofCalculationParams): RoofCalcu
   let eavesPerimeterM = 0;
   let birdStopLengthM = 0;
 
+  // ระยะลาดเอียงตามแนวสแปน
   const slopeLengthHalfWidth = (effectiveWidth / 2) * slopeFactor;
-  const slopeLengthFull = effectiveLength * slopeFactor;
+  // จันทันเพิงหมาแหงนพาดเต็มช่วงกว้างรวมระยะยื่นชายคา 2 ด้าน (Point 1)
+  const leanToSlopeLength = effectiveWidth * slopeFactor;
 
   let wallPlateM = 0;
   let ridgeBeamM = 0;
   let hipRafterLen = 0;
   let valleyGutterM = 0;
 
+  // 🌟 Point 6: แยกเกรดเหล็กและน้ำหนักบรรทุกตามชนิดกระเบื้องมุงจริง
+  let steelWeightPerBar = 24.3; // กก./ท่อน 6ม. (C-100x50x20x2.3 มม.)
+  let bracingRatio = 0.25;      // สัดส่วนค้ำยัน/ขื่อยึดหัวเสา
+  let steelSpecDesc = 'C-100x50x20x2.3 มม. (24.3 กก./ท่อน)';
+  let bracingPercent = 25;
+
+  if (materialType === 'metal_sheet') {
+    // เมทัลชีท (~5 กก./ตร.ม.): C-100x50x20x2.3 มม. (24.3 กก./ท่อน)
+    steelWeightPerBar = 24.3;
+    bracingRatio = 0.25;
+    bracingPercent = 25;
+    steelSpecDesc = 'C-100x50x20x2.3 มม. (24.3 กก./ท่อน)';
+  } else if (materialType === 'concrete_tile' || materialType === 'shingle') {
+    // กระเบื้องลอนคู่ (~15 กก./ตร.ม.): C-100/125 หนา 3.2 มม. (29.5 กก./ท่อน)
+    steelWeightPerBar = 29.5;
+    bracingRatio = 0.28;
+    bracingPercent = 28;
+    steelSpecDesc = 'C-100/125 หนา 3.2 มม. (29.5 กก./ท่อน)';
+  } else if (materialType === 'cpac') {
+    // กระเบื้องคอนกรีต ซีแพคโมเนีย (~45 กก./ตร.ม.): C-125/C-150 หนา 3.2 มม. หรือเหล็กคู่ (33.5 กก./ท่อน)
+    // เพิ่มขื่อยึดหัวเสา (Tie Beam) และเพิ่มเหล็กค้ำยันกันลมโยก (Wind Bracing) จาก 28% เป็น 35%
+    steelWeightPerBar = 33.5;
+    bracingRatio = 0.35;
+    bracingPercent = 35;
+    steelSpecDesc = 'C-125/C-150 หนา 3.2 มม. / เหล็กคู่ (33.5 กก./ท่อน) + ขื่อยึดหัวเสา';
+  }
+
+  // ตัวแปรสำหรับชิ้นส่วนเหล็ก
+  let rafterCount = 0;
+  let rafterSlopeLength = 0;
+  let raftersTotalM = 0;
+  let intermediateBeamRows = 0;
+  let intermediateBeamBars = 0;
+  let intermediateBeamM = 0;
+  let intermediatePostBars = 0;
+  let slopeRiseHeightM = 0;
+  let purlinRowsCount = 0;
+  let purlinBars = 0;
+
   switch (style) {
     case 'lean_to':
-      surfaceArea = effectiveWidth * (effectiveLength * slopeFactor);
-      ridgeLength = effectiveWidth;
-      eavesPerimeterM = (2 * effectiveWidth) + (2 * slopeLengthFull);
-      birdStopLengthM = effectiveWidth;
-      wallPlateM = 2 * effectiveWidth;
-      ridgeBeamM = effectiveWidth;
+      // 🌟 Point 1 & 2: ทรงเพิงหมาแหงน
+      // พื้นที่ผิวหลังคา = แนวความยาว x แนวมิติลาดเอียงเต็มช่วง
+      surfaceArea = effectiveLength * leanToSlopeLength;
+      ridgeLength = effectiveLength;
+      // เชิงชายรอบด้าน: แนวขนาน 2 ฝั่ง (2 x effectiveLength) + ปีกหัวท้ายตามแนวลาดเอียง (2 x leanToSlopeLength)
+      eavesPerimeterM = (2 * effectiveLength) + (2 * leanToSlopeLength);
+      // แผ่นปิดกันนกเฉพาะชายน้ำหยดด้านล่าง 1 ด้าน
+      birdStopLengthM = effectiveLength;
+      // 🌟 Point 2: อะเส วางตามแนวยาวหัวเสาด้านบนและด้านล่าง (2 x effectiveLength)
+      wallPlateM = 2 * effectiveLength;
+      ridgeBeamM = effectiveLength; // อะเสบน / คานรัดหัวเสาแถวสูง
+
+      // 🌟 Point 1: จันทันพาดเต็มช่วงกว้างลาดเอียงรวมระยะยื่น ไม่หาร 2!
+      rafterSlopeLength = leanToSlopeLength;
+      // 🌟 Point 2: วางเรียงตามแนวยาวตัวบ้าน (Roof Run Length)
+      rafterCount = Math.ceil(effectiveLength / rafterSpacingM) + 1;
+      raftersTotalM = rafterCount * rafterSlopeLength;
+
+      // 🌟 Point 3: อะเสกลาง / คานซอยรับจันทัน (Intermediate Support Beam)
+      // หากช่วงกว้างอาคารเกิน 4.5 เมตร เพิ่มอะเสกลางเพื่อป้องกันจันทันแอ่นตัว (Deflection)
+      if (baseWidthM > 4.5) {
+        intermediateBeamRows = Math.max(1, Math.floor((baseWidthM - 1.0) / 4.0));
+        intermediateBeamM = intermediateBeamRows * effectiveLength;
+        intermediateBeamBars = Math.ceil((intermediateBeamM * 1.08) / 6.0);
+        // เสาค้ำยัน/ดั้งรองรับอะเสกลางทุกระยะ 3.5 ม.
+        const postsPerBeam = Math.max(2, Math.ceil(baseLengthM / 3.5) + 1);
+        const totalIntPosts = postsPerBeam * intermediateBeamRows;
+        const avgIntPostHeight = (baseWidthM / (intermediateBeamRows + 1)) * Math.tan(rad);
+        intermediatePostBars = Math.ceil((totalIntPosts * (avgIntPostHeight + 1.2) * 1.15) / 6.0);
+      }
+
+      // 🌟 Point 4: ความสูงดั้งยกสโลป คิดเต็มช่วงกว้าง SlopeSpan * tan(pitch)
+      slopeRiseHeightM = Math.round((baseWidthM * Math.tan(rad)) * 100) / 100;
+
+      // 🌟 Point 5: แป (Purlin) พร้อมระยะทาบต่อท่อน 6.00 ม. (Lap Splice 25 ซม.) เหนือจันทัน
+      purlinRowsCount = Math.ceil(rafterSlopeLength / purlinSpacingM) + 1;
+      {
+        const splicesPerRow = Math.max(0, Math.ceil(effectiveLength / 6.0) - 1);
+        const lapSpliceM = 0.25; // ทาบต่อ 25 ซม.
+        const totalRowLength = effectiveLength + (splicesPerRow * lapSpliceM);
+        const totalPurlinMeters = purlinRowsCount * totalRowLength * 1.05; // เผื่อตัด 5%
+        purlinBars = Math.ceil(totalPurlinMeters / 6.0);
+      }
       break;
+
     case 'gable':
-      surfaceArea = 2 * (effectiveLength) * slopeLengthHalfWidth;
+      surfaceArea = 2 * effectiveLength * slopeLengthHalfWidth;
       ridgeLength = effectiveLength;
       eavesPerimeterM = (2 * effectiveLength) + (4 * slopeLengthHalfWidth);
       birdStopLengthM = 2 * effectiveLength;
       wallPlateM = 2 * effectiveLength;
       ridgeBeamM = effectiveLength;
+
+      rafterSlopeLength = slopeLengthHalfWidth;
+      rafterCount = (Math.ceil(effectiveLength / rafterSpacingM) + 1) * 2;
+      raftersTotalM = rafterCount * rafterSlopeLength;
+
+      slopeRiseHeightM = Math.round(((effectiveWidth / 2) * Math.tan(rad)) * 100) / 100;
+
+      // แปสำหรับทรงจั่ว 2 ด้าน
+      {
+        const purlinRowsPerSide = Math.ceil(slopeLengthHalfWidth / purlinSpacingM) + 1;
+        purlinRowsCount = purlinRowsPerSide * 2;
+        const splicesPerRow = Math.max(0, Math.ceil(effectiveLength / 6.0) - 1);
+        const lapSpliceM = 0.25;
+        const totalRowLength = effectiveLength + (splicesPerRow * lapSpliceM);
+        const totalPurlinMeters = purlinRowsCount * totalRowLength * 1.05;
+        purlinBars = Math.ceil(totalPurlinMeters / 6.0);
+      }
       break;
+
     case 'hip':
       surfaceArea = effectiveWidth * effectiveLength * slopeFactor * 1.08;
       hipRafterLen = Math.sqrt(Math.pow(slopeLengthHalfWidth, 2) + Math.pow(effectiveWidth / 2, 2));
@@ -1514,7 +1612,17 @@ export function calculateRoofMaterials(params: RoofCalculationParams): RoofCalcu
       wallPlateM = 2 * (effectiveWidth + effectiveLength);
       ridgeBeamM = Math.max(1, effectiveLength - effectiveWidth);
       valleyGutterM = Math.round(hipRafterLen * 1.5 * 10) / 10;
+
+      rafterSlopeLength = slopeLengthHalfWidth;
+      rafterCount = (Math.ceil(effectiveLength / rafterSpacingM) + 1) * 2;
+      raftersTotalM = (rafterCount * slopeLengthHalfWidth) + (4 * hipRafterLen);
+
+      slopeRiseHeightM = Math.round(((effectiveWidth / 2) * Math.tan(rad)) * 100) / 100;
+
+      purlinRowsCount = (Math.ceil(slopeLengthHalfWidth / purlinSpacingM) + 1) * 2;
+      purlinBars = Math.ceil((surfaceArea / (purlinSpacingM * 6.0)) * 1.20);
       break;
+
     case 'flat_slab':
       surfaceArea = effectiveWidth * effectiveLength;
       ridgeLength = 0;
@@ -1522,34 +1630,39 @@ export function calculateRoofMaterials(params: RoofCalculationParams): RoofCalcu
       birdStopLengthM = 0;
       wallPlateM = 0;
       ridgeBeamM = 0;
+      rafterCount = 0;
+      rafterSlopeLength = 0;
+      raftersTotalM = 0;
+      purlinBars = 0;
       break;
   }
 
   eavesPerimeterM = Math.round(eavesPerimeterM * 10) / 10;
   birdStopLengthM = Math.round(birdStopLengthM * 10) / 10;
 
-  // 1. คำนวณเหล็กตามหลักวิศวกรรมจริงแยกรายชิ้นส่วน (ท่อนละ 6 ม.)
-  const wallPlateBars = wallPlateM > 0 ? Math.ceil((wallPlateM * 1.08) / 6) : 0;
-  
-  const rafterCount = style === 'lean_to' 
-    ? (Math.ceil(effectiveWidth / rafterSpacingM) + 1)
-    : (Math.ceil(effectiveLength / rafterSpacingM) + 1) * 2;
-  const raftersTotalM = (rafterCount * slopeLengthHalfWidth) + (style === 'hip' ? 4 * hipRafterLen : 0);
-  const rafterBars = raftersTotalM > 0 ? Math.ceil((raftersTotalM * 1.10) / 6) : 0;
+  // คำนวณจำนวนท่อนเหล็กรูปพรรณ (ท่อนละ 6 ม.)
+  const wallPlateBars = wallPlateM > 0 ? Math.ceil((wallPlateM * 1.08) / 6.0) : 0;
+  const rafterBars = raftersTotalM > 0 ? Math.ceil((raftersTotalM * 1.10) / 6.0) : 0;
+  const ridgeBeamBars = ridgeBeamM > 0 ? Math.ceil((ridgeBeamM * 1.10) / 6.0) * 2 : 0; // ประกบคู่ 2C
 
-  const ridgeBeamBars = ridgeBeamM > 0 ? Math.ceil((ridgeBeamM * 1.10) / 6) * 2 : 0; // ประกบคู่ 2C-150
+  // 🌟 Point 4: ดั้งยกสโลป
+  let kingPostBars = 0;
+  if (style === 'lean_to') {
+    const kingPostCount = Math.max(2, Math.ceil(effectiveLength / 3.5) + 1);
+    // เสาดั้งสูง slopeRiseHeightM + ท้าวแขนค้ำยันรับลม 1.5 ม.
+    const kingPostTotalM = kingPostCount * (slopeRiseHeightM + 1.5);
+    kingPostBars = Math.ceil((kingPostTotalM * 1.15) / 6.0) + intermediatePostBars;
+  } else if (ridgeBeamM > 0) {
+    const kingPostCount = Math.max(2, Math.ceil(ridgeBeamM / 3.5) + 1);
+    kingPostBars = Math.ceil((kingPostCount * (slopeRiseHeightM + 1.2) * 1.15) / 6.0);
+  }
 
-  const kingPostHeight = (effectiveWidth / 2) * Math.tan(rad);
-  const kingPostCount = ridgeBeamM > 0 ? Math.max(2, Math.ceil(ridgeBeamM / 3.5) + 1) : 0;
-  const kingPostBars = kingPostCount > 0 ? Math.ceil((kingPostCount * (kingPostHeight + 1.2) * 1.15) / 6) : 0;
+  // 🌟 รวมเหล็ก C-Channel ทั้งหมด (รวมอะเสกลางจาก Point 3)
+  const cChannelBars = wallPlateBars + rafterBars + ridgeBeamBars + kingPostBars + intermediateBeamBars;
+  const cChannelKg = Math.round(cChannelBars * steelWeightPerBar);
 
-  // แปสำเร็จรูปกัลวาไนซ์
-  const purlinBars = Math.ceil(surfaceArea / (purlinSpacingM * 6) * 1.15);
-
-  const cChannelBars = wallPlateBars + rafterBars + ridgeBeamBars + kingPostBars;
-  const cChannelKg = Math.round(cChannelBars * 24.3); // C-100x50x20x2.3 mm ~ 24.3 kg/ท่อน 6ม.
-  
-  const boxSteelBars = Math.ceil(cChannelBars * 0.25); // เหล็กกล่องสำหรับดั้งรัดและค้ำยัน
+  // 🌟 Point 6: เหล็กกล่อง/ค้ำยัน/ขื่อยึดหัวเสา ตามสัดส่วน bracingRatio
+  const boxSteelBars = Math.ceil(cChannelBars * bracingRatio);
   const boxSteelKg = Math.round(boxSteelBars * 28.5);
 
   const isHeavyRoof = materialType === 'concrete_tile' || materialType === 'cpac';
@@ -1625,13 +1738,12 @@ export function calculateRoofMaterials(params: RoofCalculationParams): RoofCalcu
   const birdStopMaterialCost = Math.round(birdStopLength * birdStopMatPricePerM);
   const birdStopLaborCost = Math.round(birdStopLength * birdStopLabPricePerM);
 
-  // 4. ระบบครอบแห้ง Dry Ridge System & รางน้ำตะเฆ่ราง
+  // 4. ระบบครอบแห้ง Dry Ridge & ตะเฆ่ราง
   const dryRidgeRolls = ridgeLength > 0 ? Math.ceil(ridgeLength / 3.0) : 0;
-  const dryRidgeCost = dryRidgeRolls * 750; // ม้วนละ 3 เมตร 750 บาท
+  const dryRidgeCost = dryRidgeRolls * 750;
+  const valleyGutterCost = Math.round(valleyGutterM * 450);
 
-  const valleyGutterCost = Math.round(valleyGutterM * 450); // สแตนเลส 304 หนา 0.5 มม. 450 บาท/ม.
-
-  // 5. สกรูยึดหลังคาพร้อมยาง EPDM
+  // 5. สกรูยึดหลังคา
   const roofScrewsPcs = Math.ceil(surfaceArea * 5.5);
   const roofScrewsCost = Math.ceil(roofScrewsPcs * 1.5);
 
@@ -1662,7 +1774,7 @@ export function calculateRoofMaterials(params: RoofCalculationParams): RoofCalcu
 
   const baseMaterialPricePerSqm = isHeavyRoof ? 550 : 380;
   const baseLaborPricePerSqm = isHeavyRoof ? 180 : 120;
-  const roofMatTotal = Math.round((surfaceArea * baseMaterialPricePerSqm) + (cChannelKg * 34) + (boxSteelKg * 36) + (purlinBars * 190));
+  const roofMatTotal = Math.round((surfaceArea * baseMaterialPricePerSqm) + (cChannelKg * 35) + (boxSteelKg * 36) + (purlinBars * 195));
   const roofLabTotal = Math.round((surfaceArea * baseLaborPricePerSqm) + ((cChannelKg + boxSteelKg) * 14));
 
   return {
@@ -1687,6 +1799,16 @@ export function calculateRoofMaterials(params: RoofCalculationParams): RoofCalcu
     rafterBars,
     ridgeBeamBars,
     kingPostBars,
+    intermediateBeamBars,
+    intermediateBeamM: Math.round(intermediateBeamM * 10) / 10,
+    intermediatePostBars,
+    rafterLengthM: Math.round(rafterSlopeLength * 100) / 100,
+    rafterCount,
+    slopeRiseHeightM,
+    purlinRowsCount,
+    steelSpecDesc,
+    steelWeightPerBar,
+    bracingPercent,
     valleyGutterM,
     valleyGutterCost,
     dryRidgeRolls,

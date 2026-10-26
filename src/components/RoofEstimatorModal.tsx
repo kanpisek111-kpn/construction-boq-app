@@ -77,29 +77,56 @@ export const RoofEstimatorModal: React.FC<RoofEstimatorModalProps> = ({ isOpen, 
       });
     }
 
-    // 2. เหล็กจันทัน (Rafters)
+    // 2. เหล็กจันทัน (Rafters) - แก้ไขคำนวณเต็มช่วงลาดเอียงและจำนวนแถวตามแนวยาว
     if (result.rafterBars > 0) {
+      const rafterName = `เหล็กจันทัน ${result.steelSpecDesc || 'C-100x50x20x2.3 มม.'} (ระยะห่าง @ ${rafterSpacingM} ม.)`;
+      const rafterSpec = style === 'lean_to'
+        ? `เพิงหมาแหงน พาดเต็มช่วงลาดเอียง ${result.rafterLengthM || 0} ม. รวม ${result.rafterCount || 0} แนว (@ ${rafterSpacingM}ม.) รวมสั่ง ${result.rafterBars} ท่อน @ 6ม.`
+        : `ลาดเอียง ${pitchDeg}° รวม ${result.rafterCount || 0} แนว (สั่ง ${result.rafterBars} ท่อน @ 6ม.)`;
+
       generatedItems.push({
         id: `roof-gen-rafter-${timestamp + 1}`,
         category: 'roof',
-        name: 'เหล็กจันทัน C-100x50x20x2.3 มม. (ระยะห่าง @ ' + rafterSpacingM + ' ม.)',
-        spec: `คำนวณตามความชันลาดเอียง ${pitchDeg}° และระยะยื่นชายคา ${overhangM} ม. (สั่ง ${result.rafterBars} ท่อน @ 6ม.)`,
+        name: rafterName,
+        spec: rafterSpec,
         quantity: result.rafterBars,
         unit: 'ท่อน',
-        materialUnitPrice: 490,
+        materialUnitPrice: materialType === 'cpac' ? 620 : materialType === 'concrete_tile' ? 550 : 490,
         laborUnitPrice: 120,
         wastePercent: 6,
+      });
+    }
+
+    // 🌟 2.5 เหล็กอะเสกลาง / คานซอยรับจันทัน (Intermediate Support Beam)
+    if (result.intermediateBeamBars && result.intermediateBeamBars > 0) {
+      generatedItems.push({
+        id: `roof-gen-intermediate-beam-${timestamp + 12}`,
+        category: 'roof',
+        name: 'เหล็กอะเสกลาง/คานซอยรับจันทัน C-125 หรือ 2C-100 พร้อมเสาค้ำยัน',
+        spec: `ช่วงกว้างอาคาร ${baseWidthM} ม. (> 4.5 ม.) วิศวกรรมกำหนดเพิ่มอะเสกลางป้องกันจันทันแอ่นตัว (Deflection) ความยาวรวม ${result.intermediateBeamM} ม. (${result.intermediateBeamBars} ท่อน @ 6ม.)`,
+        quantity: result.intermediateBeamBars,
+        unit: 'ท่อน',
+        materialUnitPrice: 680,
+        laborUnitPrice: 140,
+        wastePercent: 5,
       });
     }
 
     // 3. เหล็กอกไก่และดั้ง/ค้ำยัน (Ridge Beam & King Post)
     const ridgeAndPostBars = result.ridgeBeamBars + result.kingPostBars;
     if (ridgeAndPostBars > 0) {
+      const kingPostName = style === 'lean_to'
+        ? 'เหล็กเสาดั้งยกสโลปเพิงแหงนและท้าวแขนค้ำยันรับแรงลม (King Post & Wind Bracing)'
+        : 'เหล็กอกไก่และดั้งรับสันหลังคา C-125/C-150 หรือ 2C ประกบคู่ พร้อมค้ำยัน';
+      const kingPostSpec = style === 'lean_to'
+        ? `เสาดั้งยกสโลปเต็มช่วงกว้างสูง ${result.slopeRiseHeightM || 0} ม. พร้อมท้าวแขนค้ำยันรับลมโยก (${ridgeAndPostBars} ท่อน @ 6ม.)`
+        : `แนวสันอกไก่ยาว ${result.ridgeTilesM} ม. รวมดั้งและท้าวแขนค้ำยัน (${ridgeAndPostBars} ท่อน @ 6ม.)`;
+
       generatedItems.push({
         id: `roof-gen-ridgebeam-${timestamp + 2}`,
         category: 'roof',
-        name: 'เหล็กอกไก่และดั้งรับสันหลังคา C-125/C-150 หรือ 2C ประกบคู่ พร้อมค้ำยัน',
-        spec: `แนวสันอกไก่ยาว ${result.ridgeTilesM} ม. รวมดั้งและท้าวแขนค้ำยัน (${ridgeAndPostBars} ท่อน @ 6ม.)`,
+        name: kingPostName,
+        spec: kingPostSpec,
         quantity: ridgeAndPostBars,
         unit: 'ท่อน',
         materialUnitPrice: 650,
@@ -108,11 +135,9 @@ export const RoofEstimatorModal: React.FC<RoofEstimatorModalProps> = ({ isOpen, 
       });
     }
 
-    // 4. แปสำเร็จรูปกัลวาไนซ์ (Purlins)
+    // 4. แปสำเร็จรูปกัลวาไนซ์ (Purlins) - พร้อมเผื่อระยะทาบต่อ 25 ซม. เหนือจันทัน
     if (result.purlin_bars > 0) {
-      const purlinSpec = materialType === 'concrete_tile' || materialType === 'cpac'
-        ? `แปซีแพคสำเร็จรูปกัลวาไนซ์กันสนิม หนา 0.55-0.70 มม. ระยะแป @ ${purlinSpacingM} ม. (${result.purlin_bars} ท่อน @ 6ม.)`
-        : `แปกัลวาไนซ์ทรง C-Purlin หนา 0.70 มม. ระยะแป @ ${purlinSpacingM} ม. (${result.purlin_bars} ท่อน @ 6ม.)`;
+      const purlinSpec = `แปกัลวาไนซ์สำเร็จรูป ${result.purlinRowsCount ? 'จำนวน ' + result.purlinRowsCount + ' แถว ' : ''}ระยะแป @ ${purlinSpacingM} ม. (เผื่อระยะทาบต่อ 25 ซม. เหนือจันทันทุกช่วง 6.00 ม.) รวมสั่ง ${result.purlin_bars} ท่อน @ 6ม.`;
 
       generatedItems.push({
         id: `roof-gen-purlin-${timestamp + 3}`,
@@ -566,6 +591,17 @@ export const RoofEstimatorModal: React.FC<RoofEstimatorModalProps> = ({ isOpen, 
 
               <div className="p-4 flex flex-col gap-2.5 text-xs overflow-y-auto max-h-[380px]">
                 
+                {/* 🌟 ป้ายมาตรฐานวิศวกรรม: เกรดเหล็กและน้ำหนักบรรทุก (Point 6) */}
+                <div className="p-2.5 bg-slate-900/90 border border-amber-500/30 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between text-xs gap-1.5">
+                  <div className="flex items-center gap-1.5 text-amber-300 font-medium">
+                    <span className="material-symbols-outlined text-sm text-amber-400">verified</span>
+                    <span>เกรดเหล็กรับน้ำหนัก: <strong className="text-white">{result.steelSpecDesc}</strong></span>
+                  </div>
+                  <span className="text-slate-400 font-mono text-[11px]">
+                    ค้ำยัน/ขื่อยึด {result.bracingPercent}% ({materialType === 'metal_sheet' ? '~5 กก./ตร.ม.' : materialType === 'concrete_tile' ? '~15 กก./ตร.ม.' : '~45 กก./ตร.ม.'})
+                  </span>
+                </div>
+
                 {/* 1. เหล็กอะเส */}
                 <div className="flex justify-between items-center py-1.5 border-b border-slate-850">
                   <div className="flex items-center gap-2">
@@ -578,11 +614,18 @@ export const RoofEstimatorModal: React.FC<RoofEstimatorModalProps> = ({ isOpen, 
                   </div>
                 </div>
 
-                {/* 2. เหล็กจันทัน */}
+                {/* 2. เหล็กจันทัน - Point 1 & 2 */}
                 <div className="flex justify-between items-center py-1.5 border-b border-slate-850">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-blue-400"></span>
-                    <span className="text-slate-300 font-medium">เหล็กจันทัน C-100x50x20 (@ {rafterSpacingM}ม.):</span>
+                  <div className="flex flex-col">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-blue-400"></span>
+                      <span className="text-slate-300 font-medium">เหล็กจันทัน (@ {rafterSpacingM}ม.):</span>
+                    </div>
+                    <span className="text-[10px] text-slate-500 ml-4">
+                      {style === 'lean_to' 
+                        ? `พาดเต็มช่วงลาดเอียง ${result.rafterLengthM} ม. x ${result.rafterCount} แนว` 
+                        : `ยาวช่วงละ ${result.rafterLengthM} ม. x ${result.rafterCount} แนว`}
+                    </span>
                   </div>
                   <div className="text-right">
                     <span className="font-mono font-bold text-blue-300 mr-1">{result.rafterBars} ท่อน</span>
@@ -590,11 +633,35 @@ export const RoofEstimatorModal: React.FC<RoofEstimatorModalProps> = ({ isOpen, 
                   </div>
                 </div>
 
-                {/* 3. เหล็กอกไก่ ดั้ง และค้ำยัน */}
+                {/* 🌟 2.5 อะเสกลาง / คานซอยรับจันทัน (Point 3) */}
+                {result.intermediateBeamBars && result.intermediateBeamBars > 0 ? (
+                  <div className="flex justify-between items-center py-1.5 border-b border-slate-850 bg-cyan-950/20 px-2 rounded">
+                    <div className="flex flex-col">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-cyan-400"></span>
+                        <span className="text-cyan-200 font-medium">อะเสกลาง / คานซอยรับจันทัน (สแปน {baseWidthM}ม. &gt; 4.5ม.):</span>
+                      </div>
+                      <span className="text-[10px] text-cyan-400/80 ml-4">
+                        คานยาวรวม {result.intermediateBeamM} ม. พร้อมเสาดั้งค้ำยัน (ป้องกันจันทันแอ่นตัว Deflection)
+                      </span>
+                    </div>
+                    <div className="text-right">
+                      <span className="font-mono font-bold text-cyan-300 mr-1">{result.intermediateBeamBars} ท่อน</span>
+                      <span className="text-slate-500 font-mono text-[10px]">(@ 6ม.)</span>
+                    </div>
+                  </div>
+                ) : null}
+
+                {/* 3. เหล็กอกไก่ ดั้ง และค้ำยัน - Point 4 */}
                 <div className="flex justify-between items-center py-1.5 border-b border-slate-850">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-indigo-400"></span>
-                    <span className="text-slate-300 font-medium">เหล็กอกไก่ & ดั้ง & ค้ำยัน (2C/กล่อง):</span>
+                  <div className="flex flex-col">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-indigo-400"></span>
+                      <span className="text-slate-300 font-medium">{style === 'lean_to' ? 'เสาดั้งยกสโลป & ท้าวแขนค้ำยันรับลม:' : 'เหล็กอกไก่ & ดั้ง & ค้ำยัน:'}</span>
+                    </div>
+                    <span className="text-[10px] text-slate-500 ml-4">
+                      {style === 'lean_to' ? `คำนวณยกสโลปเต็มช่วงกว้างสูง ${result.slopeRiseHeightM} ม. พร้อมค้ำยันรับลม` : `รวมดั้งสูง ${result.slopeRiseHeightM} ม. และท้าวแขน`}
+                    </span>
                   </div>
                   <div className="text-right">
                     <span className="font-mono font-bold text-indigo-300 mr-1">{result.ridgeBeamBars + result.kingPostBars} ท่อน</span>
@@ -602,14 +669,20 @@ export const RoofEstimatorModal: React.FC<RoofEstimatorModalProps> = ({ isOpen, 
                   </div>
                 </div>
 
-                {/* 3. แปหลังคา */}
+                {/* 4. แปหลังคา - Point 5 */}
                 <div className="flex justify-between items-center py-1.5 border-b border-slate-850">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-indigo-400"></span>
-                    <span className="text-slate-300 font-medium">แปกัลวาไนซ์ / แปโอเมก้า (ระยะห่าง {purlinSpacingM} ม.):</span>
+                  <div className="flex flex-col">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+                      <span className="text-slate-300 font-medium">แปกัลวาไนซ์ / แปโอเมก้า (@ {purlinSpacingM} ม.):</span>
+                    </div>
+                    <span className="text-[10px] text-slate-500 ml-4">
+                      {result.purlinRowsCount ? `จำนวน ${result.purlinRowsCount} แถว ` : ''}(เผื่อระยะทาบต่อ 25 ซม. เหนือจันทันทุก 6.00 ม.)
+                    </span>
                   </div>
                   <div className="text-right">
-                    <span className="font-mono font-bold text-amber-300">{result.purlin_bars} ท่อน (ยาว 6ม.)</span>
+                    <span className="font-mono font-bold text-amber-300">{result.purlin_bars} ท่อน</span>
+                    <span className="text-slate-500 font-mono text-[10px] ml-1">(@ 6ม.)</span>
                   </div>
                 </div>
 
