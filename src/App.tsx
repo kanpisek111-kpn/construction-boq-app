@@ -555,6 +555,21 @@ export default function App() {
     setTimeout(() => setSaveStatusToast(''), 3000);
   };
 
+  const handleUpdateProjectExpenses = (projectId: string, newExpenses: ActualExpenseItem[]) => {
+    if (projectId === activeProjectId) {
+      setActualExpenses(newExpenses);
+    }
+    setProjects((prev) => {
+      const updated = prev.map((p) => (p.id === projectId ? { ...p, actualExpenses: newExpenses } : p));
+      try {
+        localStorage.setItem(PROJECTS_LIST_KEY, JSON.stringify(updated));
+      } catch (e) {
+        console.error('Failed to save projects to localStorage:', e);
+      }
+      return updated;
+    });
+  };
+
   const handleDuplicateProject = (id: string) => {
     const source = projects.find((p) => p.id === id);
     if (!source) return;
@@ -1447,6 +1462,7 @@ export default function App() {
               onDuplicateProject={handleDuplicateProject}
               onDeleteProject={handleDeleteProject}
               onImportProjectFile={handleLoadProjectFile}
+              onUpdateProjectExpenses={handleUpdateProjectExpenses}
             />
           )}
           {/* TAB 1: BOQ ESTIMATE TABLE */}

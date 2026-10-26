@@ -1,5 +1,6 @@
-import React, { useState, useMemo, useRef } from 'react';
-import { ProjectSaveState, ProjectStatus } from '../types';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { ProjectSaveState, ProjectStatus, ActualExpenseItem } from '../types';
+import { ProjectSnapshotSection } from './ProjectSnapshotSection';
 import { computeBOQSummary } from '../services/calculator';
 import { Flow } from 'flow-sdk';
 
@@ -18,6 +19,7 @@ interface ProjectDashboardViewProps {
   onDuplicateProject: (id: string) => void;
   onDeleteProject: (id: string) => void;
   onImportProjectFile: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onUpdateProjectExpenses?: (projectId: string, expenses: ActualExpenseItem[]) => void;
 }
 
 export const ProjectDashboardView: React.FC<ProjectDashboardViewProps> = ({
@@ -28,10 +30,20 @@ export const ProjectDashboardView: React.FC<ProjectDashboardViewProps> = ({
   onDuplicateProject,
   onDeleteProject,
   onImportProjectFile,
+  onUpdateProjectExpenses,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | ProjectStatus>('all');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+
+  // Snapshot active project selection
+  const [snapshotProjectId, setSnapshotProjectId] = useState<string>(activeProjectId || (projects[0]?.id ?? ''));
+
+  useEffect(() => {
+    if (activeProjectId) {
+      setSnapshotProjectId(activeProjectId);
+    }
+  }, [activeProjectId]);
 
   // New Project Form State
   const [newProjectName, setNewProjectName] = useState('บ้านพักอาศัย คสล. 1-2 ชั้น พร้อมรั้วและโรงจอดรถ');
@@ -218,6 +230,14 @@ export const ProjectDashboardView: React.FC<ProjectDashboardViewProps> = ({
           <span className="text-[11px] text-slate-500 mt-1">กำลังหน้างานจริง</span>
         </div>
       </div>
+
+      {/* 🌟 PROJECT SNAPSHOT SECTION: งบประมาณ vs ต้นทุนจริง & ความเสี่ยงการเงิน */}
+      <ProjectSnapshotSection
+        projects={projects}
+        selectedProjectId={snapshotProjectId}
+        onSelectProject={setSnapshotProjectId}
+        onUpdateProjectExpenses={onUpdateProjectExpenses || (() => {})}
+      />
 
       {/* Search & Filter Bar */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-slate-900/70 p-2.5 rounded-2xl border border-slate-800">
@@ -469,6 +489,20 @@ export const ProjectDashboardView: React.FC<ProjectDashboardViewProps> = ({
                         <span className="material-symbols-outlined text-sm">delete</span>
                       </button>
                     )}
+
+                    {/* 📸 Snapshot Button */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSnapshotProjectId(proj.id);
+                        document.getElementById('project-snapshot-section')?.scrollIntoView({ behavior: 'smooth' });
+                      }}
+                      className="px-2.5 py-1.5 rounded-lg bg-indigo-950/80 hover:bg-indigo-900 border border-indigo-500/40 text-indigo-300 text-xs font-bold flex items-center gap-1 shadow transition active:scale-95"
+                      title="ดูภาพรวมเปรียบเทียบงบประมาณ vs ต้นทุนจริงของโครงการนี้"
+                    >
+                      <span className="material-symbols-outlined text-xs text-indigo-400">analytics</span>
+                      <span>📸 Snapshot</span>
+                    </button>
 
                     {/* Open Project Button */}
                     <button
