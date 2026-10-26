@@ -29,6 +29,9 @@ import { AISanityCheckModal } from './components/AISanityCheckModal';
 import { CostAnalyticsModal } from './components/CostAnalyticsModal';
 import { PaintEstimatorModal } from './components/PaintEstimatorModal';
 import { Flow } from 'flow-sdk';
+import { LicenseTier, getCurrentSession, saveSession, logout as logoutAuth, canAccessFeature } from './services/authService';
+import { AccessLockModal, OwnerKeyManagerModal } from './components/AccessLockModal';
+import { UpgradePromptModal } from './components/UpgradePromptModal';
 
 export const DEFAULT_SAMPLE_EXPENSES: ActualExpenseItem[] = [];
 const DRAFT_STORAGE_KEY = 'thai_boq_project_draft_v1';
@@ -185,6 +188,61 @@ export default function App() {
     }
   });
   const [isSanityCheckOpen, setIsSanityCheckOpen] = useState<boolean>(false);
+
+  // ======== LICENSE & AUTH STATE ========
+  const [licenseSession, setLicenseSession] = useState(() => getCurrentSession());
+  const [isAccessLockOpen, setIsAccessLockOpen] = useState<boolean>(() => {
+    const s = getCurrentSession();
+    return s.tier === 'locked';
+  });
+  const [upgradeModalFeature, setUpgradeModalFeature] = useState<string | null>(null);
+  const [isOwnerKeyModalOpen, setIsOwnerKeyModalOpen] = useState<boolean>(false);
+
+  const handleAuthSuccess = (tier: LicenseTier, label: string) => {
+    const newSess = {
+      tier,
+      keyOrPass: '',
+      activatedAt: new Date().toISOString(),
+      userLabel: label
+    };
+    setLicenseSession(newSess);
+    setIsAccessLockOpen(false);
+    setSaveStatusToast(`เข้าสู่ระบบสำเร็จ: ${label} ✓`);
+    setTimeout(() => setSaveStatusToast(''), 4000);
+  };
+
+  const handleEnterDemo = () => {
+    const demoSess = {
+      tier: 'demo' as LicenseTier,
+      keyOrPass: 'DEMO',
+      activatedAt: new Date().toISOString(),
+      userLabel: '🔍 โหมดทดลองใช้งานฟรี (Demo)'
+    };
+    saveSession(demoSess);
+    setLicenseSession(demoSess);
+    setIsAccessLockOpen(false);
+    setSaveStatusToast('ยินดีต้อนรับสู่โหมดทดลองใช้งานฟรี (Demo)');
+    setTimeout(() => setSaveStatusToast(''), 4000);
+  };
+
+  const handleLogout = () => {
+    logoutAuth();
+    setLicenseSession({
+      tier: 'locked',
+      keyOrPass: '',
+      activatedAt: '',
+      userLabel: 'ยังไม่ได้ยืนยันสิทธิ์'
+    });
+    setIsAccessLockOpen(true);
+  };
+
+  const openEstimatorIfAllowed = (setter: (val: boolean) => void, featureName: string) => {
+    if (licenseSession.tier === 'demo') {
+      setUpgradeModalFeature(featureName);
+      return;
+    }
+    setter(true);
+  };
 
   // Hidden File Input for Loading Project File
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -523,6 +581,10 @@ export default function App() {
     clientAddress?: string,
     status?: ProjectStatus
   ) => {
+    if (licenseSession.tier === 'demo' && projects.length >= 1) {
+      setUpgradeModalFeature('สร้างหลายโครงการไม่จำกัด (สิทธิ์ Pro)');
+      return;
+    }
     const newProj = makeDefaultProject(
       name,
       area,
@@ -574,6 +636,10 @@ export default function App() {
   };
 
   const handleDuplicateProject = (id: string) => {
+    if (licenseSession.tier === 'demo') {
+      setUpgradeModalFeature('คัดลอกโครงการและสร้างหลายโครงการ (สิทธิ์ Pro)');
+      return;
+    }
     const source = projects.find((p) => p.id === id);
     if (!source) return;
     const copy: ProjectSaveState = {
@@ -764,6 +830,10 @@ export default function App() {
     setTimeout(() => setSaveStatusToast(''), 3000);
   };
   const handleSaveProjectFile = async () => {
+    if (licenseSession.tier === 'demo') {
+      setUpgradeModalFeature('บันทึกไฟล์โครงการ (.json)');
+      return;
+    }
     try {
       const state: ProjectSaveState = {
         id: activeProjectId || generateId(),
@@ -869,6 +939,10 @@ export default function App() {
     }
   };
   const handleExportExcel = () => {
+    if (!canAccessFeature('export_excel', licenseSession.tier)) {
+      setUpgradeModalFeature('ส่งออกไฟล์ Excel (.xlsx) ยื่นกู้ธนาคาร');
+      return;
+    }
     setIsExporting(true);
     try {
       exportBOQToExcel({
@@ -889,6 +963,10 @@ export default function App() {
   };
 
   const handleExportCSV = async () => {
+    if (!canAccessFeature('export_csv', licenseSession.tier)) {
+      setUpgradeModalFeature('ส่งออกไฟล์ตาราง CSV');
+      return;
+    }
     setIsExporting(true);
     try {
       let csvContent = '\uFEFF';
@@ -998,7 +1076,13 @@ export default function App() {
                 <span>1. ตาราง BOQ</span>
               </button>
               <button
-                onClick={() => setActiveMainTab('site_procurement')}
+                onClick={() => {
+                  if (licenseSession.tier === 'demo') {
+                    setUpgradeModalFeature('ระบบสั่งซื้อวัสดุหน้างาน (Site Procurement)');
+                    return;
+                  }
+                  setActiveMainTab('site_procurement');
+                }}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition ${
                   activeMainTab === 'site_procurement'
                     ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/30 font-black'
@@ -1007,9 +1091,16 @@ export default function App() {
               >
                 <span className="material-symbols-outlined text-sm">local_shipping</span>
                 <span>2. สั่งซื้อหน้างาน ({siteMaterialItems.length})</span>
+                {licenseSession.tier === 'demo' && <span className="text-[10px] text-amber-400">🔒</span>}
               </button>
               <button
-                onClick={() => setActiveMainTab('gantt_schedule')}
+                onClick={() => {
+                  if (licenseSession.tier === 'demo') {
+                    setUpgradeModalFeature('ระบบตารางแผนงาน Gantt Chart');
+                    return;
+                  }
+                  setActiveMainTab('gantt_schedule');
+                }}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition ${
                   activeMainTab === 'gantt_schedule'
                     ? 'bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/30 font-black'
@@ -1018,9 +1109,16 @@ export default function App() {
               >
                 <span className="material-symbols-outlined text-sm">timeline</span>
                 <span>3. แผนงาน Gantt</span>
+                {licenseSession.tier === 'demo' && <span className="text-[10px] text-amber-400">🔒</span>}
               </button>
               <button
-                onClick={() => setActiveMainTab('actual_cost_tracker')}
+                onClick={() => {
+                  if (licenseSession.tier === 'demo') {
+                    setUpgradeModalFeature('ระบบคุมต้นทุนจริง & กำไรหน้างาน (Actual Cost)');
+                    return;
+                  }
+                  setActiveMainTab('actual_cost_tracker');
+                }}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition ${
                   activeMainTab === 'actual_cost_tracker'
                     ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 shadow-md shadow-emerald-500/30 font-black'
@@ -1029,6 +1127,7 @@ export default function App() {
               >
                 <span className="material-symbols-outlined text-sm">account_balance_wallet</span>
                 <span>4. คุมต้นทุนจริง & กำไร ({actualExpenses.length})</span>
+                {licenseSession.tier === 'demo' && <span className="text-[10px] text-amber-400">🔒</span>}
               </button>
             </div>
             {/* Actions & Export */}
@@ -1042,40 +1141,67 @@ export default function App() {
                 <span>เซ็ต 0</span>
               </button>
               
-              
               {/* AI ตรวจสอบความถูกต้อง BOQ */}
               <button
-                onClick={() => setIsSanityCheckOpen(true)}
+                onClick={() => {
+                  if (!canAccessFeature('ai_sanity_check', licenseSession.tier)) {
+                    setUpgradeModalFeature('ระบบ AI ตรวจสอบความถูกต้อง BOQ ตาม วสท.');
+                    return;
+                  }
+                  setIsSanityCheckOpen(true);
+                }}
                 className="px-2.5 py-1.5 rounded-lg bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-black flex items-center gap-1 shadow-sm transition active:scale-95"
                 title="AI ตรวจสอบความขัดแย้งของปริมาณงาน สัดส่วนวิศวกรรม วสท. และรายการที่อาจลืมคิด"
               >
                 <span className="material-symbols-outlined text-sm">verified_user</span>
                 <span>AI ตรวจ BOQ</span>
+                {licenseSession.tier === 'demo' && <span className="text-[10px]">🔒</span>}
               </button>
 
               <button
-                onClick={() => setIsCostAnalyticsOpen(true)}
+                onClick={() => {
+                  if (!canAccessFeature('cost_analytics', licenseSession.tier)) {
+                    setUpgradeModalFeature('ระบบวิเคราะห์สัดส่วนต้นทุนและกำไรสุทธิ');
+                    return;
+                  }
+                  setIsCostAnalyticsOpen(true);
+                }}
                 className="px-2.5 py-1.5 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-black flex items-center gap-1 shadow-sm transition active:scale-95"
                 title="วิเคราะห์สัดส่วนวัสดุ ค่าแรง กำไร และเรดาร์ความเสี่ยงต้นทุน 5 จุด"
               >
                 <span className="material-symbols-outlined text-sm">analytics</span>
                 <span>วิเคราะห์ต้นทุน</span>
+                {licenseSession.tier === 'demo' && <span className="text-[10px]">🔒</span>}
               </button>
               <button
-                onClick={() => setIsMilestonesModalOpen(true)}
+                onClick={() => {
+                  if (!canAccessFeature('milestones_manager', licenseSession.tier)) {
+                    setUpgradeModalFeature('ระบบบริหารและแบ่งงวดงาน');
+                    return;
+                  }
+                  setIsMilestonesModalOpen(true);
+                }}
                 className="px-2.5 py-1.5 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-black flex items-center gap-1 shadow-sm transition active:scale-95"
                 title="ปรับสัดส่วนเปอร์เซ็นต์งวดงาน 3/4/5/6 งวด"
               >
                 <span className="material-symbols-outlined text-sm">payments</span>
                 <span>งวดงาน ({milestones.length})</span>
+                {licenseSession.tier === 'demo' && <span className="text-[10px]">🔒</span>}
               </button>
               <button
-                onClick={() => setIsQuotationModalOpen(true)}
+                onClick={() => {
+                  if (!canAccessFeature('export_quotation', licenseSession.tier)) {
+                    setUpgradeModalFeature('ออกใบเสนอราคาอย่างเป็นทางการและพิมพ์ PDF');
+                    return;
+                  }
+                  setIsQuotationModalOpen(true);
+                }}
                 className="px-2.5 py-1.5 rounded-lg bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 text-xs font-black flex items-center gap-1 shadow-sm transition active:scale-95"
                 title="ออกใบเสนอราคาอย่างเป็นทางการและพิมพ์ / บันทึก PDF"
               >
                 <span className="material-symbols-outlined text-sm">picture_as_pdf</span>
                 <span>พิมพ์ PDF</span>
+                {licenseSession.tier === 'demo' && <span className="text-[10px]">🔒</span>}
               </button>
               <button
                 onClick={handleSaveProjectFile}
@@ -1101,6 +1227,7 @@ export default function App() {
               >
                 <span className="material-symbols-outlined text-sm text-emerald-400">description</span>
                 <span>Excel (.xlsx)</span>
+                {licenseSession.tier === 'demo' && <span className="text-[10px]">🔒</span>}
               </button>
               <button
                 onClick={handleExportCSV}
@@ -1110,6 +1237,60 @@ export default function App() {
               >
                 <span className="material-symbols-outlined text-sm text-amber-300">table_view</span>
                 <span>CSV</span>
+                {licenseSession.tier === 'demo' && <span className="text-[10px]">🔒</span>}
+              </button>
+            </div>
+
+            {/* License & Account Status Badge */}
+            <div className="flex items-center gap-1.5 shrink-0 pl-1 border-l border-slate-800">
+              {licenseSession.tier === 'owner' && (
+                <div className="flex items-center gap-1.5 bg-amber-500/20 border border-amber-400/40 text-amber-300 px-2.5 py-1 rounded-xl text-xs font-bold font-prompt">
+                  <span>👑 เจ้าของระบบ (Owner)</span>
+                  <button
+                    onClick={() => setIsOwnerKeyModalOpen(true)}
+                    className="ml-1 px-2 py-0.5 bg-amber-500 text-slate-950 rounded hover:bg-amber-400 font-bold transition text-[11px] shadow"
+                    title="สร้าง License Key สำหรับลูกค้าที่สั่งซื้อ"
+                  >
+                    🔑 สร้าง Key ลูกค้า
+                  </button>
+                </div>
+              )}
+              {licenseSession.tier === 'pro' && (
+                <div className="bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 px-2.5 py-1 rounded-xl text-xs font-bold font-prompt flex items-center gap-1">
+                  <span>⭐ สิทธิ์แพ็กเกจ Pro</span>
+                </div>
+              )}
+              {licenseSession.tier === 'enterprise' && (
+                <div className="bg-blue-500/20 border border-blue-400/40 text-blue-300 px-2.5 py-1 rounded-xl text-xs font-bold font-prompt flex items-center gap-1">
+                  <span>🏢 แพ็กเกจ Enterprise</span>
+                </div>
+              )}
+              {licenseSession.tier === 'demo' && (
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => setIsAccessLockOpen(true)}
+                    className="bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/40 text-amber-300 px-2.5 py-1 rounded-xl text-xs font-bold font-prompt flex items-center gap-1 transition"
+                  >
+                    <span className="material-symbols-outlined text-sm">lock</span>
+                    <span>โหมด Demo (คลิกเพื่อใส่รหัส)</span>
+                  </button>
+                  <a
+                    href="https://kanpisek111-kpn.github.io/construction-boq-salespage/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="hidden sm:inline-flex items-center gap-1 bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 font-prompt font-bold text-xs px-2.5 py-1 rounded-xl shadow transition"
+                  >
+                    <span>อัปเกรด</span>
+                    <span className="material-symbols-outlined text-xs">arrow_forward</span>
+                  </a>
+                </div>
+              )}
+              <button
+                onClick={handleLogout}
+                className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-rose-400 border border-slate-700/80 transition"
+                title="ออกจากระบบ / สลับรหัสผ่าน"
+              >
+                <span className="material-symbols-outlined text-sm">logout</span>
               </button>
             </div>
 
@@ -1148,119 +1329,133 @@ export default function App() {
             </button>
             {/* 1. โครงสร้าง: เสา-คาน-พื้น */}
             <button
-              onClick={() => setIsStructureModalOpen(true)}
+              onClick={() => openEstimatorIfAllowed(setIsStructureModalOpen, '1. เสา-คาน-พื้น')}
               className="px-2.5 py-1 rounded-lg bg-cyan-950/70 hover:bg-cyan-900 border border-cyan-500/40 text-cyan-200 text-xs font-bold flex items-center gap-1.5 transition active:scale-95 shrink-0"
             >
               <span className="material-symbols-outlined text-sm text-cyan-400">apartment</span>
               <span>1. เสา-คาน-พื้น</span>
+              {licenseSession.tier === 'demo' && <span className="text-[10px]">🔒</span>}
             </button>
             {/* 1.1 บันได คสล. */}
             <button
-              onClick={() => setIsStairModalOpen(true)}
+              onClick={() => openEstimatorIfAllowed(setIsStairModalOpen, '1.1 บันได คสล.')}
               className="px-2.5 py-1 rounded-lg bg-gradient-to-r from-cyan-950 to-indigo-950 hover:from-cyan-900 hover:to-indigo-900 border border-cyan-400/60 text-cyan-200 text-xs font-black flex items-center gap-1.5 transition active:scale-95 shrink-0 shadow-sm"
               title="คำนวณบันได คสล."
             >
               <span className="material-symbols-outlined text-sm text-cyan-300 font-bold">stairs</span>
               <span>1.1 บันได คสล.</span>
+              {licenseSession.tier === 'demo' && <span className="text-[10px]">🔒</span>}
             </button>
             {/* 2. โครงหลังคา & มุง */}
             <button
-              onClick={() => setIsRoofModalOpen(true)}
+              onClick={() => openEstimatorIfAllowed(setIsRoofModalOpen, '2. หลังคา & มุง')}
               className="px-2.5 py-1 rounded-lg bg-amber-950/70 hover:bg-amber-900 border border-amber-500/40 text-amber-200 text-xs font-bold flex items-center gap-1.5 transition active:scale-95 shrink-0"
             >
               <span className="material-symbols-outlined text-sm text-amber-400">roofing</span>
               <span>2. หลังคา & มุง</span>
+              {licenseSession.tier === 'demo' && <span className="text-[10px]">🔒</span>}
             </button>
             {/* 3. ผนังก่อฉาบ & ทับหลัง */}
             <button
-              onClick={() => setIsMasonryModalOpen(true)}
+              onClick={() => openEstimatorIfAllowed(setIsMasonryModalOpen, '3. ผนังก่อฉาบ')}
               className="px-2.5 py-1 rounded-lg bg-orange-950/70 hover:bg-orange-900 border border-orange-500/40 text-orange-200 text-xs font-bold flex items-center gap-1.5 transition active:scale-95 shrink-0"
             >
               <span className="material-symbols-outlined text-sm text-orange-400">handyman</span>
               <span>3. ผนังก่อฉาบ</span>
+              {licenseSession.tier === 'demo' && <span className="text-[10px]">🔒</span>}
             </button>
             {/* 4. ประตูห้อง (70/80/90) */}
             <button
-              onClick={() => setIsRoomDoorModalOpen(true)}
+              onClick={() => openEstimatorIfAllowed(setIsRoomDoorModalOpen, '4. ประตูห้อง')}
               className="px-2.5 py-1 rounded-lg bg-amber-950/60 hover:bg-amber-900 border border-amber-600/40 text-amber-200 text-xs font-semibold flex items-center gap-1.5 transition active:scale-95 shrink-0"
             >
               <span className="material-symbols-outlined text-sm text-amber-400">meeting_room</span>
               <span>4. ประตูห้อง</span>
+              {licenseSession.tier === 'demo' && <span className="text-[10px]">🔒</span>}
             </button>
             {/* 5. อลูมิเนียม */}
             <button
-              onClick={() => setIsAluminumModalOpen(true)}
+              onClick={() => openEstimatorIfAllowed(setIsAluminumModalOpen, '5. อลูมิเนียม')}
               className="px-2.5 py-1 rounded-lg bg-teal-950/70 hover:bg-teal-900 border border-teal-500/40 text-teal-200 text-xs font-semibold flex items-center gap-1.5 transition active:scale-95 shrink-0"
             >
               <span className="material-symbols-outlined text-sm text-teal-400">door_front</span>
               <span>5. อลูมิเนียม</span>
+              {licenseSession.tier === 'demo' && <span className="text-[10px]">🔒</span>}
             </button>
             {/* 6. กระเบื้องพื้น & ผนัง */}
             <button
-              onClick={() => setIsTileModalOpen(true)}
+              onClick={() => openEstimatorIfAllowed(setIsTileModalOpen, '6. กระเบื้อง')}
               className="px-2.5 py-1 rounded-lg bg-emerald-950/70 hover:bg-emerald-900 border border-emerald-500/40 text-emerald-200 text-xs font-semibold flex items-center gap-1.5 transition active:scale-95 shrink-0"
             >
               <span className="material-symbols-outlined text-sm text-emerald-400">grid_view</span>
               <span>6. กระเบื้อง</span>
+              {licenseSession.tier === 'demo' && <span className="text-[10px]">🔒</span>}
             </button>
             {/* 7. ท่อประปา & สุขาภิบาล */}
             <button
-              onClick={() => setIsSanitaryModalOpen(true)}
+              onClick={() => openEstimatorIfAllowed(setIsSanitaryModalOpen, '7. ท่อประปา')}
               className="px-2.5 py-1 rounded-lg bg-blue-950/80 hover:bg-blue-900 border border-blue-500/60 text-blue-200 text-xs font-bold flex items-center gap-1.5 transition active:scale-95 shrink-0"
             >
               <span className="material-symbols-outlined text-sm text-blue-400 font-bold">plumbing</span>
               <span>7. ท่อประปา</span>
+              {licenseSession.tier === 'demo' && <span className="text-[10px]">🔒</span>}
             </button>
             {/* 7.1 อุปกรณ์ห้องน้ำและสุขภัณฑ์ */}
             <button
-              onClick={() => setIsSanitaryFixtureModalOpen(true)}
+              onClick={() => openEstimatorIfAllowed(setIsSanitaryFixtureModalOpen, '7.1 สุขภัณฑ์ & อุปกรณ์')}
               className="px-2.5 py-1 rounded-lg bg-gradient-to-r from-blue-950 via-cyan-950 to-teal-950 hover:from-blue-900 hover:to-cyan-900 border border-cyan-400/80 text-cyan-200 text-xs font-black flex items-center gap-1.5 transition active:scale-95 shrink-0 shadow-md"
             >
               <span className="material-symbols-outlined text-sm text-cyan-300 font-bold">wash</span>
               <span>7.1 สุขภัณฑ์ & อุปกรณ์</span>
+              {licenseSession.tier === 'demo' && <span className="text-[10px]">🔒</span>}
             </button>
             {/* 8. สายไฟ วสท. */}
             <button
-              onClick={() => setIsElectricalModalOpen(true)}
+              onClick={() => openEstimatorIfAllowed(setIsElectricalModalOpen, '8. คำนวณสายไฟ')}
               className="px-2.5 py-1 rounded-lg bg-yellow-950/80 hover:bg-yellow-900 border border-yellow-500/60 text-yellow-200 text-xs font-bold flex items-center gap-1.5 transition active:scale-95 shrink-0"
             >
               <span className="material-symbols-outlined text-sm text-yellow-400 font-bold">bolt</span>
               <span>8. คำนวณสายไฟ</span>
+              {licenseSession.tier === 'demo' && <span className="text-[10px]">🔒</span>}
             </button>
             {/* 9. บัวพื้น-บัวปูน-หินกาบ */}
             <button
-              onClick={() => setIsDecorationModalOpen(true)}
+              onClick={() => openEstimatorIfAllowed(setIsDecorationModalOpen, '9. ตกแต่งบัว-หิน')}
               className="px-2.5 py-1 rounded-lg bg-rose-950/70 hover:bg-rose-900 border border-rose-500/50 text-rose-200 text-xs font-bold flex items-center gap-1.5 transition active:scale-95 shrink-0"
             >
               <span className="material-symbols-outlined text-sm text-rose-400">architecture</span>
               <span>9. ตกแต่งบัว-หิน</span>
+              {licenseSession.tier === 'demo' && <span className="text-[10px]">🔒</span>}
             </button>
             {/* 10. งานภายนอก */}
             <button
-              onClick={() => setIsExternalModalOpen(true)}
+              onClick={() => openEstimatorIfAllowed(setIsExternalModalOpen, '10. งานภายนอก')}
               className="px-2.5 py-1 rounded-lg bg-purple-950/70 hover:bg-purple-900 border border-purple-500/40 text-purple-200 text-xs font-bold flex items-center gap-1.5 transition active:scale-95 shrink-0"
             >
               <span className="material-symbols-outlined text-sm text-purple-400">fence</span>
               <span>10. งานภายนอก</span>
+              {licenseSession.tier === 'demo' && <span className="text-[10px]">🔒</span>}
             </button>
             {/* 11. สีอาคาร & สีเหล็ก */}
             <button
-              onClick={() => setIsPaintModalOpen(true)}
+              onClick={() => openEstimatorIfAllowed(setIsPaintModalOpen, '11. สีอาคาร & เหล็ก')}
               className="px-2.5 py-1 rounded-lg bg-pink-950/80 hover:bg-pink-900 border border-pink-500/60 text-pink-200 text-xs font-bold flex items-center gap-1.5 transition active:scale-95 shrink-0"
             >
               <span className="material-symbols-outlined text-sm text-pink-400 font-bold">format_paint</span>
               <span>11. สีอาคาร & เหล็ก</span>
+              {licenseSession.tier === 'demo' && <span className="text-[10px]">🔒</span>}
             </button>
           </div>
           {/* 📸 AI สแกนแปลนบ้านด้วยภาพถ่าย (Gemini Multimodal Takeoff) */}
           <div className="shrink-0 pl-2 border-l border-slate-800">
             <button
-              onClick={() => setIsPlanModalOpen(true)}
+              onClick={() => openEstimatorIfAllowed(setIsPlanModalOpen, '📸 AI สแกนแปลนบ้าน')}
               className="px-3 py-1 rounded-lg bg-gradient-to-r from-cyan-500 via-blue-600 to-indigo-600 hover:brightness-110 text-white text-xs font-black flex items-center gap-1.5 shadow-md shadow-cyan-500/25 transition active:scale-95 shrink-0 animate-pulse hover:animate-none"
               title="ถ่ายภาพแปลนบ้านด้วยมือถือหรืออัปโหลดแบบ PDF ให้ Gemini AI แกะแบบและคำนวณ BOQ อัตโนมัติ"
             >
               <span className="material-symbols-outlined text-sm font-black">document_scanner</span>
               <span>📸 AI สแกนแปลนบ้าน</span>
+              {licenseSession.tier === 'demo' && <span className="text-[10px]">🔒</span>}
             </button>
           </div>
         </div>
@@ -1888,6 +2083,29 @@ export default function App() {
         overheadPercent={overheadPercent}
         vatPercent={vatPercent}
         projectName={projectName}
+      />
+
+      {/* Security & Access Lock Modal */}
+      <AccessLockModal
+        isOpen={isAccessLockOpen}
+        onSuccess={handleAuthSuccess}
+        onEnterDemo={handleEnterDemo}
+        allowClose={licenseSession.tier !== 'locked'}
+        onClose={() => setIsAccessLockOpen(false)}
+      />
+
+      {/* Upgrade / Feature Locked Prompt Modal */}
+      <UpgradePromptModal
+        isOpen={!!upgradeModalFeature}
+        featureName={upgradeModalFeature || ''}
+        onClose={() => setUpgradeModalFeature(null)}
+        onUnlocked={handleAuthSuccess}
+      />
+
+      {/* Owner Key Manager Modal */}
+      <OwnerKeyManagerModal
+        isOpen={isOwnerKeyModalOpen}
+        onClose={() => setIsOwnerKeyModalOpen(false)}
       />
     </div>
   );
