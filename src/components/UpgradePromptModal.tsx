@@ -69,26 +69,30 @@ export const UpgradePromptModal: React.FC<UpgradePromptModalProps> = ({
         </div>
 
         {/* Value Proposition */}
-        <div className="bg-slate-800/80 rounded-xl p-3.5 border border-slate-700/80 mb-5 text-xs font-sarabun text-slate-300 space-y-2">
-          <div className="font-prompt font-semibold text-amber-400 flex items-center gap-1.5">
-            <span className="material-symbols-outlined text-sm">stars</span>
-            <span>สิทธิประโยชน์เมื่ออัปเกรดเป็น Pro:</span>
+        <div className="bg-slate-800/80 rounded-xl p-3.5 border border-slate-700/80 mb-4 text-xs font-sarabun text-slate-300 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="font-prompt font-bold text-amber-400 flex items-center gap-1.5">
+              <span className="material-symbols-outlined text-sm">stars</span>
+              <span>อัปเกรดเป็น Pro Lifetime:</span>
+            </span>
+            <span className="font-prompt font-extrabold text-white bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded border border-amber-400/30 text-xs">
+              ฿790 (ตลอดชีพ)
+            </span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-emerald-400">✓</span>
-            <span>ออกเอกสารใบเสนอราคา (Quotation PDF) สวยงาม</span>
+            <span className="text-emerald-400 font-bold">✓</span>
+            <span>ออกเอกสารใบเสนอราคา (Quotation PDF) และ Export Excel / CSV</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-emerald-400">✓</span>
-            <span>Export ไฟล์ Excel และ CSV ไปใช้งานต่อได้ทันที</span>
+            <span className="text-emerald-400 font-bold">✓</span>
+            <span>ปลดล็อกระบบบริหารงวดงานและเครื่องคิดเลขเจาะลึก 11 หมวดงาน</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-emerald-400">✓</span>
-            <span>ปลดล็อกระบบบริหารงวดงานและคำนวณทุกหมวดหมู่</span>
+            <span className="text-emerald-400 font-bold">✓</span>
+            <span>สร้างและบันทึกโครงการได้ไม่จำกัดตลอดอายุการใช้งาน</span>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-emerald-400">✓</span>
-            <span>สร้างและบันทึกโครงการได้ไม่จำกัด</span>
+          <div className="pt-1.5 border-t border-slate-700/60 text-[11px] text-amber-300 font-prompt">
+            🎁 รับฟรี! เทมเพลตสัญญาช่าง + ตารางราคากลาง 2026 (มูลค่า 4,500.-)
           </div>
         </div>
 
@@ -121,15 +125,23 @@ export const UpgradePromptModal: React.FC<UpgradePromptModalProps> = ({
         </form>
 
         {/* CTA to Sales Page */}
-        <div className="pt-2 border-t border-slate-800">
+        <div className="pt-2 border-t border-slate-800 space-y-2">
           <a
             href={salesPageUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-prompt font-bold text-xs shadow-md transition"
           >
-            <span>ดูราคาแพ็กเกจ & สั่งซื้อรับรหัสทันที</span>
+            <span>⚡ สั่งซื้อสิทธิ์ Pro ฿790 & รับโบนัสทันที</span>
             <span className="material-symbols-outlined text-sm">open_in_new</span>
+          </a>
+          <a
+            href="https://line.me/R/ti/p/@boqpro"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full inline-flex items-center justify-center gap-2 py-2 px-4 rounded-xl bg-[#06C755]/20 hover:bg-[#06C755]/30 border border-[#06C755]/40 text-[#06C755] hover:text-white font-prompt font-semibold text-xs transition"
+          >
+            <span>💬 สั่งซื้อหรือสอบถามผ่าน LINE (@boqpro)</span>
           </a>
         </div>
       </div>
