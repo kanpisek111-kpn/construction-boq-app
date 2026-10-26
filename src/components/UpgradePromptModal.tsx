@@ -136,12 +136,12 @@ export const UpgradePromptModal: React.FC<UpgradePromptModalProps> = ({
             <span className="material-symbols-outlined text-sm">open_in_new</span>
           </a>
           <a
-            href="https://line.me/R/ti/p/@boqpro"
+            href="https://line.me/R/ti/p/@003iwzqt"
             target="_blank"
             rel="noopener noreferrer"
             className="w-full inline-flex items-center justify-center gap-2 py-2 px-4 rounded-xl bg-[#06C755]/20 hover:bg-[#06C755]/30 border border-[#06C755]/40 text-[#06C755] hover:text-white font-prompt font-semibold text-xs transition"
           >
-            <span>💬 สั่งซื้อหรือสอบถามผ่าน LINE (@boqpro)</span>
+            <span>💬 สั่งซื้อหรือแจ้งโอนผ่าน LINE (@003iwzqt)</span>
           </a>
         </div>
       </div>
