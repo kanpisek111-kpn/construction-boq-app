@@ -1974,8 +1974,17 @@ export function calculateStructureMaterials(params: StructureCalcParams): Struct
   let formworkBeamSqm = 0;
   let totalBeamDB12M = 0;
   let totalBeamDB16M = 0;
+  let totalBeamDB20M = 0;
   let totalBeamStirrupM = 0;
-  const beamSummaryList: { code: string; lengthM: number; concreteCuM: number; formworkSqm: number; steelKg: number }[] = [];
+  const beamSummaryList: { 
+    code: string; 
+    lengthM: number; 
+    concreteCuM: number; 
+    formworkSqm: number; 
+    steelKg: number;
+    mainBarsStr?: string;
+    extraBarsStr?: string;
+  }[] = [];
 
   const effectiveBeams: BeamItem[] = beams && beams.length > 0 
     ? beams 
@@ -1997,26 +2006,58 @@ export function calculateStructureMaterials(params: StructureCalcParams): Struct
     const form = ((2 * b.depthM) + b.widthM) * b.totalLengthM;
     formworkBeamSqm += form;
 
+    // 1. เหล็กแกนหลักตลอดแนวคาน (เผื่อทาบและงอขอ 15%)
     const mainM = b.totalLengthM * b.mainBarsCount * 1.15;
-    const weightPerM = b.mainBarType === 'DB16' ? 1.58 : 0.888;
-    const steelKg = Math.round(mainM * weightPerM);
+    const weightPerM = b.mainBarType === 'DB20' ? 2.47 : b.mainBarType === 'DB16' ? 1.58 : 0.888;
 
     if (b.mainBarType === 'DB12') {
       totalBeamDB12M += mainM;
+    } else if (b.mainBarType === 'DB20') {
+      totalBeamDB20M += mainM;
     } else {
       totalBeamDB16M += mainM;
     }
 
+    // 2. เหล็กเสริมพิเศษตามแบบ (หัวคาน 0.25L, กลางคาน 0.60L, ท้ายคาน 0.25L เผื่องอขอ 15%)
+    const extraNearBars = Number(b.extraTopNearBars) || 0;
+    const extraMidBars = Number(b.extraBottomMidBars) || 0;
+    const extraFarBars = Number(b.extraTopFarBars) || 0;
+    const extraType = b.extraBarType || b.mainBarType || 'DB12';
+
+    const extraNearM = b.totalLengthM * 0.25 * extraNearBars * 1.15;
+    const extraMidM = b.totalLengthM * 0.60 * extraMidBars * 1.15;
+    const extraFarM = b.totalLengthM * 0.25 * extraFarBars * 1.15;
+    const totalExtraM = extraNearM + extraMidM + extraFarM;
+
+    const extraWeightPerM = extraType === 'DB20' ? 2.47 : extraType === 'DB16' ? 1.58 : 0.888;
+    if (extraType === 'DB12') {
+      totalBeamDB12M += totalExtraM;
+    } else if (extraType === 'DB20') {
+      totalBeamDB20M += totalExtraM;
+    } else {
+      totalBeamDB16M += totalExtraM;
+    }
+
+    const steelKg = Math.round((mainM * weightPerM) + (totalExtraM * extraWeightPerM));
+
     const stirrupCount = Math.floor(b.totalLengthM / b.stirrupSpacingM) + 1;
     const stirrupPerimeter = (2 * (b.widthM - 0.05) + 2 * (b.depthM - 0.05)) + 0.15;
     totalBeamStirrupM += (stirrupCount * stirrupPerimeter);
+
+    const extraParts: string[] = [];
+    if (extraNearBars > 0) extraParts.push(`หัว ${extraNearBars}-${extraType}`);
+    if (extraMidBars > 0) extraParts.push(`กลาง ${extraMidBars}-${extraType}`);
+    if (extraFarBars > 0) extraParts.push(`ท้าย ${extraFarBars}-${extraType}`);
+    const extraBarsStr = extraParts.length > 0 ? extraParts.join(' | ') : undefined;
 
     beamSummaryList.push({
       code: b.code || 'B',
       lengthM: b.totalLengthM,
       concreteCuM: Math.round(vol * 100) / 100,
       formworkSqm: Math.round(form * 10) / 10,
-      steelKg
+      steelKg,
+      mainBarsStr: `แกน ${b.mainBarsCount}-${b.mainBarType}`,
+      extraBarsStr
     });
   });
 
@@ -2064,6 +2105,7 @@ export function calculateStructureMaterials(params: StructureCalcParams): Struct
 
   let totalDB12M = totalFootingDB12M + totalColDB12M + totalBeamDB12M;
   let totalDB16M = totalFootingDB16M + totalColDB16M + totalBeamDB16M;
+  let totalBeamDB20TotalM = totalBeamDB20M;
 
   if (castInPlaceRebarType === 'DB12') {
     totalDB12M += slabCastRebarM;
@@ -2071,8 +2113,10 @@ export function calculateStructureMaterials(params: StructureCalcParams): Struct
 
   const db12Kg = Math.round(totalDB12M * 0.888);
   const db16Kg = Math.round(totalDB16M * 1.580);
+  const db20Kg = Math.round(totalBeamDB20TotalM * 2.470);
   const db12Bars = Math.ceil(totalDB12M / 10);
   const db16Bars = Math.ceil(totalDB16M / 10);
+  const db20Bars = Math.ceil(totalBeamDB20TotalM / 10);
 
   // 1. แยกคำนวณเหล็กปลอกเสา คสล. (Column Ties)
   const colStirrupsTotalPcs = columnCount * colStirrupsPerCol;
@@ -2094,7 +2138,7 @@ export function calculateStructureMaterials(params: StructureCalcParams): Struct
   const stirrupBars = colStirrupBars + beamStirrupBars;
   const totalStirrupM = colStirrupTotalM + beamStirrupTotalM;
 
-  const totalSteelKg = db12Kg + db16Kg + stirrupKg + (castInPlaceRebarType === 'RB9' ? slabCastRebarKg : 0);
+  const totalSteelKg = db12Kg + db16Kg + db20Kg + stirrupKg + (castInPlaceRebarType === 'RB9' ? slabCastRebarKg : 0);
   const tieWireKg = Math.max(5, Math.ceil(totalSteelKg * 0.02));
 
   const estConcreteMat = totalConcreteCuM * 2150;
@@ -2104,7 +2148,7 @@ export function calculateStructureMaterials(params: StructureCalcParams): Struct
   // ไม้แบบคิดค่าเสื่อมการหมุนเวียนใช้ซ้ำ 3-4 ครั้ง (40% ของราคาไม้ใหม่ตามมาตรฐานกรมบัญชีกลาง)
   const estFormMat = Math.round(totalFormworkSqm * (150 * 0.40));
   // เผื่อระยะทาบ 40d-50d และงอขอเหล็กเสริม 12%
-  const rebarLapAllowanceKg = Math.round((db12Kg + db16Kg) * 0.12);
+  const rebarLapAllowanceKg = Math.round((db12Kg + db16Kg + db20Kg) * 0.12);
   // ลูกปูนหนุนเหล็ก Covering 4.5 ลูก/ตร.ม. ไม้แบบ
   const concreteSpacersPcs = Math.ceil(totalFormworkSqm * 4.5);
   const estFormLab = totalFormworkSqm * 120;
@@ -2196,6 +2240,8 @@ export function calculateStructureMaterials(params: StructureCalcParams): Struct
     db12Bars,
     db16Kg,
     db16Bars,
+    db20Kg,
+    db20Bars,
     stirrupKg,
     stirrupBars,
     precastPlanksCount,

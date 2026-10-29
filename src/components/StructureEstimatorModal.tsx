@@ -65,7 +65,11 @@ export const StructureEstimatorModal: React.FC<StructureEstimatorModalProps> = (
       depthM: 0.40,
       mainBarsCount: 4,
       mainBarType: 'DB12',
-      stirrupSpacingM: 0.20
+      stirrupSpacingM: 0.20,
+      extraTopNearBars: 2,
+      extraBottomMidBars: 1,
+      extraTopFarBars: 2,
+      extraBarType: 'DB12'
     },
     {
       id: 'beam-b2',
@@ -76,7 +80,11 @@ export const StructureEstimatorModal: React.FC<StructureEstimatorModalProps> = (
       depthM: 0.35,
       mainBarsCount: 4,
       mainBarType: 'DB12',
-      stirrupSpacingM: 0.20
+      stirrupSpacingM: 0.20,
+      extraTopNearBars: 0,
+      extraBottomMidBars: 0,
+      extraTopFarBars: 0,
+      extraBarType: 'DB12'
     },
     {
       id: 'beam-b3',
@@ -87,7 +95,11 @@ export const StructureEstimatorModal: React.FC<StructureEstimatorModalProps> = (
       depthM: 0.50,
       mainBarsCount: 6,
       mainBarType: 'DB16',
-      stirrupSpacingM: 0.15
+      stirrupSpacingM: 0.15,
+      extraTopNearBars: 2,
+      extraBottomMidBars: 2,
+      extraTopFarBars: 2,
+      extraBarType: 'DB16'
     }
   ]);
 
@@ -345,7 +357,15 @@ export const StructureEstimatorModal: React.FC<StructureEstimatorModalProps> = (
     // หมวด 2: งานโครงสร้าง คสล. (structure)
     // ==========================================
     const footingSpecStr = footings.map(f => `${f.code}: ${f.count} ฐาน (${f.widthM}x${f.lengthM}x${f.thicknessM}ม. ${f.barType})`).join(' | ');
-    const beamSpecStr = beams.map(b => `${b.code}: ${b.totalLengthM}ม. (${b.widthM}x${b.depthM}ม. ${b.mainBarsCount}${b.mainBarType})`).join(' | ');
+    const beamSpecStr = beams.map(b => {
+      const extraParts: string[] = [];
+      const extraType = b.extraBarType || b.mainBarType;
+      if (b.extraTopNearBars) extraParts.push(`หัว ${b.extraTopNearBars}`);
+      if (b.extraBottomMidBars) extraParts.push(`กลาง ${b.extraBottomMidBars}`);
+      if (b.extraTopFarBars) extraParts.push(`ท้าย ${b.extraTopFarBars}`);
+      const extraNote = extraParts.length > 0 ? ` + เสริมพิเศษ(${extraParts.join(',')}-${extraType})` : '';
+      return `${b.code}: ${b.totalLengthM}ม. (${b.widthM}x${b.depthM}ม. แกน ${b.mainBarsCount}${b.mainBarType}${extraNote})`;
+    }).join(' | ');
     const totalBeamLen = beams.reduce((sum, b) => sum + (b.totalLengthM || 0), 0);
 
     // 1. คอนกรีตฐานราก
@@ -484,6 +504,21 @@ export const StructureEstimatorModal: React.FC<StructureEstimatorModalProps> = (
         unit: 'กก.',
         materialUnitPrice: 28.5,
         laborUnitPrice: 6.5,
+        wastePercent: 5,
+      });
+    }
+
+    // 8.1 เหล็ก DB20 (สำหรับคานช่วงยาวพิเศษ/เหล็กเสริมพิเศษ)
+    if (result.db20Kg && result.db20Kg > 0) {
+      newItems.push({
+        id: `str-db20-${timestamp + 151}`,
+        category: 'structure',
+        name: `เหล็กข้ออ้อย DB20 มอก. SD40 (ความยาว 10 ม.)`,
+        spec: `สำหรับโครงสร้างคานช่วงยาวและเหล็กเสริมพิเศษ คำนวณได้ ${result.db20Bars} เส้น (${result.db20Kg} กก.)`,
+        quantity: result.db20Kg,
+        unit: 'กก.',
+        materialUnitPrice: 29.0,
+        laborUnitPrice: 7.0,
         wastePercent: 5,
       });
     }
@@ -1022,7 +1057,7 @@ export const StructureEstimatorModal: React.FC<StructureEstimatorModalProps> = (
                       </div>
                     </div>
 
-                    {/* หน้าตัด กว้าง x ลึก */}
+                    {/* หน้าตัด กว้าง x ลึก x เหล็กแกน */}
                     <div className="grid grid-cols-4 gap-2 pt-1 border-t border-slate-850">
                       <div>
                         <label className="text-[10px] text-slate-400 block mb-0.5">กว้าง (ม.):</label>
@@ -1047,7 +1082,7 @@ export const StructureEstimatorModal: React.FC<StructureEstimatorModalProps> = (
                         />
                       </div>
                       <div>
-                        <label className="text-[10px] text-slate-400 block mb-0.5">เหล็กยืน (เส้น):</label>
+                        <label className="text-[10px] text-slate-400 block mb-0.5">เหล็กแกนหลัก (เส้น):</label>
                         <input
                           type="number"
                           min="2"
@@ -1058,14 +1093,15 @@ export const StructureEstimatorModal: React.FC<StructureEstimatorModalProps> = (
                         />
                       </div>
                       <div>
-                        <label className="text-[10px] text-slate-400 block mb-0.5">ขนาดเหล็กยืน:</label>
+                        <label className="text-[10px] text-slate-400 block mb-0.5">ขนาดเหล็กแกน:</label>
                         <select
                           value={b.mainBarType}
-                          onChange={(e) => handleUpdateBeam(b.id, { mainBarType: e.target.value as 'DB12' | 'DB16' })}
+                          onChange={(e) => handleUpdateBeam(b.id, { mainBarType: e.target.value as 'DB12' | 'DB16' | 'DB20' })}
                           className="w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-1 text-cyan-300 font-mono font-bold"
                         >
                           <option value="DB12">DB12</option>
                           <option value="DB16">DB16</option>
+                          <option value="DB20">DB20</option>
                         </select>
                       </div>
                     </div>
@@ -1083,6 +1119,122 @@ export const StructureEstimatorModal: React.FC<StructureEstimatorModalProps> = (
                           className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-0.5 text-white font-mono text-center"
                         />
                         <span>ม.</span>
+                      </div>
+                    </div>
+
+                    {/* 🌟 ส่วนเสริมเหล็กพิเศษ (หัวคาน / กลางคาน / ท้ายคาน) 🌟 */}
+                    <div className="p-2.5 rounded-lg bg-slate-900/90 border border-indigo-500/30 flex flex-col gap-2">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <span className="text-[11px] font-bold text-indigo-300 flex items-center gap-1.5">
+                          <span className="material-symbols-outlined text-sm text-indigo-400">architecture</span>
+                          เสริมเหล็กพิเศษตามแบบ (หัวคาน / กลางคาน / ท้ายคาน)
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] text-slate-400">ขนาดเหล็กพิเศษ:</span>
+                          <select
+                            value={b.extraBarType || b.mainBarType}
+                            onChange={(e) => handleUpdateBeam(b.id, { extraBarType: e.target.value as 'DB12' | 'DB16' | 'DB20' })}
+                            className="bg-slate-950 border border-indigo-500/40 rounded px-1.5 py-0.5 text-[10px] font-mono font-bold text-amber-300"
+                          >
+                            <option value="DB12">DB12</option>
+                            <option value="DB16">DB16</option>
+                            <option value="DB20">DB20</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* 3 ช่อง หัว-กลาง-ท้าย */}
+                      <div className="grid grid-cols-3 gap-2">
+                        {/* 1. หัวคาน (บน) */}
+                        <div className="p-2 rounded bg-slate-950 border border-indigo-500/20 flex flex-col gap-1 text-center">
+                          <div className="flex items-center justify-center gap-1 text-[10px] text-indigo-300 font-medium">
+                            <span>หัวคาน (บน)</span>
+                            <span className="text-[9px] px-1 py-0.2 rounded bg-indigo-500/20 text-indigo-300 font-mono">L/4</span>
+                          </div>
+                          <span className="text-[9px] text-slate-500">รับโมเมนต์ลบ (-M)</span>
+                          <div className="flex items-center justify-center gap-1 mt-0.5">
+                            <input
+                              type="number"
+                              min="0"
+                              max="8"
+                              value={b.extraTopNearBars || 0}
+                              onChange={(e) => handleUpdateBeam(b.id, { extraTopNearBars: Math.max(0, parseInt(e.target.value) || 0) })}
+                              className="w-12 bg-slate-900 border border-indigo-500/40 rounded py-0.5 text-center font-mono font-bold text-amber-300 text-xs"
+                            />
+                            <span className="text-[10px] text-slate-400">เส้น</span>
+                          </div>
+                        </div>
+
+                        {/* 2. กลางคาน (ล่าง) */}
+                        <div className="p-2 rounded bg-slate-950 border border-emerald-500/20 flex flex-col gap-1 text-center">
+                          <div className="flex items-center justify-center gap-1 text-[10px] text-emerald-300 font-medium">
+                            <span>กลางคาน (ล่าง)</span>
+                            <span className="text-[9px] px-1 py-0.2 rounded bg-emerald-500/20 text-emerald-300 font-mono">0.6L</span>
+                          </div>
+                          <span className="text-[9px] text-slate-500">รับโมเมนต์บวก (+M)</span>
+                          <div className="flex items-center justify-center gap-1 mt-0.5">
+                            <input
+                              type="number"
+                              min="0"
+                              max="8"
+                              value={b.extraBottomMidBars || 0}
+                              onChange={(e) => handleUpdateBeam(b.id, { extraBottomMidBars: Math.max(0, parseInt(e.target.value) || 0) })}
+                              className="w-12 bg-slate-900 border border-emerald-500/40 rounded py-0.5 text-center font-mono font-bold text-amber-300 text-xs"
+                            />
+                            <span className="text-[10px] text-slate-400">เส้น</span>
+                          </div>
+                        </div>
+
+                        {/* 3. ท้ายคาน (บน) */}
+                        <div className="p-2 rounded bg-slate-950 border border-indigo-500/20 flex flex-col gap-1 text-center">
+                          <div className="flex items-center justify-center gap-1 text-[10px] text-indigo-300 font-medium">
+                            <span>ท้ายคาน (บน)</span>
+                            <span className="text-[9px] px-1 py-0.2 rounded bg-indigo-500/20 text-indigo-300 font-mono">L/4</span>
+                          </div>
+                          <span className="text-[9px] text-slate-500">รับโมเมนต์ลบ (-M)</span>
+                          <div className="flex items-center justify-center gap-1 mt-0.5">
+                            <input
+                              type="number"
+                              min="0"
+                              max="8"
+                              value={b.extraTopFarBars || 0}
+                              onChange={(e) => handleUpdateBeam(b.id, { extraTopFarBars: Math.max(0, parseInt(e.target.value) || 0) })}
+                              className="w-12 bg-slate-900 border border-indigo-500/40 rounded py-0.5 text-center font-mono font-bold text-amber-300 text-xs"
+                            />
+                            <span className="text-[10px] text-slate-400">เส้น</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* ปุ่มคลิกด่วน */}
+                      <div className="flex items-center justify-between text-[10px] text-slate-400 pt-1 border-t border-slate-800/60 flex-wrap gap-1">
+                        <span>พรีเซ็ตด่วน:</span>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateBeam(b.id, { extraTopNearBars: 2, extraBottomMidBars: 1, extraTopFarBars: 2 })}
+                            className="px-2 py-0.5 rounded bg-indigo-600/30 hover:bg-indigo-600 text-indigo-200 transition text-[10px]"
+                            title="เสริมหัว 2, กลาง 1, ท้าย 2"
+                          >
+                            หัว 2 / กลาง 1 / ท้าย 2
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateBeam(b.id, { extraTopNearBars: 2, extraBottomMidBars: 2, extraTopFarBars: 2 })}
+                            className="px-2 py-0.5 rounded bg-indigo-600/30 hover:bg-indigo-600 text-indigo-200 transition text-[10px]"
+                            title="เสริมหัว 2, กลาง 2, ท้าย 2"
+                          >
+                            หัว 2 / กลาง 2 / ท้าย 2
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateBeam(b.id, { extraTopNearBars: 0, extraBottomMidBars: 0, extraTopFarBars: 0 })}
+                            className="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition text-[10px]"
+                            title="ล้างเหล็กพิเศษเป็น 0"
+                          >
+                            ล้างเป็น 0
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1301,7 +1453,7 @@ export const StructureEstimatorModal: React.FC<StructureEstimatorModalProps> = (
               <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
                 <span className="text-[10px] text-slate-400 block mb-0.5">เหล็กข้ออ้อยรวม (DB)</span>
                 <span className="text-lg font-bold font-mono text-amber-400">
-                  {(result.db12Kg + result.db16Kg).toLocaleString()}
+                  {(result.db12Kg + result.db16Kg + (result.db20Kg || 0)).toLocaleString()}
                 </span>
                 <span className="text-xs text-slate-500 ml-1">กก.</span>
               </div>
@@ -1358,11 +1510,21 @@ export const StructureEstimatorModal: React.FC<StructureEstimatorModalProps> = (
               <div className="flex flex-col gap-1.5 pt-2 border-t border-slate-850">
                 <span className="text-[11px] font-bold text-cyan-300">คาน ({beams.length} ขนาด):</span>
                 {result.beamSummaryList?.map(b => (
-                  <div key={b.code} className="flex justify-between items-center text-[11px] text-slate-300 pl-2">
-                    <span>• {b.code} ({b.lengthM} ม.):</span>
-                    <span className="font-mono font-semibold text-white">
-                      {b.concreteCuM} คิว | {b.steelKg} กก.
-                    </span>
+                  <div key={b.code} className="flex flex-col gap-0.5 pl-2 py-1 rounded bg-slate-950/40 border border-slate-850/60">
+                    <div className="flex justify-between items-center text-[11px] text-slate-300">
+                      <span className="font-semibold text-white">• {b.code} ({b.lengthM} ม.):</span>
+                      <span className="font-mono font-semibold text-cyan-300">
+                        {b.concreteCuM} คิว | {b.steelKg} กก.
+                      </span>
+                    </div>
+                    <div className="text-[10px] text-slate-400 font-mono flex items-center justify-between">
+                      <span>{b.mainBarsStr}</span>
+                      {b.extraBarsStr && (
+                        <span className="text-amber-400 font-sans font-medium text-[9px] bg-amber-950/40 px-1 py-0.2 rounded border border-amber-500/30">
+                          {b.extraBarsStr}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -1382,6 +1544,12 @@ export const StructureEstimatorModal: React.FC<StructureEstimatorModalProps> = (
                     <span>{result.db16Bars} เส้น ({result.db16Kg.toLocaleString()} กก.)</span>
                   </div>
                 )}
+                {result.db20Kg && result.db20Kg > 0 ? (
+                  <div className="flex justify-between text-[11px] text-cyan-300 pl-2 font-mono">
+                    <span>• เหล็ก DB20 (คานพิเศษ):</span>
+                    <span>{result.db20Bars} เส้น ({result.db20Kg.toLocaleString()} กก.)</span>
+                  </div>
+                ) : null}
                 <div className="flex justify-between text-[11px] text-cyan-300 pl-2 font-mono">
                   <span>• ปลอกเสา (RB6/9):</span>
                   <span>{result.colStirrupPcs} ปลอก ({result.colStirrupBars} เส้น / {result.colStirrupKg} กก.)</span>

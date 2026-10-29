@@ -589,14 +589,19 @@ export interface FootingItem {
 
 export interface BeamItem {
   id: string;
-  code: string;                  
-  name: string;                  
-  totalLengthM: number;          
-  widthM: number;                
-  depthM: number;                
-  mainBarsCount: number;         
-  mainBarType: 'DB12' | 'DB16';  
-  stirrupSpacingM: number;       
+  code: string;
+  name: string;
+  totalLengthM: number;
+  widthM: number;
+  depthM: number;
+  mainBarsCount: number;
+  mainBarType: 'DB12' | 'DB16' | 'DB20';
+  stirrupSpacingM: number;
+  // 🌟 เหล็กเสริมพิเศษตามแบบ (หัว / กลาง / ท้ายคาน) 🌟
+  extraTopNearBars?: number;     // เสริมบนหัวคาน (เส้น) รับโมเมนต์ลบ L/4
+  extraBottomMidBars?: number;   // เสริมล่างกลางคาน (เส้น) รับโมเมนต์บวก 0.6L
+  extraTopFarBars?: number;      // เสริมบนท้ายคาน (เส้น) รับโมเมนต์ลบ L/4
+  extraBarType?: 'DB12' | 'DB16' | 'DB20'; // ขนาดเหล็กเสริมพิเศษ
 }
 
 export type FoundationPileType = 
@@ -626,7 +631,7 @@ export interface StructureCalcParams {
   beamWidthM?: number;
   beamDepthM?: number;
   beamMainBars?: number;
-  beamMainBarType?: 'DB12' | 'DB16';
+  beamMainBarType?: 'DB12' | 'DB16' | 'DB20';
   beamStirrupSpacingM?: number;
   slabType: SlabSystemType;
   totalFloorAreaSqm: number;
@@ -664,6 +669,8 @@ export interface StructureCalcResult {
   db12Bars: number;
   db16Kg: number;
   db16Bars: number;
+  db20Kg?: number;
+  db20Bars?: number;
   colStirrupPcs: number;
   colStirrupM: number;
   colStirrupKg: number;
@@ -686,7 +693,7 @@ export interface StructureCalcResult {
   estMaterialCost: number;
   estLaborCost: number;
   footingSummaryList?: { code: string; count: number; concreteCuM: number; formworkSqm: number; steelKg: number }[];
-  beamSummaryList?: { code: string; lengthM: number; concreteCuM: number; formworkSqm: number; steelKg: number }[];
+  beamSummaryList?: { code: string; lengthM: number; concreteCuM: number; formworkSqm: number; steelKg: number; mainBarsStr?: string; extraBarsStr?: string }[];
   // ผลคำนวณงานเสาเข็มและงานดินขุด (Earthwork & Piling)
   totalFootingsCount: number;
   totalPilesCount: number;
