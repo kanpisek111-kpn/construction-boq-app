@@ -28,6 +28,7 @@ import { QuickBOQWizardModal } from './components/QuickBOQWizardModal';
 import { AISanityCheckModal } from './components/AISanityCheckModal';
 import { CostAnalyticsModal } from './components/CostAnalyticsModal';
 import { PaintEstimatorModal } from './components/PaintEstimatorModal';
+import { CeilingEstimatorModal } from './components/CeilingEstimatorModal';
 import { Flow } from 'flow-sdk';
 import { LicenseTier, getCurrentSession, saveSession, logout as logoutAuth, canAccessFeature } from './services/authService';
 import { AccessLockModal, OwnerKeyManagerModal } from './components/AccessLockModal';
@@ -175,6 +176,7 @@ export default function App() {
   const [isSanitaryModalOpen, setIsSanitaryModalOpen] = useState<boolean>(false);
   const [isSanitaryFixtureModalOpen, setIsSanitaryFixtureModalOpen] = useState<boolean>(false);
   const [isPaintModalOpen, setIsPaintModalOpen] = useState<boolean>(false);
+  const [isCeilingModalOpen, setIsCeilingModalOpen] = useState<boolean>(false);
   const [isQuotationModalOpen, setIsQuotationModalOpen] = useState<boolean>(false);
   const [isMilestonesModalOpen, setIsMilestonesModalOpen] = useState<boolean>(false);
   const [isExporting, setIsExporting] = useState<boolean>(false);
@@ -1399,6 +1401,16 @@ export default function App() {
               <span>6. กระเบื้อง</span>
               {licenseSession.tier === 'demo' && <span className="text-[10px]">🔒</span>}
             </button>
+            {/* 6.1 ฝ้าเพดาน & C-Line */}
+            <button
+              onClick={() => openEstimatorIfAllowed(setIsCeilingModalOpen, '6.1 ฝ้าเพดาน & C-Line')}
+              className="px-2.5 py-1 rounded-lg bg-teal-950/80 hover:bg-teal-900 border border-teal-500/60 text-teal-200 text-xs font-bold flex items-center gap-1.5 transition active:scale-95 shrink-0 shadow-sm"
+              title="คำนวณงานฝ้าเพดาน ถอดโครง C-Line ฉากริม ปูนฉาบ และอุปกรณ์ครบชุด"
+            >
+              <span className="material-symbols-outlined text-sm text-teal-400 font-bold">view_quilt</span>
+              <span>6.1 ฝ้า & C-Line</span>
+              {licenseSession.tier === 'demo' && <span className="text-[10px]">🔒</span>}
+            </button>
             {/* 7. ท่อประปา & สุขาภิบาล */}
             <button
               onClick={() => openEstimatorIfAllowed(setIsSanitaryModalOpen, '7. ท่อประปา')}
@@ -1972,6 +1984,13 @@ export default function App() {
         isOpen={isSanitaryFixtureModalOpen}
         onClose={() => setIsSanitaryFixtureModalOpen(false)}
         onAddItems={handleMergeNewItems}
+        currentHouseAreaSqm={houseAreaSqm}
+      />
+      {/* 🌟 Ceiling & C-Line Estimator Modal 🌟 */}
+      <CeilingEstimatorModal
+        isOpen={isCeilingModalOpen}
+        onClose={() => setIsCeilingModalOpen(false)}
+        onApplyToBOQ={handleMergeNewItems}
         currentHouseAreaSqm={houseAreaSqm}
       />
       {/* 🎨 Paint & Steel Coating Estimator Modal 🎨 */}

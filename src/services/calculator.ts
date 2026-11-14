@@ -916,24 +916,110 @@ export function generateSiteMaterialsProcurementList(
 
     if (item.category === 'finishes') {
       if (nameLower.includes('ฝ้า') || specLower.includes('ยิปซัม') || nameLower.includes('ยิปซัม')) {
-        const gypsumSheets = Math.ceil(exactOrderQty / 2.88);
+        const areaVal = exactOrderQty;
+        const gypsumSheets = Math.ceil(areaVal / 2.88 * 1.05);
+        const cLineBars = Math.ceil(areaVal * 1.05);
+        const wallAngleBars = Math.ceil(areaVal * 0.45);
+        const jointBags = Math.max(1, Math.ceil((areaVal * 0.38) / 25));
+        const tapeRolls = Math.max(1, Math.ceil((areaVal * 1.6) / 90));
+        const screwBoxes = Math.max(1, Math.ceil((areaVal * 20) / 1000));
+        const hangerSets = Math.ceil(areaVal * 1.3);
+
+        // 1. แผ่นยิปซัมบอร์ด
         materials.push({
-          id: `mat-proc-ceiling-${item.id}-${index}`,
+          id: `mat-proc-ceiling-sheet-${item.id}-${index}`,
           materialGroup: 'tiles_finishes',
-          name: item.name,
-          spec: `${item.spec} (พื้นที่ ${item.quantity} ตร.ม. ~ สั่งแผ่นยิปซัม 1.20x2.40ม. รวม ${gypsumSheets} แผ่น พร้อมโครง C-Line)`,
+          name: `แผ่นยิปซัมบอร์ด 9 มม. (ขอบลาด) 1.20x2.40 ม.`,
+          spec: `${item.name} สำหรับพื้นที่ ${item.quantity} ตร.ม. (คำนวณเผื่อตัด 5% รวม ${gypsumSheets} แผ่น)`,
           netQuantity: item.quantity,
           wastePercent,
           orderQuantity: gypsumSheets,
-          unit: 'แผ่น (1.20x2.40ม.)',
-          unitPriceEstimate: Math.round(item.materialUnitPrice * 2.88),
-          totalEstimatedCost: lineTotal,
+          unit: 'แผ่น',
+          unitPriceEstimate: 165,
+          totalEstimatedCost: gypsumSheets * 165,
           priorityPhase,
           milestoneNumber,
           milestoneTitle,
           boqCategory: item.category,
-          packageNote: 'สั่งแผ่นยิปซัมขอบลาดหนา 9 มม. พร้อมโครงคร่าว C-Line และปูนฉาบรอยต่อ'
+          packageNote: 'แผ่นยิปซัมขอบลาดหนา 9 มม. มอก. สำหรับฝ้าฉาบเรียบ'
         });
+
+        // 2. โครงคร่าว C-Line
+        materials.push({
+          id: `mat-proc-ceiling-cline-${item.id}-${index}`,
+          materialGroup: 'tiles_finishes',
+          name: `โครงคร่าว C-Line เบอร์ 24 (หนา 0.52 มม. ยาว 4.00 ม.)`,
+          spec: `โครงหลัก @1.00 ม. + โครงซอย @0.40 ม. สำหรับพื้นที่ฝ้า ${item.quantity} ตร.ม. รวม ${cLineBars} ท่อน`,
+          netQuantity: item.quantity,
+          wastePercent,
+          orderQuantity: cLineBars,
+          unit: 'ท่อน (ยาว 4.00 ม.)',
+          unitPriceEstimate: 58,
+          totalEstimatedCost: cLineBars * 58,
+          priorityPhase,
+          milestoneNumber,
+          milestoneTitle,
+          boqCategory: item.category,
+          packageNote: 'โครง C-Line ชุบสังกะสี มอก. ผิวลายสลับกันแอ่น'
+        });
+
+        // 3. ฉากริมผนัง Wall Angle
+        materials.push({
+          id: `mat-proc-ceiling-angle-${item.id}-${index}`,
+          materialGroup: 'tiles_finishes',
+          name: `โครงฉากริมผนัง Wall Angle (ยาว 2.40 ม.)`,
+          spec: `ฉากริมยึดขอบผนังรอบห้อง สำหรับพื้นที่ ${item.quantity} ตร.ม. (~ ${wallAngleBars} ท่อน)`,
+          netQuantity: item.quantity,
+          wastePercent,
+          orderQuantity: wallAngleBars,
+          unit: 'ท่อน (ยาว 2.40 ม.)',
+          unitPriceEstimate: 35,
+          totalEstimatedCost: wallAngleBars * 35,
+          priorityPhase,
+          milestoneNumber,
+          milestoneTitle,
+          boqCategory: item.category,
+          packageNote: 'ฉากริมสังกะสีหนา 0.40 มม. ติดรอบแนวผนัง'
+        });
+
+        // 4. ปูนฉาบรอยต่อยิปซัม
+        materials.push({
+          id: `mat-proc-ceiling-joint-${item.id}-${index}`,
+          materialGroup: 'tiles_finishes',
+          name: `ปูนฉาบรอยต่อยิปซัม (Gypsum Joint Compound ถุงละ 25 กก.)`,
+          spec: `สำหรับฉาบแนวต่อแผ่น 3 เที่ยวและหัวสกรู (${item.quantity} ตร.ม. ใช้ ~ ${Math.round(areaVal * 0.38)} กก. = ${jointBags} ถุง)`,
+          netQuantity: item.quantity,
+          wastePercent,
+          orderQuantity: jointBags,
+          unit: 'ถุง (25 กก.)',
+          unitPriceEstimate: 280,
+          totalEstimatedCost: jointBags * 280,
+          priorityPhase,
+          milestoneNumber,
+          milestoneTitle,
+          boqCategory: item.category,
+          packageNote: 'ปูนฉาบยิปซัมสูตรผสมน้ำ ฉาบลื่น ขัดง่าย ไม่แตกร้าว'
+        });
+
+        // 5. ผ้าเทปรอยต่อ & สกรู & ชุดแขวนลวดปรับระดับ
+        materials.push({
+          id: `mat-proc-ceiling-acc-${item.id}-${index}`,
+          materialGroup: 'tiles_finishes',
+          name: `ชุดอุปกรณ์ติดตั้งฝ้าครบเซ็ต (ผ้าเทป ${tapeRolls} ม้วน + สกรู ${screwBoxes} กล่อง + ลวดแขวน ${hangerSets} ชุด)`,
+          spec: `ผ้าเทปรอยต่อ 90ม. (${tapeRolls} ม้วน), สกรูยิปซัม 1 นิ้ว (${screwBoxes} กล่อง), ชุดลวดแขวน+สปริง (${hangerSets} ชุด)`,
+          netQuantity: item.quantity,
+          wastePercent,
+          orderQuantity: 1,
+          unit: 'ชุดรวม',
+          unitPriceEstimate: Math.round((tapeRolls * 95) + (screwBoxes * 160) + (hangerSets * 14)),
+          totalEstimatedCost: Math.round((tapeRolls * 95) + (screwBoxes * 160) + (hangerSets * 14)),
+          priorityPhase,
+          milestoneNumber,
+          milestoneTitle,
+          boqCategory: item.category,
+          packageNote: 'รวมผ้าเทปไฟเบอร์/กระดาษ + สกรูดำเกลียวปล่อย + พุกดร็อปอินและลวดสปริง'
+        });
+
         return;
       }
 
@@ -2291,5 +2377,117 @@ export function computeBOQSummary(items: BOQItem[], overheadPercent: number = 7,
     overheadCost: Math.round(overheadCost),
     vatAmount: Math.round(vatAmount),
     grandTotal: Math.round(grandTotal),
+  };
+}
+
+
+/**
+ * 🌟 คำนวณปริมาณงานฝ้าเพดานยิปซัมฉาบเรียบ โครงคร่าว C-Line & อุปกรณ์ประกอบครบชุด 🌟
+ * อิงตามมาตรฐาน SCG / Gyproc:
+ * - แผ่นยิปซัม 1.20x2.40ม. (2.88 ตร.ม./แผ่น) เผื่อตัด 5-8%
+ * - โครง C-Line หลัก @ 1.00ม. (~0.32 ท่อน/ตร.ม.)
+ * - โครง C-Line ซอย @ 0.40ม. (~0.73 ท่อน/ตร.ม.)
+ * - ฉากริมผนัง Wall Angle 2.4ม. (~0.45 ท่อน/ตร.ม. หรือตามเส้นรอบรูป)
+ * - ปูนฉาบรอยต่อยิปซัม 0.38 กก./ตร.ม. (ถุง 25 กก.)
+ * - ผ้าเทปรอยต่อ 1.6 ม./ตร.ม. (ม้วน 90 ม.)
+ * - สกรูยิปซัม 1 นิ้ว 20 ตัว/ตร.ม. (กล่อง 1,000 ตัว)
+ * - ชุดแขวนลวด+สปริง 1.3 ชุด/ตร.ม.
+ * - ขอล็อค C-Line 2.8 ตัว/ตร.ม.
+ * - ข้อต่อ C-Line 0.25 ตัว/ตร.ม.
+ */
+export function calculateCeilingMaterials(
+  ceilingAreaSqm: number,
+  boardType: 'gypsum_standard_9mm' | 'gypsum_moisture_9mm' | 'smartboard_6mm' = 'gypsum_standard_9mm',
+  designType: 'flat_flush' | 'cove_stepped' | 'tbar_grid' = 'flat_flush',
+  covePerimeterM: number = 0
+) {
+  const area = Math.max(1, ceilingAreaSqm);
+  const isCove = designType === 'cove_stepped';
+  const coveBonusArea = isCove ? (covePerimeterM * 0.45) : 0; // เพิ่มพื้นที่ดร็อปซ่อนไฟ
+  const effectiveArea = area + coveBonusArea;
+
+  // 1. จำนวนแผ่น (1.20 x 2.40 ม. = 2.88 ตร.ม.)
+  const wasteRate = isCove ? 1.08 : 1.05;
+  const gypsumSheets = Math.ceil((effectiveArea / 2.88) * wasteRate);
+
+  // 2. โครง C-Line หลักและซอย (ท่อนละ 4.00 ม.)
+  const cLineMainBars = Math.ceil(effectiveArea * 0.32);
+  const cLineCrossBars = Math.ceil(effectiveArea * (isCove ? 0.85 : 0.73));
+  const cLineTotalBars = cLineMainBars + cLineCrossBars;
+
+  // 3. ฉากริมผนัง Wall Angle (ท่อนละ 2.40 ม.)
+  // ประมาณเส้นรอบรูปจากห้องสี่เหลี่ยม หรืออัตราส่วน 0.45 ท่อน/ตร.ม.
+  const wallAngleBars = Math.ceil(effectiveArea * (isCove ? 0.65 : 0.45));
+
+  // 4. ปูนฉาบรอยต่อยิปซัม (ถุงละ 25 กก.)
+  const jointCompoundKg = effectiveArea * 0.38;
+  const jointCompoundBags = Math.max(1, Math.ceil(jointCompoundKg / 25));
+
+  // 5. ผ้าเทปผ้ารอยต่อ (ม้วนละ 90 เมตร)
+  const jointTapeMeters = effectiveArea * 1.6;
+  const jointTapeRolls = Math.max(1, Math.ceil(jointTapeMeters / 90));
+
+  // 6. สกรูยิงยิปซัม 1 นิ้ว (กล่องละ 1,000 ตัว)
+  const drywallScrewsPcs = Math.ceil(effectiveArea * 20);
+  const drywallScrewsBoxes = Math.max(1, Math.ceil(drywallScrewsPcs / 1000));
+
+  // 7. ชุดแขวนฝ้า (ลวดปรับระดับ + สปริง + พุกดร็อปอิน)
+  const hangerSets = Math.ceil(effectiveArea * 1.3);
+
+  // 8. ขอล็อคโครง C-Line (Locking Key)
+  const lockingKeys = Math.ceil(effectiveArea * 2.8);
+
+  // 9. ข้อต่อโครง C-Line (Joint Clip)
+  const jointClips = Math.ceil(effectiveArea * 0.28);
+
+  // ราคาประเมินวัสดุ
+  let boardPricePerSheet = 165; // ยิปซัม 9 มม. SCG/Knauf
+  if (boardType === 'gypsum_moisture_9mm') boardPricePerSheet = 245; // ทนชื้นห้องน้ำ
+  else if (boardType === 'smartboard_6mm') boardPricePerSheet = 195; // สมาร์ทบอร์ด
+
+  const cLinePrice = 58;         // C-Line มอก. หนา 0.52มม.
+  const wallAnglePrice = 35;     // ฉากริม 2.4ม.
+  const jointCompoundPrice = 280;// ถุง 25 กก.
+  const jointTapePrice = 95;     // ม้วน 90 ม.
+  const screwBoxPrice = 160;     // กล่อง 1,000 ตัว
+  const hangerPrice = 14;        // ชุดละ 14 บ. (ลวด+สปริง+พุก)
+  const lockingKeyPrice = 3.5;   // ตัวละ 3.5 บ.
+  const jointClipPrice = 4.5;    // ตัวละ 4.5 บ.
+
+  const materialCost = Math.round(
+    (gypsumSheets * boardPricePerSheet) +
+    (cLineTotalBars * cLinePrice) +
+    (wallAngleBars * wallAnglePrice) +
+    (jointCompoundBags * jointCompoundPrice) +
+    (jointTapeRolls * jointTapePrice) +
+    (drywallScrewsBoxes * screwBoxPrice) +
+    (hangerSets * hangerPrice) +
+    (lockingKeys * lockingKeyPrice) +
+    (jointClips * jointClipPrice)
+  );
+
+  // ค่าแรงติดตั้งฝ้าฉาบเรียบพร้อมฉาบรอยต่อ (ตร.ม. ละ 95 - 135 บ.)
+  const laborRatePerSqm = isCove ? 140 : 95;
+  const laborCost = Math.round(effectiveArea * laborRatePerSqm);
+
+  return {
+    ceilingAreaSqm: area,
+    covePerimeterM,
+    boardType,
+    designType,
+    gypsumSheets,
+    cLineMainBars,
+    cLineCrossBars,
+    cLineTotalBars,
+    wallAngleBars,
+    jointCompoundBags,
+    jointTapeRolls,
+    drywallScrewsBoxes,
+    hangerSets,
+    lockingKeys,
+    jointClips,
+    materialCost,
+    laborCost,
+    totalCost: materialCost + laborCost
   };
 }

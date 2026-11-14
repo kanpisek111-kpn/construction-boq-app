@@ -706,3 +706,29 @@ export interface StructureCalcResult {
   sandBeddingCuM: number;
   leanConcreteCuM: number;
 }
+
+
+// 🌟 งานฝ้าเพดานและอุปกรณ์โครงคร่าว C-Line 🌟
+export type CeilingBoardType = 'gypsum_standard_9mm' | 'gypsum_moisture_9mm' | 'smartboard_6mm';
+export type CeilingDesignType = 'flat_flush' | 'cove_stepped' | 'tbar_grid';
+
+export interface CeilingCalculationResult {
+  ceilingAreaSqm: number;
+  covePerimeterM: number;
+  boardType: CeilingBoardType;
+  designType: CeilingDesignType;
+  gypsumSheets: number;
+  cLineMainBars: number;
+  cLineCrossBars: number;
+  cLineTotalBars: number;
+  wallAngleBars: number;
+  jointCompoundBags: number;
+  jointTapeRolls: number;
+  drywallScrewsBoxes: number;
+  hangerSets: number;
+  lockingKeys: number;
+  jointClips: number;
+  materialCost: number;
+  laborCost: number;
+  totalCost: number;
+}
