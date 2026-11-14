@@ -915,7 +915,9 @@ export function generateSiteMaterialsProcurementList(
     }
 
     if (item.category === 'finishes') {
-      if (nameLower.includes('ฝ้า') || specLower.includes('ยิปซัม') || nameLower.includes('ยิปซัม')) {
+      // ตรวจสอบว่าเป็นงานทาสีฝ้าเพดานหรือไม่ ถ้าใช่ ให้ส่งไปเข้าหมวดคำนวณถังสีด้านล่าง ไม่ให้ถูกดักจับเป็นแผ่นยิปซัมและโครง C-Line ซ้ำ
+      const isPaintItem = nameLower.includes('ทาสี') || nameLower.includes('สีทา') || nameLower.includes('สีรองพื้น') || nameLower.includes('สีจริง');
+      if (!isPaintItem && (nameLower.includes('ฝ้า') || specLower.includes('ยิปซัม') || nameLower.includes('ยิปซัม'))) {
         const areaVal = exactOrderQty;
         const gypsumSheets = Math.ceil(areaVal / 2.88 * 1.05);
         const cLineBars = Math.ceil(areaVal * 1.05);
