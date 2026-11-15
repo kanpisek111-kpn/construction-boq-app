@@ -2019,6 +2019,7 @@ export default function App() {
         vatPercent={vatPercent}
         quotationMeta={quotationMeta}
         onUpdateMeta={setQuotationMeta}
+        milestones={milestones}
       />
       {/* Electrical & Wire Sizing Modal */}
       <ElectricalEstimatorModal
