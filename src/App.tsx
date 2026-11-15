@@ -418,14 +418,24 @@ export default function App() {
             color: #0f172a !important;
             box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.08) !important;
           }
+          .daylight-mode .bg-slate-950\/50,
+          .daylight-mode .bg-slate-950\/60,
+          .daylight-mode .bg-slate-950\/70,
           .daylight-mode .bg-slate-950\/80,
           .daylight-mode .bg-slate-950\/85,
           .daylight-mode .bg-slate-950\/90,
+          .daylight-mode .bg-slate-900\/60,
+          .daylight-mode .bg-slate-900\/70,
           .daylight-mode .bg-slate-900\/80,
           .daylight-mode .bg-slate-900\/90,
           .daylight-mode .bg-slate-900\/95 {
             background-color: #ffffff !important;
             color: #0f172a !important;
+          }
+          .daylight-mode .from-amber-950\/70,
+          .daylight-mode .from-amber-950\/60,
+          .daylight-mode .bg-gradient-to-r.from-amber-950\/70 {
+            background-image: linear-gradient(to right, #fef3c7, #ffffff, #e0e7ff) !important;
           }
           .daylight-mode .bg-slate-850,
           .daylight-mode .bg-slate-800 {

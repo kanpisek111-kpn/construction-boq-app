@@ -112,6 +112,18 @@ export const PriceBookModal: React.FC<PriceBookModalProps> = ({
     }, 3500);
   };
 
+  // Filtered saved items (placed before early return to obey React Rules of Hooks)
+  const filteredSavedItems = useMemo(() => {
+    return (draftConfig.savedCustomItems || []).filter(item => {
+      const matchCat = customItemFilterCategory === 'all' || item.category === customItemFilterCategory;
+      const matchQuery = !customItemSearch.trim() || 
+        item.name.toLowerCase().includes(customItemSearch.toLowerCase()) ||
+        item.spec.toLowerCase().includes(customItemSearch.toLowerCase()) ||
+        (item.customGroup && item.customGroup.toLowerCase().includes(customItemSearch.toLowerCase()));
+      return matchCat && matchQuery;
+    });
+  }, [draftConfig.savedCustomItems, customItemFilterCategory, customItemSearch]);
+
   if (!isOpen) return null;
 
   const isDemo = licenseTier === 'demo';
@@ -358,18 +370,6 @@ export const PriceBookModal: React.FC<PriceBookModalProps> = ({
     onInsertCustomItem(boqItem);
     showToast(`+ ดึงรายการ "${customItem.name}" เข้าสู่ตาราง BOQ แล้ว! ✓`, 'success');
   };
-
-  // Filtered saved items
-  const filteredSavedItems = useMemo(() => {
-    return (draftConfig.savedCustomItems || []).filter(item => {
-      const matchCat = customItemFilterCategory === 'all' || item.category === customItemFilterCategory;
-      const matchQuery = !customItemSearch.trim() || 
-        item.name.toLowerCase().includes(customItemSearch.toLowerCase()) ||
-        item.spec.toLowerCase().includes(customItemSearch.toLowerCase()) ||
-        (item.customGroup && item.customGroup.toLowerCase().includes(customItemSearch.toLowerCase()));
-      return matchCat && matchQuery;
-    });
-  }, [draftConfig.savedCustomItems, customItemFilterCategory, customItemSearch]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in">
