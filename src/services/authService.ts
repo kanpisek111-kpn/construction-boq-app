@@ -656,7 +656,8 @@ export function canAccessFeature(
     | 'white_label_branding'
     | 'ai_sanity_check'
     | 'plan_analyzer'
-    | 'actual_cost_tracker',
+    | 'actual_cost_tracker'
+    | 'price_book',
   tier: LicenseTier
 ): boolean {
   if (tier === 'owner' || tier === 'vip' || tier === 'enterprise') {
@@ -676,6 +677,7 @@ export function canAccessFeature(
       case 'gantt_schedule':
       case 'project_files_json':
       case 'white_label_branding':
+      case 'price_book':
         return true;
       case 'actual_cost_tracker':
       case 'ai_sanity_check':
@@ -694,6 +696,7 @@ export function canAccessFeature(
       case 'milestones_manager':
       case 'cost_analytics':
       case 'advanced_calculators':
+      case 'price_book':
         return true;
       case 'multi_projects':
       case 'site_procurement':

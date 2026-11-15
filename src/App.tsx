@@ -28,6 +28,14 @@ import { AISanityCheckModal } from './components/AISanityCheckModal';
 import { CostAnalyticsModal } from './components/CostAnalyticsModal';
 import { PaintEstimatorModal } from './components/PaintEstimatorModal';
 import { CeilingEstimatorModal } from './components/CeilingEstimatorModal';
+import { PriceBookModal } from './components/PriceBookModal';
+import { 
+  loadPriceBookConfig, 
+  savePriceBookConfig, 
+  applyPriceBookToItems, 
+  applyPriceBookToSingleItem 
+} from './services/priceBookService';
+import { PriceBookConfig } from './types';
 import { Flow } from 'flow-sdk';
 import { 
   LicenseTier, 
@@ -200,6 +208,19 @@ export default function App() {
   const [isExporting, setIsExporting] = useState<boolean>(false);
   const [isQuickWizardOpen, setIsQuickWizardOpen] = useState<boolean>(false);
   const [isCostAnalyticsOpen, setIsCostAnalyticsOpen] = useState<boolean>(false);
+  const [isPriceBookModalOpen, setIsPriceBookModalOpen] = useState<boolean>(false);
+  const [priceBookConfig, setPriceBookConfig] = useState<PriceBookConfig>(() => loadPriceBookConfig());
+
+  const handleSavePriceBookConfig = (newConfig: PriceBookConfig) => {
+    setPriceBookConfig(newConfig);
+    savePriceBookConfig(newConfig);
+  };
+
+  const handleInsertPriceBookItem = (item: BOQItem) => {
+    setItems(prev => [...prev, item]);
+    setSaveStatusToast(`+ ดึงรายการ "${item.name}" เข้าสู่ตาราง BOQ แล้ว ✓`);
+    setTimeout(() => setSaveStatusToast(''), 2500);
+  };
   const [isDaylightMode, setIsDaylightMode] = useState<boolean>(() => {
     try {
       return localStorage.getItem('thai_boq_daylight_mode') === 'true';
@@ -876,13 +897,27 @@ export default function App() {
     );
   }, [items, boqSearchQuery]);
   const handleUpdateItem = (id: string, updated: Partial<BOQItem>) => {
-    setItems(prev => prev.map(item => item.id === id ? { ...item, ...updated } : item));
+    setItems(prev => prev.map(item => {
+      if (item.id !== id) return item;
+      const nextItem = { ...item, ...updated };
+      // อัปเดต baseMaterialUnitPrice และ baseLaborUnitPrice ด้วยเมื่อผู้ใช้แก้ไขราคาเอง
+      // เพื่อไม่ให้ราคาที่ผู้ใช้ตั้งใจแก้ไขเพี้ยนหรือทบซ้ำเวลาเปลี่ยนโซนภูมิภาค
+      if (typeof updated.materialUnitPrice === 'number') {
+        const matMul = priceBookConfig.materialMultiplier || 1.0;
+        nextItem.baseMaterialUnitPrice = Math.round(updated.materialUnitPrice / matMul);
+      }
+      if (typeof updated.laborUnitPrice === 'number') {
+        const labMul = priceBookConfig.laborMultiplier || 1.0;
+        nextItem.baseLaborUnitPrice = Math.round(updated.laborUnitPrice / labMul);
+      }
+      return nextItem;
+    }));
   };
   const handleDeleteItem = (id: string) => {
     setItems(prev => prev.filter(item => item.id !== id));
   };
   const handleAddItem = (category: ConstructionCategory) => {
-    const newItem: BOQItem = {
+    let newItem: BOQItem = {
       id: `custom-${Date.now()}`,
       category,
       name: 'รายการใหม่',
@@ -894,20 +929,29 @@ export default function App() {
       wastePercent: 0,
       basePerSqm: 1 / Math.max(1, houseAreaSqm),
     };
+    if (priceBookConfig.autoApplyToNewItems) {
+      newItem = applyPriceBookToSingleItem(newItem, priceBookConfig);
+    }
     setItems(prev => [...prev, newItem]);
     setSaveStatusToast('เพิ่มแถวรายการใหม่เรียบร้อย ✓');
     setTimeout(() => setSaveStatusToast(''), 2500);
   };
   const handleMergeNewItems = (newItems: BOQItem[]) => {
-    setItems(prev => [...prev, ...newItems]);
-    setSaveStatusToast(`เพิ่มวัสดุ ${newItems.length} รายการลง BOQ เรียบร้อย ✓`);
+    const finalItems = priceBookConfig.autoApplyToNewItems 
+      ? applyPriceBookToItems(newItems, priceBookConfig) 
+      : newItems;
+    setItems(prev => [...prev, ...finalItems]);
+    setSaveStatusToast(`เพิ่มวัสดุ ${finalItems.length} รายการลง BOQ เรียบร้อย ✓`);
     setTimeout(() => setSaveStatusToast(''), 3000);
   };
 
   const handleApplyCategoryItems = (newItems: BOQItem[], replaceCategory?: ConstructionCategory | ConstructionCategory[]) => {
+    const finalItems = priceBookConfig.autoApplyToNewItems 
+      ? applyPriceBookToItems(newItems, priceBookConfig) 
+      : newItems;
     setItems(prev => {
       if (!replaceCategory) {
-        return [...prev, ...newItems];
+        return [...prev, ...finalItems];
       }
       const catsToReplace = Array.isArray(replaceCategory) ? replaceCategory : [replaceCategory];
       
@@ -954,23 +998,29 @@ export default function App() {
         return true;
       });
 
-      return [...filtered, ...newItems];
+      return [...filtered, ...finalItems];
     });
 
-    setSaveStatusToast(`อัปเดตคำนวณใหม่ ${newItems.length} รายการลง BOQ เรียบร้อย (ไม่มียอดซ้ำ) ✓`);
+    setSaveStatusToast(`อัปเดตคำนวณใหม่ ${finalItems.length} รายการลง BOQ เรียบร้อย (ไม่มียอดซ้ำ) ✓`);
     setTimeout(() => setSaveStatusToast(''), 3000);
   };
 
   const handleApplyStairItems = (newItems: BOQItem[]) => {
+    const finalItems = priceBookConfig.autoApplyToNewItems 
+      ? applyPriceBookToItems(newItems, priceBookConfig) 
+      : newItems;
     setItems(prev => {
       const filtered = prev.filter(item => !item.id.startsWith('stair-'));
-      return [...filtered, ...newItems];
+      return [...filtered, ...finalItems];
     });
-    setSaveStatusToast(`อัปเดตงานบันได ${newItems.length} รายการลง BOQ เรียบร้อย ✓`);
+    setSaveStatusToast(`อัปเดตงานบันได ${finalItems.length} รายการลง BOQ เรียบร้อย ✓`);
     setTimeout(() => setSaveStatusToast(''), 3000);
   };
 
   const handleApplyCeilingItems = (newItems: BOQItem[]) => {
+    const finalItems = priceBookConfig.autoApplyToNewItems 
+      ? applyPriceBookToItems(newItems, priceBookConfig) 
+      : newItems;
     setItems(prev => {
       const filtered = prev.filter(item => !(
         item.id.startsWith('fin-ceiling-') || 
@@ -978,22 +1028,25 @@ export default function App() {
         item.id === 'fin-1' ||
         item.id.startsWith('wiz-ceiling-')
       ));
-      return [...filtered, ...newItems];
+      return [...filtered, ...finalItems];
     });
-    setSaveStatusToast(`อัปเดตงานฝ้าเพดาน ${newItems.length} รายการลง BOQ เรียบร้อย ✓`);
+    setSaveStatusToast(`อัปเดตงานฝ้าเพดาน ${finalItems.length} รายการลง BOQ เรียบร้อย ✓`);
     setTimeout(() => setSaveStatusToast(''), 3000);
   };
 
   const handleApplyPaintItems = (newItems: BOQItem[]) => {
+    const finalItems = priceBookConfig.autoApplyToNewItems 
+      ? applyPriceBookToItems(newItems, priceBookConfig) 
+      : newItems;
     setItems(prev => {
       const filtered = prev.filter(item => !(
         item.id.startsWith('paint-') ||
         item.id === 'fin-paint' ||
         item.id.startsWith('wiz-paint-')
       ));
-      return [...filtered, ...newItems];
+      return [...filtered, ...finalItems];
     });
-    setSaveStatusToast(`อัปเดตงานสี ${newItems.length} รายการลง BOQ เรียบร้อย ✓`);
+    setSaveStatusToast(`อัปเดตงานสี ${finalItems.length} รายการลง BOQ เรียบร้อย ✓`);
     setTimeout(() => setSaveStatusToast(''), 3000);
   };
   const handleSaveMilestones = (updatedMilestones: PaymentMilestone[]) => {
@@ -1457,6 +1510,27 @@ export default function App() {
                 <span className="material-symbols-outlined text-sm text-amber-300">table_view</span>
                 <span>CSV</span>
                 {licenseSession.tier === 'demo' && <span className="text-[10px]">🔒</span>}
+              </button>
+              <button
+                onClick={() => {
+                  if (!canAccessFeature('price_book', licenseSession.tier)) {
+                    setIsPriceBookModalOpen(true);
+                    return;
+                  }
+                  setIsPriceBookModalOpen(true);
+                }}
+                className="px-2.5 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 hover:text-white border border-amber-500/40 text-xs font-bold flex items-center gap-1.5 transition active:scale-95 shadow-sm"
+                title={`ฐานราคาภูมิภาค: ${priceBookConfig.regionName} (วัสดุ ${(priceBookConfig.materialMultiplier * 100).toFixed(0)}%, ค่าแรง ${(priceBookConfig.laborMultiplier * 100).toFixed(0)}%)`}
+              >
+                <span className="material-symbols-outlined text-sm text-amber-400">public</span>
+                <span className="hidden sm:inline">คลังราคา & โซนพื้นที่</span>
+                <span className="sm:hidden">คลังราคา</span>
+                <span className="text-[10px] bg-amber-500/30 text-amber-200 px-1.5 py-0.2 rounded font-mono hidden md:inline">
+                  {priceBookConfig.regionId === 'custom' ? 'Custom' : priceBookConfig.regionName.split(' ')[0]}
+                </span>
+                {!canAccessFeature('price_book', licenseSession.tier) && (
+                  <span className="text-[10px] text-amber-400">🔒</span>
+                )}
               </button>
             </div>
 
@@ -2084,6 +2158,14 @@ export default function App() {
                     <span className="material-symbols-outlined text-sm">picture_as_pdf</span>
                     <span>ใบเสนอราคา</span>
                   </button>
+                  <button
+                    onClick={() => setIsPriceBookModalOpen(true)}
+                    className="px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold transition shadow flex items-center gap-1.5"
+                    title={`ปรับฐานราคาตามภูมิภาคปัจจุบัน: ${priceBookConfig.regionName}`}
+                  >
+                    <span className="material-symbols-outlined text-sm">public</span>
+                    <span>ฐานราคาภูมิภาค ({priceBookConfig.regionName.split(' ')[0]})</span>
+                  </button>
                 </div>
               </div>
               {/* BOQ Search Bar & Count */}
@@ -2373,7 +2455,10 @@ export default function App() {
         onClose={() => setIsQuickWizardOpen(false)}
         currentHouseAreaSqm={houseAreaSqm}
         onApplyBOQ={(newItems, name, area) => {
-          setItems(newItems);
+          const finalItems = priceBookConfig.autoApplyToNewItems 
+            ? applyPriceBookToItems(newItems, priceBookConfig) 
+            : newItems;
+          setItems(finalItems);
           setProjectName(name);
           setHouseAreaSqm(area);
           setAreaInputText(String(area));
@@ -2393,6 +2478,23 @@ export default function App() {
         overheadPercent={overheadPercent}
         vatPercent={vatPercent}
         projectName={projectName}
+      />
+
+      {/* Price Book & Regional Pricing Modal */}
+      <PriceBookModal
+        isOpen={isPriceBookModalOpen}
+        onClose={() => setIsPriceBookModalOpen(false)}
+        currentConfig={priceBookConfig}
+        onSaveConfig={handleSavePriceBookConfig}
+        currentBOQItems={items}
+        onApplyToBOQ={(updatedItems) => {
+          setItems(updatedItems);
+          setSaveStatusToast('ปรับปรุงราคาทั้งตาราง BOQ ตามฐานภูมิภาคสำเร็จแล้ว ✓');
+          setTimeout(() => setSaveStatusToast(''), 3000);
+        }}
+        onInsertCustomItem={handleInsertPriceBookItem}
+        licenseTier={licenseSession.tier}
+        onRequestUpgrade={(feature) => setUpgradeModalFeature(feature)}
       />
 
       {/* Security & Access Lock Modal */}

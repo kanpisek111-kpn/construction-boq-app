@@ -23,6 +23,55 @@ export interface BOQItem {
   basePerSqm?: number;   // สัดส่วนปริมาณต่อ 1 ตร.ม. สำหรับคำนวณปรับสเกลอัตโนมัติ
   itemSubtype?: string;  // ประเภทย่อย
   milestoneNumber?: number; // ลำดับงวดงานที่ต้องเบิก/ทำ (1, 2, 3...)
+  baseMaterialUnitPrice?: number; // ราคาวัสดุต้นฉบับก่อนคูณปรับฐานภูมิภาค (ป้องกันการคูณทบซ้ำ)
+  baseLaborUnitPrice?: number;    // ราคาค่าแรงต้นฉบับก่อนคูณปรับฐานภูมิภาค (ป้องกันการคูณทบซ้ำ)
+}
+
+// 🗺️ โครงสร้างฐานราคาตามภูมิภาคและคลังราคาส่วนตัว (Regional Price Book)
+export type RegionalZoneId = 
+  | 'central_bkk'       // กทม. และปริมณฑล (1.00 / 1.00)
+  | 'central_east'      // ภาคกลางและภาคตะวันออก (1.03 / 0.95)
+  | 'north'             // ภาคเหนือ (1.06 / 0.85)
+  | 'northeast'         // ภาคอีสาน (1.05 / 0.82)
+  | 'south'             // ภาคใต้ (1.08 / 0.98)
+  | 'remote_island'     // พื้นที่ห่างไกล / เกาะ / บนดอย (1.20 / 1.10)
+  | 'custom';           // กำหนดค่าเองตามต้องการ
+
+export interface RegionalPreset {
+  id: RegionalZoneId;
+  name: string;
+  shortDesc: string;
+  materialMultiplier: number; // สัดส่วนตัวคูณค่าวัสดุ
+  laborMultiplier: number;    // สัดส่วนตัวคูณค่าแรง
+  provincesSample: string;    // จังหวัดตัวอย่าง
+}
+
+export interface MasterRatesConfig {
+  concreteReadyMixedPerCuM?: number; // คอนกรีตผสมเสร็จ 240 ksc (บาท/คิว)
+  steelDeformedBarPerKg?: number;    // เหล็กข้ออ้อย มอก. DB12/16 (บาท/กก.)
+  formworkPerSqm?: number;           // ไม้แบบหล่อคอนกรีต คสล. (บาท/ตร.ม.)
+  masonryLaborPerSqm?: number;       // ค่าแรงก่อผนังอิฐมวลเบา/บล็อก (บาท/ตร.ม.)
+  plasterLaborPerSqm?: number;       // ค่าแรงฉาบปูน 2 ด้าน (บาท/ตร.ม.)
+  tileLaborPerSqm?: number;          // ค่าแรงปูกระเบื้อง (บาท/ตร.ม.)
+  paintLaborPerSqm?: number;         // ค่าแรงทาสีรองพื้น+จริง 2 เที่ยว (บาท/ตร.ม.)
+  [key: string]: number | undefined;
+}
+
+export interface SavedPriceBookItem extends Omit<BOQItem, 'id'> {
+  savedId: string;
+  customGroup?: string;
+  updatedAt?: string;
+}
+
+export interface PriceBookConfig {
+  regionId: RegionalZoneId;
+  regionName: string;
+  materialMultiplier: number;
+  laborMultiplier: number;
+  autoApplyToNewItems: boolean;
+  masterRates: MasterRatesConfig;
+  savedCustomItems: SavedPriceBookItem[];
+  lastUpdated?: string;
 }
 
 // 🚽 ชนิดสุขภัณฑ์และอุปกรณ์ในห้องน้ำ
