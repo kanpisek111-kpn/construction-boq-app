@@ -3,6 +3,7 @@ import { BOQItem, ConstructionCategory, QuotationMeta, PaymentMilestone } from '
 import { CATEGORY_LABELS, formatMilestonesToPaymentTerms } from '../constants';
 import { exportBOQToExcel } from '../services/excelExporter';
 import { computeBOQSummary } from '../services/calculator';
+import { LicenseTier, canAccessFeature } from '../services/authService';
 
 interface QuotationPrintModalProps {
   isOpen: boolean;
@@ -15,6 +16,8 @@ interface QuotationPrintModalProps {
   quotationMeta: QuotationMeta;
   onUpdateMeta: (meta: QuotationMeta) => void;
   milestones?: PaymentMilestone[];
+  licenseTier?: LicenseTier;
+  onRequestUpgrade?: (featureName: string) => void;
 }
 
 export const QuotationPrintModal: React.FC<QuotationPrintModalProps> = ({
@@ -27,15 +30,17 @@ export const QuotationPrintModal: React.FC<QuotationPrintModalProps> = ({
   vatPercent,
   quotationMeta,
   onUpdateMeta,
-  milestones = []
+  milestones = [],
+  licenseTier = 'owner',
+  onRequestUpgrade
 }) => {
   const [meta, setMeta] = useState<QuotationMeta>(quotationMeta);
   const [showMetaEdit, setShowMetaEdit] = useState<boolean>(false);
 
-  // Sync meta state whenever quotationMeta prop updates
+  // Sync meta state whenever quotationMeta prop updates or modal opens (ensures fresh data per project)
   useEffect(() => {
     setMeta(quotationMeta);
-  }, [quotationMeta]);
+  }, [quotationMeta, isOpen]);
 
   const summary = computeBOQSummary(items, overheadPercent, vatPercent);
   const costPerSqm = houseAreaSqm > 0 ? Math.round(summary.grandTotal / houseAreaSqm) : 0;
@@ -46,6 +51,10 @@ export const QuotationPrintModal: React.FC<QuotationPrintModalProps> = ({
     : meta.paymentTerms;
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!canAccessFeature('white_label_branding', licenseTier)) {
+      if (onRequestUpgrade) onRequestUpgrade('White-label ปรับแต่งโลโก้บริษัทและชื่อผู้รับเหมา');
+      return;
+    }
     const file = e.target.files?.[0];
     if (file) {
       if (file.size > 2 * 1024 * 1024) {
@@ -392,13 +401,31 @@ export const QuotationPrintModal: React.FC<QuotationPrintModalProps> = ({
                 )}
               </div>
               <div className="flex-1">
-                <span className="text-slate-300 font-bold block">โลโก้บริษัท / ตราสัญลักษณ์:</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-300 font-bold block">โลโก้บริษัท / ตราสัญลักษณ์:</span>
+                  {!canAccessFeature('white_label_branding', licenseTier) && (
+                    <span className="text-[10px] font-prompt px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                      🔒 ปลดล็อกใน Pro & VIP
+                    </span>
+                  )}
+                </div>
                 <span className="text-[10px] text-slate-400 block">รองรับไฟล์ PNG, JPG (ขนาดไม่เกิน 2MB)</span>
                 <div className="flex gap-2 mt-1">
-                  <label className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-cyan-300 text-[11px] font-semibold cursor-pointer transition border border-slate-600">
-                    เลือกรูปภาพ
-                    <input type="file" accept="image/*" onChange={handleLogoUpload} className="hidden" />
-                  </label>
+                  {!canAccessFeature('white_label_branding', licenseTier) ? (
+                    <button
+                      type="button"
+                      onClick={() => onRequestUpgrade && onRequestUpgrade('White-label ปรับแต่งโลโก้บริษัทและชื่อผู้รับเหมา')}
+                      className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-amber-400 text-[11px] font-semibold transition border border-amber-500/40 flex items-center gap-1"
+                    >
+                      <span className="material-symbols-outlined text-xs">lock</span>
+                      <span>อัปเกรดเพื่อใส่โลโก้</span>
+                    </button>
+                  ) : (
+                    <label className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-cyan-300 text-[11px] font-semibold cursor-pointer transition border border-slate-600">
+                      เลือกรูปภาพ
+                      <input type="file" accept="image/*" onChange={handleLogoUpload} className="hidden" />
+                    </label>
+                  )}
                   {meta.companyLogo && (
                     <button
                       type="button"

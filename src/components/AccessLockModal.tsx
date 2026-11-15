@@ -1,5 +1,12 @@
 import React, { useState } from 'react';
-import { LicenseTier, validatePasscodeOrKey, saveSession, generateRandomLicenseKey, getStoredGeneratedKeys } from '../services/authService';
+import { 
+  LicenseTier, 
+  validatePasscodeOrKey, 
+  saveSession, 
+  generateChecksumLicenseKey, 
+  getStoredGeneratedKeys,
+  PRESET_DEMO_KEYS 
+} from '../services/authService';
 
 interface AccessLockModalProps {
   isOpen: boolean;
@@ -89,7 +96,7 @@ export const AccessLockModal: React.FC<AccessLockModalProps> = ({
           )}
         </div>
 
-        {/* Form */}
+        {/* Form - Clean & Secure (No default password hints leaked to public) */}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-xs font-semibold text-slate-300 mb-1.5 font-prompt">
@@ -103,7 +110,7 @@ export const AccessLockModal: React.FC<AccessLockModalProps> = ({
                   setPasscode(e.target.value);
                   setErrorMsg('');
                 }}
-                placeholder="เช่น OWNER-BOQ-2026 หรือ PRO-xxxx-xxxx"
+                placeholder="กรอก License Key หรือรหัสผ่านของคุณ"
                 className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-white text-sm font-mono placeholder:text-slate-600 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition"
                 autoFocus
               />
@@ -168,7 +175,7 @@ export const AccessLockModal: React.FC<AccessLockModalProps> = ({
 };
 
 // =====================================================================
-// OWNER KEY GENERATOR & MANAGEMENT MODAL
+// OWNER KEY GENERATOR & MANAGEMENT MODAL (3-TIER CHECKSUM + TEST KEYS)
 // =====================================================================
 interface OwnerKeyManagerModalProps {
   isOpen: boolean;
@@ -176,7 +183,7 @@ interface OwnerKeyManagerModalProps {
 }
 
 export const OwnerKeyManagerModal: React.FC<OwnerKeyManagerModalProps> = ({ isOpen, onClose }) => {
-  const [selectedTier, setSelectedTier] = useState<'pro' | 'enterprise'>('pro');
+  const [selectedTier, setSelectedTier] = useState<'starter' | 'pro' | 'vip'>('pro');
   const [createdKey, setCreatedKey] = useState<string>('');
   const [copyToast, setCopyToast] = useState(false);
   const [keyList, setKeyList] = useState(getStoredGeneratedKeys());
@@ -184,7 +191,7 @@ export const OwnerKeyManagerModal: React.FC<OwnerKeyManagerModalProps> = ({ isOp
   if (!isOpen) return null;
 
   const handleGenerate = () => {
-    const key = generateRandomLicenseKey(selectedTier);
+    const key = generateChecksumLicenseKey(selectedTier);
     setCreatedKey(key);
     setKeyList(getStoredGeneratedKeys());
   };
@@ -211,7 +218,7 @@ export const OwnerKeyManagerModal: React.FC<OwnerKeyManagerModalProps> = ({ isOp
           </div>
           <div>
             <h3 className="font-prompt font-bold text-lg text-white">ระบบจัดการ License Key สำหรับเจ้าของ</h3>
-            <p className="text-xs text-amber-400">สร้างรหัสผ่านส่งให้ลูกค้าที่ชำระเงินเรียบร้อยแล้ว</p>
+            <p className="text-xs text-amber-400">สร้างรหัสผ่านส่งให้ลูกค้าที่ชำระเงินเรียบร้อยแล้ว (ระบบ Checksum ป้องกันการสุ่ม)</p>
           </div>
         </div>
 
@@ -220,28 +227,39 @@ export const OwnerKeyManagerModal: React.FC<OwnerKeyManagerModalProps> = ({ isOp
           <label className="block text-xs font-prompt font-semibold text-slate-300">
             เลือกประเภทแพ็กเกจที่ต้องการสร้าง:
           </label>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-2">
             <button
               type="button"
-              onClick={() => setSelectedTier('pro')}
-              className={`py-2 px-3 rounded-lg text-xs font-prompt font-semibold border transition ${
-                selectedTier === 'pro'
-                  ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md'
+              onClick={() => setSelectedTier('starter')}
+              className={`py-2 px-2 rounded-lg text-xs font-prompt font-semibold border transition text-center ${
+                selectedTier === 'starter'
+                  ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md font-bold'
                   : 'bg-slate-700 text-slate-300 border-slate-600 hover:bg-slate-650'
               }`}
             >
-              ⭐ สมาชิกแพ็กเกจ Pro
+              🟢 Starter (฿890)
             </button>
             <button
               type="button"
-              onClick={() => setSelectedTier('enterprise')}
-              className={`py-2 px-3 rounded-lg text-xs font-prompt font-semibold border transition ${
-                selectedTier === 'enterprise'
-                  ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md'
+              onClick={() => setSelectedTier('pro')}
+              className={`py-2 px-2 rounded-lg text-xs font-prompt font-semibold border transition text-center ${
+                selectedTier === 'pro'
+                  ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md font-bold'
                   : 'bg-slate-700 text-slate-300 border-slate-600 hover:bg-slate-650'
               }`}
             >
-              🏢 แพ็กเกจ Enterprise
+              ⭐ Pro (฿1,490)
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedTier('vip')}
+              className={`py-2 px-2 rounded-lg text-xs font-prompt font-semibold border transition text-center ${
+                selectedTier === 'vip'
+                  ? 'bg-indigo-500 text-white border-indigo-400 shadow-md font-bold'
+                  : 'bg-slate-700 text-slate-300 border-slate-600 hover:bg-slate-650'
+              }`}
+            >
+              💎 VIP (฿2,990)
             </button>
           </div>
 
@@ -276,12 +294,36 @@ export const OwnerKeyManagerModal: React.FC<OwnerKeyManagerModalProps> = ({ isOp
           )}
         </div>
 
+        {/* Preset Demo Keys for Owner to Test */}
+        <div className="bg-slate-800/40 p-3.5 rounded-xl border border-slate-700/80 mb-4">
+          <div className="text-xs font-prompt font-semibold text-amber-300 mb-2 flex items-center gap-1">
+            <span className="material-symbols-outlined text-sm">key</span>
+            <span>รหัสตัวอย่างสำหรับเจ้าของทดสอบระบบ (บันทึกไว้ในระบบ):</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            {PRESET_DEMO_KEYS.map((k, i) => (
+              <div key={i} className="bg-slate-900/90 p-2 rounded-lg border border-slate-700 flex flex-col justify-between">
+                <span className="text-[10px] text-slate-400 font-prompt">{k.label}</span>
+                <div className="flex items-center justify-between mt-1">
+                  <span className="font-mono text-xs text-white font-bold">{k.key}</span>
+                  <button
+                    onClick={() => handleCopy(k.key)}
+                    className="text-amber-400 hover:text-white text-[10px] font-prompt underline"
+                  >
+                    คัดลอก
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
         {/* History / Stored Keys */}
         <div>
           <h4 className="text-xs font-prompt font-semibold text-slate-300 mb-2 flex items-center justify-between">
-            <span>ประวัติ License Key ที่เคยสร้างในเครื่องนี้ ({keyList.length})</span>
+            <span>ประวัติ License Key ที่สร้างแล้วในเครื่องนี้ ({keyList.length})</span>
           </h4>
-          <div className="max-h-48 overflow-y-auto space-y-1.5 text-xs font-mono">
+          <div className="max-h-40 overflow-y-auto space-y-1.5 text-xs font-mono">
             {keyList.length === 0 ? (
               <div className="text-slate-500 text-center py-4 font-sarabun">ยังไม่มีประวัติการสร้าง Key</div>
             ) : (
@@ -289,7 +331,11 @@ export const OwnerKeyManagerModal: React.FC<OwnerKeyManagerModalProps> = ({ isOp
                 <div key={idx} className="flex items-center justify-between bg-slate-800/60 px-3 py-2 rounded border border-slate-700/60">
                   <div>
                     <span className="text-white font-bold">{item.key}</span>
-                    <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-slate-700 text-slate-300 uppercase">
+                    <span className={`ml-2 text-[10px] px-1.5 py-0.5 rounded uppercase font-semibold ${
+                      item.tier === 'starter' ? 'bg-emerald-900/80 text-emerald-300' :
+                      item.tier === 'vip' ? 'bg-indigo-900/80 text-indigo-300' :
+                      'bg-amber-900/80 text-amber-300'
+                    }`}>
                       {item.tier}
                     </span>
                   </div>

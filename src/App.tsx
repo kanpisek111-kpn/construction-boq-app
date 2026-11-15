@@ -209,9 +209,19 @@ export default function App() {
     };
     setLicenseSession(newSess);
     setIsAccessLockOpen(false);
+    if (tier === 'starter') {
+      setActiveMainTab('boq_estimate');
+    }
     setSaveStatusToast(`เข้าสู่ระบบสำเร็จ: ${label} ✓`);
     setTimeout(() => setSaveStatusToast(''), 4000);
   };
+
+  // Guard against Starter or Demo opening Multi-Projects Dashboard
+  useEffect(() => {
+    if (!canAccessFeature('multi_projects', licenseSession.tier) && activeMainTab === 'dashboard') {
+      setActiveMainTab('boq_estimate');
+    }
+  }, [licenseSession.tier, activeMainTab]);
 
   const handleEnterDemo = () => {
     const demoSess = {
@@ -1056,7 +1066,13 @@ export default function App() {
           <div className="flex items-center gap-2 flex-wrap">
             <div className="flex items-center gap-1.5 bg-slate-950 px-2 py-1 rounded-xl border border-slate-800 shadow-inner">
               <button
-                onClick={() => setActiveMainTab('dashboard')}
+                onClick={() => {
+                  if (!canAccessFeature('multi_projects', licenseSession.tier)) {
+                    setUpgradeModalFeature('ระบบจัดการหลายโครงการ (Multi-Projects)');
+                    return;
+                  }
+                  setActiveMainTab('dashboard');
+                }}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition ${
                   activeMainTab === 'dashboard'
                     ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/30 font-black'
@@ -1065,6 +1081,9 @@ export default function App() {
               >
                 <span className="material-symbols-outlined text-sm">dashboard</span>
                 <span>Dashboard โครงการ ({projects.length})</span>
+                {!canAccessFeature('multi_projects', licenseSession.tier) && (
+                  <span className="text-[10px] text-amber-400 font-normal">🔒</span>
+                )}
               </button>
               <button
                 onClick={() => setActiveMainTab('boq_estimate')}
@@ -1214,20 +1233,38 @@ export default function App() {
                 {licenseSession.tier === 'demo' && <span className="text-[10px]">🔒</span>}
               </button>
               <button
-                onClick={handleSaveProjectFile}
+                onClick={() => {
+                  if (!canAccessFeature('project_files_json', licenseSession.tier)) {
+                    setUpgradeModalFeature('ระบบบันทึกและสำรองไฟล์โครงการ (.json)');
+                    return;
+                  }
+                  handleSaveProjectFile();
+                }}
                 className="px-2 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1 transition active:scale-95"
                 title="บันทึกไฟล์โครงการ (.json)"
               >
                 <span className="material-symbols-outlined text-sm text-emerald-400">save</span>
                 <span>เซฟ</span>
+                {!canAccessFeature('project_files_json', licenseSession.tier) && (
+                  <span className="text-[10px] text-amber-400">🔒</span>
+                )}
               </button>
               <button
-                onClick={() => fileInputRef.current?.click()}
+                onClick={() => {
+                  if (!canAccessFeature('project_files_json', licenseSession.tier)) {
+                    setUpgradeModalFeature('ระบบเปิดไฟล์โครงการเดิม (.json)');
+                    return;
+                  }
+                  fileInputRef.current?.click();
+                }}
                 className="px-2 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1 transition active:scale-95"
                 title="เปิดไฟล์โครงการเดิมกลับมาทำต่อ"
               >
                 <span className="material-symbols-outlined text-sm text-cyan-400">file_open</span>
                 <span>เปิด</span>
+                {!canAccessFeature('project_files_json', licenseSession.tier) && (
+                  <span className="text-[10px] text-amber-400">🔒</span>
+                )}
               </button>
               <button
                 onClick={handleExportExcel}
@@ -1265,14 +1302,19 @@ export default function App() {
                   </button>
                 </div>
               )}
-              {licenseSession.tier === 'pro' && (
+              {licenseSession.tier === 'starter' && (
                 <div className="bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 px-2.5 py-1 rounded-xl text-xs font-bold font-prompt flex items-center gap-1">
-                  <span>⭐ สิทธิ์แพ็กเกจ Pro</span>
+                  <span>🟢 แพ็กเกจ Starter</span>
                 </div>
               )}
-              {licenseSession.tier === 'enterprise' && (
-                <div className="bg-blue-500/20 border border-blue-400/40 text-blue-300 px-2.5 py-1 rounded-xl text-xs font-bold font-prompt flex items-center gap-1">
-                  <span>🏢 แพ็กเกจ Enterprise</span>
+              {licenseSession.tier === 'pro' && (
+                <div className="bg-amber-500/20 border border-amber-400/40 text-amber-300 px-2.5 py-1 rounded-xl text-xs font-bold font-prompt flex items-center gap-1">
+                  <span>⭐ แพ็กเกจ Pro Contractor</span>
+                </div>
+              )}
+              {(licenseSession.tier === 'vip' || licenseSession.tier === 'enterprise') && (
+                <div className="bg-indigo-500/20 border border-indigo-400/40 text-indigo-300 px-2.5 py-1 rounded-xl text-xs font-bold font-prompt flex items-center gap-1">
+                  <span>💎 แพ็กเกจ VIP Corporate (100%)</span>
                 </div>
               )}
               {licenseSession.tier === 'demo' && (
@@ -2020,6 +2062,8 @@ export default function App() {
         quotationMeta={quotationMeta}
         onUpdateMeta={setQuotationMeta}
         milestones={milestones}
+        licenseTier={licenseSession.tier}
+        onRequestUpgrade={(feature) => setUpgradeModalFeature(feature)}
       />
       {/* Electrical & Wire Sizing Modal */}
       <ElectricalEstimatorModal
