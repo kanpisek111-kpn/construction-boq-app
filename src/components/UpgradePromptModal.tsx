@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { LicenseTier, validatePasscodeOrKey, saveSession } from '../services/authService';
 
 interface UpgradePromptModalProps {
@@ -20,6 +20,14 @@ export const UpgradePromptModal: React.FC<UpgradePromptModalProps> = ({
 }) => {
   const [keyInput, setKeyInput] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+
+  // Reset inputs and error messages when modal opens or featureName changes
+  useEffect(() => {
+    if (isOpen) {
+      setKeyInput('');
+      setErrorMsg('');
+    }
+  }, [isOpen, featureName]);
 
   if (!isOpen) return null;
 

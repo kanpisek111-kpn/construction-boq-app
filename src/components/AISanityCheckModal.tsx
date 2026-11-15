@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { BOQItem, ConstructionCategory } from '../types';
 import { CATEGORY_LABELS } from '../constants';
 import { computeBOQSummary } from '../services/calculator';
+import { copyToClipboardWithFallback } from '../services/imageUtils';
 
 export type SanitySeverity = 'critical' | 'warning' | 'info';
 
@@ -548,7 +549,7 @@ export const AISanityCheckModal: React.FC<AISanityCheckModalProps> = ({
     onApplyFixes(updated);
   };
 
-  const handleCopyReport = () => {
+  const handleCopyReport = async () => {
     let report = `🛡️ รายงานผลการตรวจสอบ BOQ & มาตรฐานวิศวกรรม (AI Safety Check)\n`;
     report += `🏗️ โครงการ: ${projectName} (${houseAreaSqm} ตร.ม.)\n`;
     report += `📊 คะแนนความสมบูรณ์: ${healthScore}/100 (${scoreLabel})\n`;
@@ -570,7 +571,7 @@ export const AISanityCheckModal: React.FC<AISanityCheckModalProps> = ({
     report += `--------------------------------------------------\n`;
     report += `✨ ตรวจสอบอัตโนมัติโดยระบบ Thai Construction BOQ Pro`;
 
-    navigator.clipboard.writeText(report);
+    await copyToClipboardWithFallback(report);
     setCopyToast(true);
     setTimeout(() => setCopyToast(false), 3000);
   };

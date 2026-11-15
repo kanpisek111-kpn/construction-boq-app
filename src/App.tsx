@@ -2212,6 +2212,12 @@ export default function App() {
           setItems(newItems);
           setProjectName(name);
           setHouseAreaSqm(area);
+          setAreaInputText(String(area));
+          setSelectedCategory('all');
+          setBoqSearchQuery('');
+          setActiveMainTab('boq_estimate');
+          setSaveStatusToast(`สร้างรายการ BOQ สำหรับ "${name}" (${area} ตร.ม.) สำเร็จเรียบร้อย ✓`);
+          setTimeout(() => setSaveStatusToast(''), 4000);
         }}
       />
       {/* Cost Analytics & Profit Visualizer Modal */}

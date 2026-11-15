@@ -301,7 +301,7 @@ export function exportBOQToExcel({
         `งวดที่ ${m.milestoneNumber || ''}`,
         m.title || '',
         `${m.percentage}%`,
-        { t: 'n', v: amount, f: `ROUND(D2*${m.percentage}/100, 0)` },
+        { t: 'n', v: amount, f: `ROUND($E$2*${m.percentage}/100, 0)` },
         m.durationDays ? `${m.durationDays} วัน` : '-',
         m.deliverables?.join(', ') || ''
       ]);
