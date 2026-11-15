@@ -49,6 +49,7 @@ const REVOKED_KEYS_STORAGE_KEY = 'construction_boq_revoked_keys_v1';
 const DEVICE_ID_KEY = 'construction_boq_device_id_v2';
 const DEVICE_BINDINGS_STORAGE_KEY = 'construction_boq_device_bindings_v2';
 const CLOUD_SYNC_ENDPOINT = 'https://kvdb.io/4y9qEw9gRk5y9j2K8V3M2A';
+const CLOUD_BLACKLIST_KEY = 'boq_blacklist_global';
 
 // Hardcoded blacklist in code (can add known violators directly here)
 const HARDCODED_REVOKED_KEYS: string[] = [];
@@ -93,6 +94,19 @@ export function getStoredRevokedKeys(): string[] {
   }
 }
 
+export async function syncBlacklistToCloud(list: string[]): Promise<void> {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000);
+    await fetch(`${CLOUD_SYNC_ENDPOINT}/${CLOUD_BLACKLIST_KEY}`, {
+      method: 'POST',
+      body: JSON.stringify(list),
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+  } catch {}
+}
+
 export function revokeKey(key: string): void {
   try {
     const clean = key.trim().toUpperCase();
@@ -101,6 +115,7 @@ export function revokeKey(key: string): void {
     if (!list.includes(clean)) {
       list.unshift(clean);
       localStorage.setItem(REVOKED_KEYS_STORAGE_KEY, JSON.stringify(list));
+      syncBlacklistToCloud(list);
     }
   } catch {}
 }
@@ -110,6 +125,7 @@ export function unrevokeKey(key: string): void {
     const clean = key.trim().toUpperCase();
     const list = getStoredRevokedKeys().filter(k => k !== clean);
     localStorage.setItem(REVOKED_KEYS_STORAGE_KEY, JSON.stringify(list));
+    syncBlacklistToCloud(list);
   } catch {}
 }
 
@@ -120,23 +136,62 @@ export function isKeyRevoked(key: string): boolean {
   return list.some(k => k === clean);
 }
 
-// Sync with remote blacklist.json
+// Sync with remote blacklist.json & cloud kvdb
 export async function syncRemoteBlacklist(): Promise<string[]> {
+  const current = getStoredRevokedKeys();
+  const remoteKeys: string[] = [];
+
+  // 1. Fetch from ./blacklist.json
   try {
-    const res = await fetch(`./blacklist.json?t=${Date.now()}`, { cache: 'no-store' });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 2000);
+    const res = await fetch(`./blacklist.json?t=${Date.now()}`, {
+      cache: 'no-store',
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
     if (res.ok) {
       const data = await res.json();
       if (Array.isArray(data.revokedKeys)) {
-        const current = getStoredRevokedKeys();
-        const merged = Array.from(new Set([...current, ...data.revokedKeys.map((k: string) => k.toUpperCase().trim())]));
-        localStorage.setItem(REVOKED_KEYS_STORAGE_KEY, JSON.stringify(merged));
-        return merged;
+        data.revokedKeys.forEach((k: string) => {
+          if (typeof k === 'string' && k.trim()) {
+            remoteKeys.push(k.toUpperCase().trim());
+          }
+        });
       }
     }
   } catch (err) {
-    // Offline / network fallback
+    // Offline / file fallback
   }
-  return getStoredRevokedKeys();
+
+  // 2. Fetch from CLOUD_SYNC_ENDPOINT (boq_blacklist_global)
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 2500);
+    const res = await fetch(`${CLOUD_SYNC_ENDPOINT}/${CLOUD_BLACKLIST_KEY}?t=${Date.now()}`, {
+      cache: 'no-store',
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+    if (res.ok) {
+      const cloudData = await res.json();
+      if (Array.isArray(cloudData)) {
+        cloudData.forEach((k: string) => {
+          if (typeof k === 'string' && k.trim()) {
+            remoteKeys.push(k.toUpperCase().trim());
+          }
+        });
+      }
+    }
+  } catch (err) {
+    // Offline / cloud fetch fallback
+  }
+
+  const merged = Array.from(new Set([...current, ...remoteKeys]));
+  try {
+    localStorage.setItem(REVOKED_KEYS_STORAGE_KEY, JSON.stringify(merged));
+  } catch {}
+  return merged;
 }
 
 // Check if currently active session was revoked

@@ -141,7 +141,7 @@ export const StructureEstimatorModal: React.FC<StructureEstimatorModalProps> = (
         setCastInPlaceAreaSqm(currentHouseAreaSqm);
       }
     }
-  }, [isOpen, currentHouseAreaSqm, slabType]);
+  }, [isOpen, currentHouseAreaSqm]);
 
   // แท็บทำงาน: งานเสาเข็มและดินขุด, ฟุตติ้ง, คาน, เสา, พื้น
   const [activeTab, setActiveTab] = useState<'piles_earthwork' | 'footing' | 'beam' | 'column' | 'slab'>('piles_earthwork');

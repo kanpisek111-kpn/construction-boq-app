@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   LicenseTier, 
   validatePasscodeOrKey, 
@@ -225,6 +225,15 @@ export const OwnerKeyManagerModal: React.FC<OwnerKeyManagerModalProps> = ({ isOp
   
   const [actionNotice, setActionNotice] = useState<string>('');
 
+  useEffect(() => {
+    if (isOpen) {
+      setKeyList(getStoredGeneratedKeys());
+      setRevokedList(getStoredRevokedKeys());
+      setDeviceBindings(getLocalDeviceBindings());
+      setActionNotice('');
+    }
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const handleGenerate = () => {
@@ -233,10 +242,37 @@ export const OwnerKeyManagerModal: React.FC<OwnerKeyManagerModalProps> = ({ isOp
     setKeyList(getStoredGeneratedKeys());
   };
 
+  const fallbackCopy = (text: string) => {
+    try {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.setAttribute('readonly', '');
+      textarea.style.position = 'fixed';
+      textarea.style.left = '-9999px';
+      textarea.style.top = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      textarea.setSelectionRange(0, textarea.value.length);
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+      setCopyToast(true);
+      setTimeout(() => setCopyToast(false), 2000);
+    } catch (e) {
+      console.warn('Fallback copy failed', e);
+    }
+  };
+
   const handleCopy = (text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopyToast(true);
-    setTimeout(() => setCopyToast(false), 2000);
+    if (navigator?.clipboard?.writeText) {
+      navigator.clipboard.writeText(text).then(() => {
+        setCopyToast(true);
+        setTimeout(() => setCopyToast(false), 2000);
+      }).catch(() => {
+        fallbackCopy(text);
+      });
+      return;
+    }
+    fallbackCopy(text);
   };
 
   const handleRevokeSpecificKey = (targetKey?: string) => {

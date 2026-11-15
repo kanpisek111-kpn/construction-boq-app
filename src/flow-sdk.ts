@@ -57,8 +57,20 @@ export const Flow = {
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (err) {
       console.error('Flow.download failed:', err);
-      // Fallback
-      window.open(`data:${mimeType};base64,${base64}`, '_blank');
+      // Fallback using Blob URL & <a download> instead of window.open
+      try {
+        const fallbackBlob = new Blob([base64], { type: mimeType });
+        const fallbackUrl = URL.createObjectURL(fallbackBlob);
+        const link = document.createElement('a');
+        link.href = fallbackUrl;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setTimeout(() => URL.revokeObjectURL(fallbackUrl), 1000);
+      } catch (fallbackErr) {
+        console.error('Download fallback failed:', fallbackErr);
+      }
     }
   },
 

@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { LicenseTier, validatePasscodeOrKey, saveSession } from '../services/authService';
+import { LicenseTier, validatePasscodeOrKey, saveSession, validateAndEnforceDeviceQuota } from '../services/authService';
 
 interface UpgradePromptModalProps {
   isOpen: boolean;
   onClose: () => void;
   featureName: string;
   currentTier?: LicenseTier;
-  onUnlocked: (tier: LicenseTier, label: string) => void;
+  onUnlocked: (tier: LicenseTier, label?: string, keyOrPass?: string) => void;
   salesPageUrl?: string;
 }
 
@@ -20,12 +20,14 @@ export const UpgradePromptModal: React.FC<UpgradePromptModalProps> = ({
 }) => {
   const [keyInput, setKeyInput] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Reset inputs and error messages when modal opens or featureName changes
   useEffect(() => {
     if (isOpen) {
       setKeyInput('');
       setErrorMsg('');
+      setIsSubmitting(false);
     }
   }, [isOpen, featureName]);
 
@@ -34,34 +36,61 @@ export const UpgradePromptModal: React.FC<UpgradePromptModalProps> = ({
   const isStarterUser = currentTier === 'starter';
   const isProUser = currentTier === 'pro';
 
-  const handleUnlock = (e: React.FormEvent) => {
+  const handleUnlock = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!keyInput.trim()) {
+    const cleanPass = keyInput.trim();
+    if (!cleanPass) {
       setErrorMsg('กรุณากรอกรหัสผ่านหรือ License Key');
       return;
     }
 
-    const res = validatePasscodeOrKey(keyInput.trim());
-    if (res.valid) {
-      if (isProUser && res.tier === 'pro') {
-        setErrorMsg('⚠️ คุณเปิดใช้งานแพ็กเกจ Pro อยู่แล้ว ฟังก์ชันนี้ต้องใช้รหัส VIP (VIP-xxxx-xxxx) หรือรหัสเจ้าของระบบ');
-        return;
-      }
-      if (isStarterUser && res.tier === 'starter') {
-        setErrorMsg('⚠️ คุณเปิดใช้งานแพ็กเกจ Starter อยู่แล้ว ฟังก์ชันนี้ต้องใช้รหัส Pro หรือ VIP');
-        return;
-      }
+    setIsSubmitting(true);
+    setErrorMsg('');
 
-      saveSession({
-        tier: res.tier,
-        keyOrPass: keyInput.trim(),
-        activatedAt: new Date().toISOString(),
-        userLabel: res.label
-      });
-      onUnlocked(res.tier, res.label);
-      onClose();
-    } else {
-      setErrorMsg('❌ รหัสผ่านหรือ License Key ไม่ถูกต้อง');
+    try {
+      const res = validatePasscodeOrKey(cleanPass);
+      if (res.valid) {
+        if (isProUser && res.tier === 'pro') {
+          setErrorMsg('⚠️ คุณเปิดใช้งานแพ็กเกจ Pro อยู่แล้ว ฟังก์ชันนี้ต้องใช้รหัส VIP (VIP-xxxx-xxxx) หรือรหัสเจ้าของระบบ');
+          setIsSubmitting(false);
+          return;
+        }
+        if (isStarterUser && res.tier === 'starter') {
+          setErrorMsg('⚠️ คุณเปิดใช้งานแพ็กเกจ Starter อยู่แล้ว ฟังก์ชันนี้ต้องใช้รหัส Pro หรือ VIP');
+          setIsSubmitting(false);
+          return;
+        }
+
+        // บังคับตรวจสอบโควตาเครื่อง (1 PC + 1 มือถือต่อรหัส เจ้าของยกเว้น)
+        const deviceCheck = await validateAndEnforceDeviceQuota(cleanPass, res.tier);
+        if (!deviceCheck.allowed) {
+          setErrorMsg(
+            deviceCheck.errorMessage || 
+            '⚠️ อุปกรณ์ใช้งานเกินโควตาที่กำหนด (จำกัด 1 คอมพิวเตอร์ + 1 มือถือต่อรหัส) หากต้องการเปลี่ยนอุปกรณ์ กรุณาติดต่อแอดมินทาง LINE: @003iwzqt'
+          );
+          setIsSubmitting(false);
+          return;
+        }
+
+        saveSession({
+          tier: res.tier,
+          keyOrPass: cleanPass,
+          activatedAt: new Date().toISOString(),
+          userLabel: res.label
+        });
+        onUnlocked(res.tier, res.label, cleanPass);
+        onClose();
+      } else {
+        if (res.isRevoked) {
+          setErrorMsg(res.errorMessage || '🚫 รหัส License Key นี้ถูกระงับการใช้งานโดยผู้ดูแลระบบ กรุณาติดต่อผู้ดูแลทาง LINE: @003iwzqt');
+        } else {
+          setErrorMsg(res.errorMessage || '❌ รหัสผ่านหรือ License Key ไม่ถูกต้อง');
+        }
+      }
+    } catch (err) {
+      setErrorMsg('❌ เกิดข้อผิดพลาดในการตรวจสอบสิทธิ์ กรุณาลองใหม่อีกครั้ง');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -215,9 +244,10 @@ export const UpgradePromptModal: React.FC<UpgradePromptModalProps> = ({
               />
               <button
                 type="submit"
-                className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-prompt font-bold text-xs px-3.5 py-2 rounded-lg transition"
+                disabled={isSubmitting}
+                className="bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-prompt font-bold text-xs px-3.5 py-2 rounded-lg transition"
               >
-                ปลดล็อก
+                {isSubmitting ? 'ตรวจสอบ...' : 'ปลดล็อก'}
               </button>
             </div>
             {errorMsg && <p className="text-red-400 text-[11px] mt-1">{errorMsg}</p>}

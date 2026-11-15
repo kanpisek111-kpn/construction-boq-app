@@ -918,8 +918,17 @@ export default function App() {
             return true;
           }
           // อย่าลบรายการสุขภัณฑ์/อุปกรณ์ห้องน้ำเมื่องานสุขาภิบาลอัปเดตใหม่
-          if (catsToReplace.includes('sanitary') && item.id.startsWith('san-fixture-')) {
-            return true;
+          if (catsToReplace.includes('sanitary')) {
+            const isSanFixture = item.id.startsWith('san-fixture-') ||
+              item.id === 'san-toilet-std' ||
+              item.id === 'san-bidet-spray' ||
+              item.id === 'san-basin-counter' ||
+              item.id === 'san-rain-shower' ||
+              item.id === 'san-accessories-set' ||
+              item.id.startsWith('wiz-sanitary-fixtures-');
+            if (isSanFixture) {
+              return true;
+            }
           }
           return false;
         }
@@ -963,7 +972,12 @@ export default function App() {
 
   const handleApplyCeilingItems = (newItems: BOQItem[]) => {
     setItems(prev => {
-      const filtered = prev.filter(item => !(item.id.startsWith('fin-ceiling-') || item.id.startsWith('ceil-')));
+      const filtered = prev.filter(item => !(
+        item.id.startsWith('fin-ceiling-') || 
+        item.id.startsWith('ceil-') ||
+        item.id === 'fin-1' ||
+        item.id.startsWith('wiz-ceiling-')
+      ));
       return [...filtered, ...newItems];
     });
     setSaveStatusToast(`อัปเดตงานฝ้าเพดาน ${newItems.length} รายการลง BOQ เรียบร้อย ✓`);
@@ -972,7 +986,11 @@ export default function App() {
 
   const handleApplyPaintItems = (newItems: BOQItem[]) => {
     setItems(prev => {
-      const filtered = prev.filter(item => !item.id.startsWith('paint-'));
+      const filtered = prev.filter(item => !(
+        item.id.startsWith('paint-') ||
+        item.id === 'fin-paint' ||
+        item.id.startsWith('wiz-paint-')
+      ));
       return [...filtered, ...newItems];
     });
     setSaveStatusToast(`อัปเดตงานสี ${newItems.length} รายการลง BOQ เรียบร้อย ✓`);
@@ -2396,7 +2414,7 @@ export default function App() {
         featureName={upgradeModalFeature || ''}
         currentTier={licenseSession.tier}
         onClose={() => setUpgradeModalFeature(null)}
-        onUnlocked={handleAuthSuccess}
+        onUnlocked={(tier, label, keyOrPass) => handleAuthSuccess(tier, label || '', keyOrPass || '')}
       />
 
       {/* Owner Key Manager Modal */}
