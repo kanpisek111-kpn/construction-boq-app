@@ -139,7 +139,9 @@ export function isKeyRevoked(key: string): boolean {
 // Sync with remote blacklist.json & cloud kvdb
 export async function syncRemoteBlacklist(): Promise<string[]> {
   const current = getStoredRevokedKeys();
-  const remoteKeys: string[] = [];
+  const fileKeys: string[] = [];
+  const cloudKeys: string[] = [];
+  let isCloudSuccess = false;
 
   // 1. Fetch from ./blacklist.json
   try {
@@ -155,7 +157,7 @@ export async function syncRemoteBlacklist(): Promise<string[]> {
       if (Array.isArray(data.revokedKeys)) {
         data.revokedKeys.forEach((k: string) => {
           if (typeof k === 'string' && k.trim()) {
-            remoteKeys.push(k.toUpperCase().trim());
+            fileKeys.push(k.toUpperCase().trim());
           }
         });
       }
@@ -178,16 +180,24 @@ export async function syncRemoteBlacklist(): Promise<string[]> {
       if (Array.isArray(cloudData)) {
         cloudData.forEach((k: string) => {
           if (typeof k === 'string' && k.trim()) {
-            remoteKeys.push(k.toUpperCase().trim());
+            cloudKeys.push(k.toUpperCase().trim());
           }
         });
+        isCloudSuccess = true;
       }
     }
   } catch (err) {
     // Offline / cloud fetch fallback
   }
 
-  const merged = Array.from(new Set([...current, ...remoteKeys]));
+  // หากดึงข้อมูลจาก Cloud สำเร็จ ให้ใช้ Cloud + blacklist.json + HARDCODED_REVOKED_KEYS
+  // เพื่อให้การ "ปลดแบน" (unrevokeKey) มีผลปลดล็อกข้ามเครื่องลูกค้าได้จริง (ไม่ถูก localStorage ตัวเก่าดึงกลับมา)
+  // หากดึง Cloud ไม่สำเร็จ (ออฟไลน์) จึงค่อยใช้ current จาก localStorage ร่วมด้วย
+  const baseList = isCloudSuccess
+    ? [...cloudKeys, ...fileKeys, ...HARDCODED_REVOKED_KEYS]
+    : [...current, ...fileKeys, ...cloudKeys, ...HARDCODED_REVOKED_KEYS];
+
+  const merged = Array.from(new Set(baseList.map(k => k.trim().toUpperCase())));
   try {
     localStorage.setItem(REVOKED_KEYS_STORAGE_KEY, JSON.stringify(merged));
   } catch {}

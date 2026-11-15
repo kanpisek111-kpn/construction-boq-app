@@ -57,9 +57,16 @@ export const Flow = {
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (err) {
       console.error('Flow.download failed:', err);
-      // Fallback using Blob URL & <a download> instead of window.open
+      // Fallback using Blob URL & <a download> with proper base64 decoding
       try {
-        const fallbackBlob = new Blob([base64], { type: mimeType });
+        const cleanBase64 = base64.includes(',') ? base64.split(',')[1] : base64;
+        const binaryStr = atob(cleanBase64);
+        const len = binaryStr.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) {
+          bytes[i] = binaryStr.charCodeAt(i);
+        }
+        const fallbackBlob = new Blob([bytes], { type: mimeType });
         const fallbackUrl = URL.createObjectURL(fallbackBlob);
         const link = document.createElement('a');
         link.href = fallbackUrl;
@@ -69,7 +76,18 @@ export const Flow = {
         document.body.removeChild(link);
         setTimeout(() => URL.revokeObjectURL(fallbackUrl), 1000);
       } catch (fallbackErr) {
-        console.error('Download fallback failed:', fallbackErr);
+        console.error('Download fallback failed, trying direct data URI link:', fallbackErr);
+        try {
+          const cleanBase64 = base64.includes(',') ? base64.split(',')[1] : base64;
+          const link = document.createElement('a');
+          link.href = `data:${mimeType};base64,${cleanBase64}`;
+          link.download = filename;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        } catch (dataUriErr) {
+          console.error('Data URI download failed:', dataUriErr);
+        }
       }
     }
   },
