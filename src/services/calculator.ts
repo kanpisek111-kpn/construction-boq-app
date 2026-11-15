@@ -327,7 +327,7 @@ export function calculateSanitarySystem(params: SanitaryCalcParams): SanitaryCal
     (floorDrainPcs * 180);
 
   const septicPrice = septicTankLiters === 2000 ? 8900 : septicTankLiters === 1600 ? 7400 : 5800;
-  const greasePrice = greaseTrapLiters >= 50 ? 2800 : 1650;
+  const greasePrice = greaseTrapLiters >= 100 ? 3900 : greaseTrapLiters >= 50 ? 2800 : 1650;
 
   let pumpTankCost = 0;
   if (includeWaterPumpAndTank) {
@@ -588,7 +588,7 @@ export function generateSiteMaterialsProcurementList(
       }
     }
 
-    if (((nameLower.includes('กระเบื้อง') && item.category !== 'roof') || nameLower.includes('แกรนิตโต้') || nameLower.includes('พอร์ซเลน') || (item.category === 'finishes' && nameLower.includes('tile')))) {
+    if (((nameLower.includes('กระเบื้อง') && item.category !== 'roof' && item.unit !== 'ขั้น' && !nameLower.includes('ขั้นบันได')) || nameLower.includes('แกรนิตโต้') || nameLower.includes('พอร์ซเลน') || (item.category === 'finishes' && nameLower.includes('tile')))) {
       let sqmPerBox = 1.0;
       let piecesPerBox = 11;
       let tileDimStr = 'ทั่วไป';
@@ -927,23 +927,37 @@ export function generateSiteMaterialsProcurementList(
         const screwBoxes = Math.max(1, Math.ceil((areaVal * 20) / 1000));
         const hangerSets = Math.ceil(areaVal * 1.3);
 
-        // 1. แผ่นยิปซัมบอร์ด
+        // 1. แผ่นยิปซัมบอร์ด / สมาร์ทบอร์ด ตามสเปกจริง
+        let boardName = 'แผ่นยิปซัมบอร์ด 9 มม. (ขอบลาด) 1.20x2.40 ม.';
+        let boardPrice = 165;
+        let boardNote = 'แผ่นยิปซัมขอบลาดหนา 9 มม. มอก. สำหรับฝ้าฉาบเรียบทั่วไป';
+
+        if (nameLower.includes('ทนชื้น') || specLower.includes('ทนชื้น')) {
+          boardName = 'แผ่นยิปซัมทนชื้น (Moisture Resistant) 9 มม. 1.20x2.40 ม.';
+          boardPrice = 245;
+          boardNote = 'แผ่นยิปซัมทนชื้น สำหรับห้องน้ำ ห้องครัว และระเบียง';
+        } else if (nameLower.includes('สมาร์ทบอร์ด') || specLower.includes('สมาร์ทบอร์ด') || nameLower.includes('ไฟเบอร์ซีเมนต์')) {
+          boardName = 'แผ่นสมาร์ทบอร์ดไฟเบอร์ซีเมนต์ 6 มม. 1.20x2.40 ม.';
+          boardPrice = 195;
+          boardNote = 'แผ่นสมาร์ทบอร์ด ทนน้ำ ปลวกไม่กิน สำหรับภายนอกและชายคา';
+        }
+
         materials.push({
           id: `mat-proc-ceiling-sheet-${item.id}-${index}`,
           materialGroup: 'tiles_finishes',
-          name: `แผ่นยิปซัมบอร์ด 9 มม. (ขอบลาด) 1.20x2.40 ม.`,
+          name: boardName,
           spec: `${item.name} สำหรับพื้นที่ ${item.quantity} ตร.ม. (คำนวณเผื่อตัด 5% รวม ${gypsumSheets} แผ่น)`,
           netQuantity: item.quantity,
           wastePercent,
           orderQuantity: gypsumSheets,
           unit: 'แผ่น',
-          unitPriceEstimate: 165,
-          totalEstimatedCost: gypsumSheets * 165,
+          unitPriceEstimate: boardPrice,
+          totalEstimatedCost: gypsumSheets * boardPrice,
           priorityPhase,
           milestoneNumber,
           milestoneTitle,
           boqCategory: item.category,
-          packageNote: 'แผ่นยิปซัมขอบลาดหนา 9 มม. มอก. สำหรับฝ้าฉาบเรียบ'
+          packageNote: boardNote
         });
 
         // 2. โครงคร่าว C-Line
@@ -2195,10 +2209,6 @@ export function calculateStructureMaterials(params: StructureCalcParams): Struct
   let totalDB16M = totalFootingDB16M + totalColDB16M + totalBeamDB16M;
   let totalBeamDB20TotalM = totalBeamDB20M;
 
-  if (castInPlaceRebarType === 'DB12') {
-    totalDB12M += slabCastRebarM;
-  }
-
   const db12Kg = Math.round(totalDB12M * 0.888);
   const db16Kg = Math.round(totalDB16M * 1.580);
   const db20Kg = Math.round(totalBeamDB20TotalM * 2.470);
@@ -2226,20 +2236,8 @@ export function calculateStructureMaterials(params: StructureCalcParams): Struct
   const stirrupBars = colStirrupBars + beamStirrupBars;
   const totalStirrupM = colStirrupTotalM + beamStirrupTotalM;
 
-  const totalSteelKg = db12Kg + db16Kg + db20Kg + stirrupKg + (castInPlaceRebarType === 'RB9' ? slabCastRebarKg : 0);
+  const totalSteelKg = db12Kg + db16Kg + db20Kg + stirrupKg + slabCastRebarKg;
   const tieWireKg = Math.max(5, Math.ceil(totalSteelKg * 0.02));
-
-  const estConcreteMat = totalConcreteCuM * 2150;
-  const estConcreteLab = totalConcreteCuM * 450;
-  const estSteelMat = (totalSteelKg * 28.5) + (tieWireKg * 55);
-  const estSteelLab = totalSteelKg * 7.5;
-  // ไม้แบบคิดค่าเสื่อมการหมุนเวียนใช้ซ้ำ 3-4 ครั้ง (40% ของราคาไม้ใหม่ตามมาตรฐานกรมบัญชีกลาง)
-  const estFormMat = Math.round(totalFormworkSqm * (150 * 0.40));
-  // เผื่อระยะทาบ 40d-50d และงอขอเหล็กเสริม 12%
-  const rebarLapAllowanceKg = Math.round((db12Kg + db16Kg + db20Kg) * 0.12);
-  // ลูกปูนหนุนเหล็ก Covering 4.5 ลูก/ตร.ม. ไม้แบบ
-  const concreteSpacersPcs = Math.ceil(totalFormworkSqm * 4.5);
-  const estFormLab = totalFormworkSqm * 120;
 
   const wireMeshPricePerSqm = wireMeshDiameterMm === 6 ? 65 : 45;
   // --- คำนวณงานเสาเข็มและงานดินขุด (Earthwork & Piling) ---
@@ -2291,12 +2289,33 @@ export function calculateStructureMaterials(params: StructureCalcParams): Struct
   const sandBeddingCuM = Math.round(totalFootingAreaSqm * (sandBeddingThicknessM || 0.05) * 100) / 100;
   const leanConcreteCuM = Math.round(totalFootingAreaSqm * (leanConcreteThicknessM || 0.05) * 100) / 100;
 
+  const estFormworkSum = Math.round((formworkFootingSqm + formworkColumnSqm + formworkBeamSqm) * 10) / 10;
+  const estFormMat = Math.round(estFormworkSum * 240);
+  const estFormLab = Math.round(estFormworkSum * 130);
+
+  const estConcreteMat = totalConcreteCuM * 2150;
+  const estConcreteLab = (concreteFootingCuM + concreteColumnCuM + concreteBeamCuM) * 450 + (concreteSlabTotalCuM * 400);
+
+  const estCastRebarMat = slabCastRebarKg * (castInPlaceRebarType === 'DB12' ? 28 : 29);
+  const estCastRebarLab = slabCastRebarKg * 7.5;
+  const estCastFormMat = effectiveCastInPlaceSqm * 220;
+  const estCastFormLab = effectiveCastInPlaceSqm * 140;
+
+  const estSteelMat = (db12Kg * 28) + (db16Kg * 28.5) + (db20Kg * 29) + (stirrupKg * 29) + (tieWireKg * 55) + estCastRebarMat;
+  const estSteelLab = (db12Kg * 6.5) + (db16Kg * 6.5) + (db20Kg * 7.0) + (stirrupKg * 7.5) + estCastRebarLab;
+
   const estPrecastPlanksMat = effectivePrecastSqm * 240;
-  const estPrecastPlanksLab = effectivePrecastSqm * 55;
+  const estPrecastPlanksLab = effectivePrecastSqm * 65;
   const estWireMeshMat = wireMeshAreaSqm * wireMeshPricePerSqm;
   const estWireMeshLab = wireMeshAreaSqm * 15;
-  const slabExtraMat = estPrecastPlanksMat + estWireMeshMat;
-  const slabExtraLab = estPrecastPlanksLab + estWireMeshLab;
+  const slabExtraMat = estPrecastPlanksMat + estWireMeshMat + estCastFormMat;
+  const slabExtraLab = estPrecastPlanksLab + estWireMeshLab + estCastFormLab;
+
+  const prepMat = pileMaterialCost + (sandBeddingCuM * 480) + (leanConcreteCuM * 1750);
+  const prepLab = pileLaborCost + pileCutOffCost + (excavationCuM * 110) + (backfillCuM * 75) + (sandBeddingCuM * 120) + (leanConcreteCuM * 350);
+
+  const rebarLapAllowanceKg = Math.round((db12Kg + db16Kg + db20Kg) * 0.12);
+  const concreteSpacersPcs = Math.ceil(totalFormworkSqm * 4.5);
 
   return {
     concreteFootingCuM: Math.round(concreteFootingCuM * 100) / 100,
@@ -2337,8 +2356,8 @@ export function calculateStructureMaterials(params: StructureCalcParams): Struct
     slabCastRebarKg,
     slabCastRebarBars,
     tieWireKg,
-    estMaterialCost: Math.round(estConcreteMat + estSteelMat + estFormMat + slabExtraMat),
-    estLaborCost: Math.round(estConcreteLab + estSteelLab + estFormLab + slabExtraLab),
+    estMaterialCost: Math.round(estConcreteMat + estSteelMat + estFormMat + slabExtraMat + prepMat),
+    estLaborCost: Math.round(estConcreteLab + estSteelLab + estFormLab + slabExtraLab + prepLab),
     footingSummaryList,
     beamSummaryList,
     totalFootingsCount,

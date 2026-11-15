@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { BOQItem, ConstructionCategory, FoundationPileType } from '../types';
 
 interface QuickBOQWizardModalProps {
@@ -22,11 +22,17 @@ export const QuickBOQWizardModal: React.FC<QuickBOQWizardModalProps> = ({
 
   // Step 1: Building Archetype & Size
   const [archetype, setArchetype] = useState<BuildingArchetype>('contemporary_2fl');
-  const [areaSqm, setAreaSqm] = useState<number>(currentHouseAreaSqm || 140);
-  const [widthM, setWidthM] = useState<number>(10);
-  const [lengthM, setLengthM] = useState<number>(14);
+  const [areaSqm, setAreaSqm] = useState<number>(currentHouseAreaSqm || 160);
+  const [widthM, setWidthM] = useState<number>(8);
+  const [lengthM, setLengthM] = useState<number>(10);
   const [floors, setFloors] = useState<1 | 2 | 3>(2);
   const [customName, setCustomName] = useState<string>('บ้านพักอาศัย คสล. 2 ชั้น สไตล์ร่วมสมัย');
+
+  useEffect(() => {
+    if (isOpen && currentHouseAreaSqm && currentHouseAreaSqm > 0) {
+      setAreaSqm(currentHouseAreaSqm);
+    }
+  }, [isOpen, currentHouseAreaSqm]);
 
   // Step 2: Foundation & Roof System
   const [pileType, setPileType] = useState<FoundationPileType>('bored_pile_35');
@@ -50,8 +56,8 @@ export const QuickBOQWizardModal: React.FC<QuickBOQWizardModalProps> = ({
     } else if (type === 'contemporary_2fl') {
       setFloors(2);
       setAreaSqm(160);
-      setWidthM(10);
-      setLengthM(16);
+      setWidthM(8);
+      setLengthM(10);
       setRoofType('hip');
       setPileType('bored_pile_35');
       setCustomName('บ้านพักอาศัย คสล. 2 ชั้น สไตล์ร่วมสมัย (Contemporary)');
@@ -66,8 +72,8 @@ export const QuickBOQWizardModal: React.FC<QuickBOQWizardModalProps> = ({
     } else if (type === 'commercial_shophouse') {
       setFloors(3);
       setAreaSqm(240);
-      setWidthM(4.5);
-      setLengthM(18);
+      setWidthM(4.0);
+      setLengthM(20);
       setRoofType('lean_to');
       setPileType('bored_pile_35');
       setCustomName('อาคารพาณิชย์ คสล. 3 ชั้น (Commercial Shophouse)');
@@ -502,7 +508,11 @@ export const QuickBOQWizardModal: React.FC<QuickBOQWizardModalProps> = ({
   if (!isOpen) return null;
 
   const handleFinish = () => {
-    onApplyBOQ(generatedBOQ, customName, areaSqm);
+    const finalItems = generatedBOQ.map(it => ({
+      ...it,
+      basePerSqm: (it.quantity || 0) / Math.max(1, areaSqm)
+    }));
+    onApplyBOQ(finalItems, customName, areaSqm);
     onClose();
   };
 

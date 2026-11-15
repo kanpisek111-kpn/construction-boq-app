@@ -36,7 +36,9 @@ import {
   logout as logoutAuth, 
   canAccessFeature,
   syncRemoteBlacklist,
-  checkAndEnforceSessionRevocation 
+  checkAndEnforceSessionRevocation,
+  isKeyRevoked,
+  validateAndEnforceDeviceQuota
 } from './services/authService';
 import { AccessLockModal, OwnerKeyManagerModal } from './components/AccessLockModal';
 import { UpgradePromptModal } from './components/UpgradePromptModal';
@@ -231,26 +233,57 @@ export default function App() {
   const [isOwnerKeyModalOpen, setIsOwnerKeyModalOpen] = useState<boolean>(false);
   const [accessLockNotice, setAccessLockNotice] = useState<string>('');
 
-  // Check remote blacklist & session revocation on startup
+  // Check remote blacklist & session revocation and device quota on startup and focus
   useEffect(() => {
-    syncRemoteBlacklist().then(() => {
-      if (checkAndEnforceSessionRevocation()) {
-        setLicenseSession({
-          tier: 'locked',
-          keyOrPass: '',
-          activatedAt: '',
-          userLabel: 'ยังไม่ได้ยืนยันสิทธิ์'
-        });
-        setAccessLockNotice('❌ สิทธิ์การใช้งานของคุณถูกระงับ เนื่องจากตรวจพบการละเมิดเงื่อนไข กรุณาติดต่อผู้ดูแลระบบผ่าน LINE: @003iwzqt');
-        setIsAccessLockOpen(true);
+    const verifyActiveSession = async () => {
+      await syncRemoteBlacklist();
+      const session = getCurrentSession();
+      // Owner is completely exempt from revocation & device quota checks
+      if (session.tier === 'owner') return;
+
+      if (session.tier !== 'locked' && session.tier !== 'demo') {
+        // 1. Check revocation / blacklist
+        if (session.keyOrPass && isKeyRevoked(session.keyOrPass)) {
+          logoutAuth();
+          setLicenseSession({
+            tier: 'locked',
+            keyOrPass: '',
+            activatedAt: '',
+            userLabel: 'ยังไม่ได้ยืนยันสิทธิ์'
+          });
+          setAccessLockNotice('❌ สิทธิ์การใช้งานของคุณถูกระงับ เนื่องจากตรวจพบการละเมิดเงื่อนไข กรุณาติดต่อผู้ดูแลระบบผ่าน LINE: @003iwzqt');
+          setIsAccessLockOpen(true);
+          return;
+        }
+
+        // 2. Check Device Quota (1 PC + 1 Mobile)
+        if (session.keyOrPass) {
+          const quotaCheck = await validateAndEnforceDeviceQuota(session.keyOrPass, session.tier);
+          if (!quotaCheck.allowed) {
+            logoutAuth();
+            setLicenseSession({
+              tier: 'locked',
+              keyOrPass: '',
+              activatedAt: '',
+              userLabel: 'ยังไม่ได้ยืนยันสิทธิ์'
+            });
+            setAccessLockNotice(quotaCheck.errorMessage || '❌ สิทธิ์อุปกรณ์เกินกำหนด (อนุญาต 1 คอมพิวเตอร์ + 1 มือถือ) กรุณาสั่งซื้อแพ็กเกจใหม่ ติดต่อ LINE: @003iwzqt');
+            setIsAccessLockOpen(true);
+          }
+        }
       }
-    });
+    };
+
+    verifyActiveSession();
+    const handleFocus = () => { verifyActiveSession(); };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
   }, []);
 
-  const handleAuthSuccess = (tier: LicenseTier, label: string) => {
+  const handleAuthSuccess = (tier: LicenseTier, label: string, keyOrPass = '') => {
     const newSess = {
       tier,
-      keyOrPass: '',
+      keyOrPass,
       activatedAt: new Date().toISOString(),
       userLabel: label
     };
@@ -2277,9 +2310,9 @@ export default function App() {
       {/* Security & Access Lock Modal */}
       <AccessLockModal
         isOpen={isAccessLockOpen}
-        onSuccess={(tier, label) => {
+        onSuccess={(tier, label, keyOrPass) => {
           setAccessLockNotice('');
-          handleAuthSuccess(tier, label);
+          handleAuthSuccess(tier, label, keyOrPass);
         }}
         onEnterDemo={handleEnterDemo}
         initialMessage={accessLockNotice}

@@ -115,6 +115,8 @@ export const SiteProcurementView: React.FC<SiteProcurementViewProps> = ({
     }).length;
   }, [displayItems, activeChecked]);
 
+  const totalTargetCount = isConsolidated ? displayItems.length : filteredItems.length;
+
   const handleToggleCheck = (id: string) => {
     if (propOnToggleCheck) {
       propOnToggleCheck(id);
@@ -276,16 +278,16 @@ export const SiteProcurementView: React.FC<SiteProcurementViewProps> = ({
           </div>
           <div className="my-2">
             <div className="text-2xl font-black font-mono text-cyan-300">
-              {filteredItems.length} <span className="text-xs font-normal text-slate-400">รายการ</span>
+              {totalTargetCount} <span className="text-xs font-normal text-slate-400">รายการ</span>
             </div>
             <span className="text-[11px] text-slate-500">
-              สั่งแล้ว {orderedCount} / {filteredItems.length} รายการ
+              สั่งแล้ว {orderedCount} / {totalTargetCount} รายการ
             </span>
           </div>
           <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
             <div 
               className="bg-cyan-400 h-full transition-all duration-300"
-              style={{ width: `${filteredItems.length ? (orderedCount / filteredItems.length) * 100 : 0}%` }}
+              style={{ width: `${totalTargetCount ? (orderedCount / totalTargetCount) * 100 : 0}%` }}
             />
           </div>
         </div>
@@ -597,10 +599,10 @@ export const SiteProcurementView: React.FC<SiteProcurementViewProps> = ({
         {/* Table Footer with Summary Info */}
         <div className="p-4 bg-slate-950 border-t border-slate-800 flex items-center justify-between flex-wrap gap-4 text-xs">
           <div className="flex items-center gap-4 text-slate-400">
-            <span>แสดง <strong>{filteredItems.length}</strong> รายการวัสดุ</span>
+            <span>แสดง <strong>{totalTargetCount}</strong> รายการวัสดุ</span>
             <span>•</span>
             <span className="text-emerald-400 font-semibold">
-              เช็คแล้ว {orderedCount} รายการ ({Math.round(filteredItems.length ? (orderedCount / filteredItems.length) * 100 : 0)}%)
+              เช็คแล้ว {orderedCount} รายการ ({Math.round(totalTargetCount ? (orderedCount / totalTargetCount) * 100 : 0)}%)
             </span>
           </div>
           <div className="flex items-center gap-3">

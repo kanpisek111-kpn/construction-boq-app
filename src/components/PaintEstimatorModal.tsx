@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { BOQItem, PaintGrade, PaintSurfaceCondition, SteelPrimerType, PaintCalculationResult } from '../types';
 
 interface PaintEstimatorModalProps {
@@ -23,6 +23,15 @@ export const PaintEstimatorModal: React.FC<PaintEstimatorModalProps> = ({
   const [exteriorWallSqm, setExteriorWallSqm] = useState<number>(defaultExtWall);
   const [interiorWallSqm, setInteriorWallSqm] = useState<number>(defaultIntWall);
   const [ceilingSqm, setCeilingSqm] = useState<number>(defaultCeiling);
+
+  useEffect(() => {
+    if (isOpen && currentHouseAreaSqm) {
+      const wallTotal = Math.round(currentHouseAreaSqm * 2.8);
+      setExteriorWallSqm(Math.round(wallTotal * 0.4));
+      setInteriorWallSqm(Math.round(wallTotal * 0.6));
+      setCeilingSqm(Math.round(currentHouseAreaSqm * 1.05));
+    }
+  }, [isOpen, currentHouseAreaSqm]);
 
   // งานเหล็ก (กิโลกรัม) นำมาแปลงเป็นพื้นที่ผิว (ตร.ม.)
   const [steelWeightKg, setSteelWeightKg] = useState<number>(1800);
@@ -112,7 +121,12 @@ export const PaintEstimatorModal: React.FC<PaintEstimatorModalProps> = ({
       paintLaborCost: wallPaintLabCost,
       steelPaintMaterialCost,
       steelPaintLaborCost,
-      totalCost: wallPaintMatCost + wallPaintLabCost + steelPaintMaterialCost + steelPaintLaborCost
+      totalCost: wallPaintMatCost + wallPaintLabCost + steelPaintMaterialCost + steelPaintLaborCost,
+      totalWallAndCeiling,
+      primerBucketPrice,
+      extBucketPrice,
+      intBucketPrice,
+      ceilBucketPrice
     };
   }, [exteriorWallSqm, interiorWallSqm, ceilingSqm, steelWeightKg, includeSteelPainting, paintGrade, surfaceCondition, steelPrimerType]);
 
@@ -128,45 +142,72 @@ export const PaintEstimatorModal: React.FC<PaintEstimatorModalProps> = ({
       ? 'เกรดมาตรฐานโครงการ 3-5 ปี' 
       : 'เกรดมาตรฐาน มอก. 7-10 ปี';
 
+    const extPrice = result.extBucketPrice || 2800;
+    const intPrice = result.intBucketPrice || 2100;
+    const ceilPrice = result.ceilBucketPrice || 1950;
+    const primerPrice = result.primerBucketPrice || 1850;
+    const totalArea = result.totalWallAndCeiling || (exteriorWallSqm + interiorWallSqm + ceilingSqm);
+
+    // 0. สีรองพื้นปูนใหม่ / ปูนเก่า (Primer)
+    if (result.primerBuckets5Gal > 0 && totalArea > 0) {
+      const primerName = surfaceCondition === 'new_plaster'
+        ? `งานทาสีรองพื้นปูนใหม่กันด่าง 1 เที่ยว (${gradeLabel})`
+        : `งานทาสีรองพื้นปูนเก่าสูตรน้ำมันแทรกซึมลึก 1 เที่ยว (${gradeLabel})`;
+
+      newItems.push({
+        id: `paint-primer-${timestamp}`,
+        category: 'finishes',
+        name: primerName,
+        spec: `สำหรับพื้นที่ผนังและฝ้าเพดานรวม ${totalArea} ตร.ม. (สั่งสีรองพื้น ${result.primerBuckets5Gal} ถัง 5 แกลลอน)`,
+        quantity: totalArea,
+        unit: 'ตร.ม.',
+        materialUnitPrice: Math.round((result.primerBuckets5Gal * primerPrice) / Math.max(1, totalArea)),
+        laborUnitPrice: 15,
+        wastePercent: 0,
+        basePerSqm: totalArea / (currentHouseAreaSqm || 120)
+      });
+    }
+
     // 1. สีทาภายนอกอาคาร
+    const topcoatLabor = paintGrade === 'premium_ultra' ? 50 : 40;
     newItems.push({
-      id: `paint-ext-${timestamp}`,
+      id: `paint-ext-${timestamp + 1}`,
       category: 'finishes',
       name: `งานทาสีผนังภายนอกอาคาร (${gradeLabel})`,
-      spec: `พื้นที่ ${exteriorWallSqm} ตร.ม. [รองพื้น 1 เที่ยว + สีจริงอะคริลิกกึ่งเงา 2 เที่ยว ~ สั่งสีจริง ${result.exteriorTopcoatBuckets5Gal} ถัง 5 แกลลอน]`,
+      spec: `พื้นที่ ${exteriorWallSqm} ตร.ม. [สีจริงอะคริลิกกึ่งเงา 2 เที่ยว ~ สั่งสีจริง ${result.exteriorTopcoatBuckets5Gal} ถัง 5 แกลลอน]`,
       quantity: exteriorWallSqm,
       unit: 'ตร.ม.',
-      materialUnitPrice: Math.round((result.exteriorTopcoatBuckets5Gal * 2800) / Math.max(1, exteriorWallSqm)),
-      laborUnitPrice: 55,
-      wastePercent: 5,
+      materialUnitPrice: Math.round((result.exteriorTopcoatBuckets5Gal * extPrice) / Math.max(1, exteriorWallSqm)),
+      laborUnitPrice: topcoatLabor,
+      wastePercent: 0,
       basePerSqm: exteriorWallSqm / (currentHouseAreaSqm || 120)
     });
 
     // 2. สีทาภายในอาคาร
     newItems.push({
-      id: `paint-int-${timestamp + 1}`,
+      id: `paint-int-${timestamp + 2}`,
       category: 'finishes',
       name: `งานทาสีผนังภายในอาคาร (${gradeLabel})`,
-      spec: `พื้นที่ ${interiorWallSqm} ตร.ม. [รองพื้น 1 เที่ยว + สีจริงอะคริลิกด้าน/กึ่งเงา 2 เที่ยว ~ สั่งสีจริง ${result.interiorTopcoatBuckets5Gal} ถัง 5 แกลลอน]`,
+      spec: `พื้นที่ ${interiorWallSqm} ตร.ม. [สีจริงอะคริลิกด้าน/กึ่งเงา 2 เที่ยว ~ สั่งสีจริง ${result.interiorTopcoatBuckets5Gal} ถัง 5 แกลลอน]`,
       quantity: interiorWallSqm,
       unit: 'ตร.ม.',
-      materialUnitPrice: Math.round((result.interiorTopcoatBuckets5Gal * 2100) / Math.max(1, interiorWallSqm)),
-      laborUnitPrice: 50,
-      wastePercent: 5,
+      materialUnitPrice: Math.round((result.interiorTopcoatBuckets5Gal * intPrice) / Math.max(1, interiorWallSqm)),
+      laborUnitPrice: topcoatLabor,
+      wastePercent: 0,
       basePerSqm: interiorWallSqm / (currentHouseAreaSqm || 120)
     });
 
     // 3. สีทาฝ้าเพดาน
     newItems.push({
-      id: `paint-ceil-${timestamp + 2}`,
+      id: `paint-ceil-${timestamp + 3}`,
       category: 'finishes',
       name: `งานทาสีฝ้าเพดาน (สูตรลดแสงสะท้อน สำหรับฝ้ายิปซัม)`,
       spec: `พื้นที่ ${ceilingSqm} ตร.ม. [ทาสีจริงสำหรับฝ้า 2 เที่ยว ~ สั่งสีฝ้า ${result.ceilingTopcoatBuckets5Gal} ถัง 5 แกลลอน]`,
       quantity: ceilingSqm,
       unit: 'ตร.ม.',
-      materialUnitPrice: Math.round((result.ceilingTopcoatBuckets5Gal * 1950) / Math.max(1, ceilingSqm)),
-      laborUnitPrice: 45,
-      wastePercent: 5,
+      materialUnitPrice: Math.round((result.ceilingTopcoatBuckets5Gal * ceilPrice) / Math.max(1, ceilingSqm)),
+      laborUnitPrice: topcoatLabor,
+      wastePercent: 0,
       basePerSqm: ceilingSqm / (currentHouseAreaSqm || 120)
     });
 
@@ -179,7 +220,7 @@ export const PaintEstimatorModal: React.FC<PaintEstimatorModalProps> = ({
         : 'สีรองพื้นแดงกันสนิมเรดออกไซด์ (Red Oxide)';
 
       newItems.push({
-        id: `paint-steel-${timestamp + 3}`,
+        id: `paint-steel-${timestamp + 4}`,
         category: 'roof',
         name: `งานขัดสนิมและทาสีกันสนิมโครงสร้างเหล็ก 2 เที่ยว (${steelPrimerName})`,
         spec: `สำหรับเหล็กโครงสร้าง ${steelWeightKg.toLocaleString()} กก. (~พื้นที่ผิว ${result.steelAreaSqm} ตร.ม.) สั่งสีรองพื้น ${result.steelPrimerGallons} แกลลอน + สีจริง ${result.steelTopcoatGallons} แกลลอน + ทินเนอร์ ${result.thinnerGallons} แกลลอน`,
@@ -187,7 +228,7 @@ export const PaintEstimatorModal: React.FC<PaintEstimatorModalProps> = ({
         unit: 'ตร.ม.',
         materialUnitPrice: Math.round(result.steelPaintMaterialCost / Math.max(1, result.steelAreaSqm)),
         laborUnitPrice: 65,
-        wastePercent: 5,
+        wastePercent: 0,
         basePerSqm: result.steelAreaSqm / (currentHouseAreaSqm || 120)
       });
     }

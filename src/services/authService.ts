@@ -20,9 +20,35 @@ export interface ValidationResult {
   errorMessage?: string;
 }
 
+export interface DeviceInfo {
+  deviceId: string;
+  deviceType: 'desktop' | 'mobile';
+  platform: string;
+  boundAt: string;
+}
+
+export interface KeyDeviceBinding {
+  key: string;
+  tier: LicenseTier;
+  desktop?: DeviceInfo;
+  mobile?: DeviceInfo;
+  updatedAt: string;
+}
+
+export interface DeviceValidationResult {
+  allowed: boolean;
+  isDeviceLimitExceeded?: boolean;
+  deviceType?: 'desktop' | 'mobile';
+  errorMessage?: string;
+  binding?: KeyDeviceBinding;
+}
+
 const STORAGE_KEY = 'construction_boq_auth_session_v1';
 const GENERATED_KEYS_STORAGE_KEY = 'construction_boq_owner_keys_v1';
 const REVOKED_KEYS_STORAGE_KEY = 'construction_boq_revoked_keys_v1';
+const DEVICE_ID_KEY = 'construction_boq_device_id_v2';
+const DEVICE_BINDINGS_STORAGE_KEY = 'construction_boq_device_bindings_v2';
+const CLOUD_SYNC_ENDPOINT = 'https://kvdb.io/4y9qEw9gRk5y9j2K8V3M2A';
 
 // Hardcoded blacklist in code (can add known violators directly here)
 const HARDCODED_REVOKED_KEYS: string[] = [];
@@ -123,6 +149,230 @@ export function checkAndEnforceSessionRevocation(): boolean {
     }
   }
   return false;
+}
+
+// =====================================================================
+// DEVICE BINDING & QUOTA MANAGEMENT (1 PC + 1 MOBILE PER KEY, OWNER EXEMPT)
+// =====================================================================
+
+export function getOrCreateDeviceId(): string {
+  try {
+    let id = localStorage.getItem(DEVICE_ID_KEY);
+    if (!id) {
+      const rand = Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 10);
+      id = `dev-${Date.now().toString(36)}-${rand}`;
+      localStorage.setItem(DEVICE_ID_KEY, id);
+    }
+    return id;
+  } catch {
+    return 'dev-temp-' + Math.random().toString(36).substring(2, 10);
+  }
+}
+
+export function getDeviceType(): 'desktop' | 'mobile' {
+  if (typeof window === 'undefined') return 'desktop';
+  const ua = (navigator.userAgent || '').toLowerCase();
+  const isMobileUA = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini|mobile|crios/i.test(ua);
+  const isTouchAndSmall = (window.innerWidth <= 820) && ('ontouchstart' in window || (navigator.maxTouchPoints && navigator.maxTouchPoints > 0));
+  return (isMobileUA || isTouchAndSmall) ? 'mobile' : 'desktop';
+}
+
+export function getDevicePlatformName(): string {
+  if (typeof window === 'undefined') return 'ทั่วไป';
+  const ua = navigator.userAgent || '';
+  if (/iPhone/i.test(ua)) return 'iPhone (iOS)';
+  if (/iPad/i.test(ua)) return 'iPad (iOS)';
+  if (/Android/i.test(ua)) return 'Android สมาร์ทโฟน/แท็บเล็ต';
+  if (/Mac/i.test(ua)) return 'Mac (คอมพิวเตอร์)';
+  if (/Windows/i.test(ua)) return 'Windows PC/โน้ตบุ๊ก';
+  if (/Linux/i.test(ua)) return 'Linux PC';
+  return getDeviceType() === 'mobile' ? 'โทรศัพท์มือถือ' : 'คอมพิวเตอร์';
+}
+
+export function getLocalDeviceBindings(): Record<string, KeyDeviceBinding> {
+  try {
+    const raw = localStorage.getItem(DEVICE_BINDINGS_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function saveLocalDeviceBinding(binding: KeyDeviceBinding): void {
+  try {
+    const all = getLocalDeviceBindings();
+    all[binding.key.toUpperCase()] = binding;
+    localStorage.setItem(DEVICE_BINDINGS_STORAGE_KEY, JSON.stringify(all));
+  } catch {}
+}
+
+export function getKeyBinding(key: string): KeyDeviceBinding | null {
+  if (!key) return null;
+  const all = getLocalDeviceBindings();
+  return all[key.trim().toUpperCase()] || null;
+}
+
+export async function fetchRemoteKeyBinding(cleanKey: string): Promise<KeyDeviceBinding | null> {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 2000);
+    const res = await fetch(`${CLOUD_SYNC_ENDPOINT}/boq_dev_${encodeURIComponent(cleanKey)}?t=${Date.now()}`, {
+      cache: 'no-store',
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.key) {
+        saveLocalDeviceBinding(data);
+        return data;
+      }
+    }
+  } catch {
+    // Fallback to local
+  }
+  return getKeyBinding(cleanKey);
+}
+
+export async function saveRemoteKeyBinding(binding: KeyDeviceBinding): Promise<void> {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 2500);
+    await fetch(`${CLOUD_SYNC_ENDPOINT}/boq_dev_${encodeURIComponent(binding.key.toUpperCase())}`, {
+      method: 'POST',
+      body: JSON.stringify(binding),
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+  } catch {
+    // Offline / fallback
+  }
+}
+
+/**
+ * Validates device quota:
+ * - Owner: Unlimited devices on both PC & mobile (100% exempt)
+ * - Customer: Strictly 1 Computer (Desktop/Laptop) and 1 Mobile device (Phone/Tablet)
+ * - If exceeded: blocks immediately ("เด้งออกเลย")
+ */
+export async function validateAndEnforceDeviceQuota(
+  key: string, 
+  tier: LicenseTier
+): Promise<DeviceValidationResult> {
+  // 1. OWNER IS 100% EXEMPT (ไม่จำกัดจำนวนเครื่อง)
+  if (tier === 'owner') {
+    return { allowed: true };
+  }
+
+  // 2. Demo or Locked tiers do not consume quota
+  if (tier === 'locked' || tier === 'demo') {
+    return { allowed: true };
+  }
+
+  const cleanKey = key.trim().toUpperCase();
+  if (!cleanKey) {
+    return { allowed: false, errorMessage: 'ไม่พบ License Key' };
+  }
+
+  const currentDeviceId = getOrCreateDeviceId();
+  const currentDeviceType = getDeviceType();
+  const currentPlatform = getDevicePlatformName();
+
+  // Try to sync with remote binding
+  let binding = await fetchRemoteKeyBinding(cleanKey);
+  if (!binding) {
+    binding = getKeyBinding(cleanKey);
+  }
+
+  // If existing binding is found, check slot for current device type
+  if (binding) {
+    if (currentDeviceType === 'desktop') {
+      if (binding.desktop && binding.desktop.deviceId && binding.desktop.deviceId !== currentDeviceId) {
+        return {
+          allowed: false,
+          isDeviceLimitExceeded: true,
+          deviceType: 'desktop',
+          errorMessage: `❌ สิทธิ์อุปกรณ์เกินกำหนด! รหัสนี้ถูกเปิดใช้งานบนคอมพิวเตอร์เครื่องอื่นแล้ว (${binding.desktop.platform || 'PC อื่น'}) \n(สิทธิ์อนุญาต: 1 คอมพิวเตอร์ + 1 มือถือเท่านั้น) \nหากต้องการใช้งานเพิ่ม กรุณาสั่งซื้อแพ็กเกจใหม่ ติดต่อ LINE: @003iwzqt`,
+          binding
+        };
+      }
+    } else if (currentDeviceType === 'mobile') {
+      if (binding.mobile && binding.mobile.deviceId && binding.mobile.deviceId !== currentDeviceId) {
+        return {
+          allowed: false,
+          isDeviceLimitExceeded: true,
+          deviceType: 'mobile',
+          errorMessage: `❌ สิทธิ์อุปกรณ์เกินกำหนด! รหัสนี้ถูกเปิดใช้งานบนโทรศัพท์มือถือเครื่องอื่นแล้ว (${binding.mobile.platform || 'มือถืออื่น'}) \n(สิทธิ์อนุญาต: 1 คอมพิวเตอร์ + 1 มือถือเท่านั้น) \nหากต้องการใช้งานเพิ่ม กรุณาสั่งซื้อแพ็กเกจใหม่ ติดต่อ LINE: @003iwzqt`,
+          binding
+        };
+      }
+    }
+  }
+
+  // Slot is available or already bound to this device -> Bind / Update
+  const updatedBinding: KeyDeviceBinding = binding ? { ...binding } : {
+    key: cleanKey,
+    tier,
+    updatedAt: new Date().toISOString()
+  };
+
+  const nowIso = new Date().toISOString();
+  if (currentDeviceType === 'desktop') {
+    updatedBinding.desktop = {
+      deviceId: currentDeviceId,
+      deviceType: 'desktop',
+      platform: currentPlatform,
+      boundAt: updatedBinding.desktop?.deviceId === currentDeviceId ? (updatedBinding.desktop.boundAt || nowIso) : nowIso
+    };
+  } else {
+    updatedBinding.mobile = {
+      deviceId: currentDeviceId,
+      deviceType: 'mobile',
+      platform: currentPlatform,
+      boundAt: updatedBinding.mobile?.deviceId === currentDeviceId ? (updatedBinding.mobile.boundAt || nowIso) : nowIso
+    };
+  }
+  updatedBinding.updatedAt = nowIso;
+
+  // Persist locally and in remote cloud
+  saveLocalDeviceBinding(updatedBinding);
+  saveRemoteKeyBinding(updatedBinding).catch(() => {});
+
+  return {
+    allowed: true,
+    binding: updatedBinding
+  };
+}
+
+/**
+ * Owner reset tool: Clears bound devices for a specific key
+ */
+export async function resetKeyDevices(key: string): Promise<void> {
+  const cleanKey = key.trim().toUpperCase();
+  if (!cleanKey) return;
+
+  const all = getLocalDeviceBindings();
+  if (all[cleanKey]) {
+    delete all[cleanKey].desktop;
+    delete all[cleanKey].mobile;
+    all[cleanKey].updatedAt = new Date().toISOString();
+    localStorage.setItem(DEVICE_BINDINGS_STORAGE_KEY, JSON.stringify(all));
+  } else {
+    all[cleanKey] = {
+      key: cleanKey,
+      tier: 'pro',
+      updatedAt: new Date().toISOString()
+    };
+    localStorage.setItem(DEVICE_BINDINGS_STORAGE_KEY, JSON.stringify(all));
+  }
+
+  // Sync reset to remote
+  try {
+    await fetch(`${CLOUD_SYNC_ENDPOINT}/boq_dev_${encodeURIComponent(cleanKey)}`, {
+      method: 'POST',
+      body: JSON.stringify(all[cleanKey])
+    });
+  } catch {}
 }
 
 // =====================================================================

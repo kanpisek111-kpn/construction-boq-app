@@ -71,14 +71,46 @@ export const SanitaryEstimatorModal: React.FC<SanitaryEstimatorModalProps> = ({
       id: `san-drain-${timestamp + 1}`,
       category: 'sanitary',
       name: 'ท่อน้ำทิ้ง 2"-3" & ท่อโสโครก 4" PVC ชั้น 8.5 ตราช้าง มอก.',
-      spec: `ท่อน้ำทิ้ง ${result.wasteWaterPipes4m} ท่อน + ท่อส้วมโสโครก 4" ${result.soilPipes4m} ท่อน + ท่ออากาศ ${result.ventPipes4m} ท่อน พร้อมกาวประสานท่อและ Floor Drain`,
+      spec: `ท่อน้ำทิ้ง ${result.wasteWaterPipes4m} ท่อน + ท่อส้วมโสโครก 4" ${result.soilPipes4m} ท่อน + ท่ออากาศ ${result.ventPipes4m} ท่อน`,
       quantity: result.wasteWaterPipes4m + result.soilPipes4m + result.ventPipes4m,
       unit: 'ท่อน',
       materialUnitPrice: 260,
       laborUnitPrice: 95,
       wastePercent: 5,
-      basePerSqm: (result.wasteWaterPipes4m + result.soilPipes4m) / (currentHouseAreaSqm || 120)
+      basePerSqm: (result.wasteWaterPipes4m + result.soilPipes4m + result.ventPipes4m) / (currentHouseAreaSqm || 120)
     });
+
+    // 2.1 ข้อต่อ ข้องอ สามทาง และกาวประสานท่อ
+    if (result.fittingsEstimatePcs > 0) {
+      newItems.push({
+        id: `san-fittings-${timestamp + 11}`,
+        category: 'sanitary',
+        name: 'ข้อต่อ ข้องอ สามทาง วาล์วน้ำ และน้ำยาประสานท่อ',
+        spec: `อุปกรณ์ฟิตติ้งระบบประปาและน้ำทิ้ง (~${result.fittingsEstimatePcs} ชิ้น พร้อมกาวทาท่อและเทปพันเกลียว)`,
+        quantity: result.fittingsEstimatePcs,
+        unit: 'ชิ้น',
+        materialUnitPrice: 35,
+        laborUnitPrice: 0,
+        wastePercent: 5,
+        basePerSqm: result.fittingsEstimatePcs / (currentHouseAreaSqm || 120)
+      });
+    }
+
+    // 2.2 ตะแกรงดักกลิ่นสแตนเลส (Floor Drain)
+    if (result.floorDrainPcs > 0) {
+      newItems.push({
+        id: `san-floordrain-${timestamp + 12}`,
+        category: 'sanitary',
+        name: 'ตะแกรงดักกลิ่นสแตนเลส SUS304 (Floor Drain กันกลิ่น/กันแมลง)',
+        spec: `สำหรับห้องน้ำ ${bathroomCount} ห้อง และลานซักล้าง (${result.floorDrainPcs} จุด ท่อระบาย 2"-3")`,
+        quantity: result.floorDrainPcs,
+        unit: 'ชุด',
+        materialUnitPrice: 180,
+        laborUnitPrice: 50,
+        wastePercent: 0,
+        basePerSqm: result.floorDrainPcs / (currentHouseAreaSqm || 120)
+      });
+    }
 
     // 3. ถังบำบัดน้ำเสียสำเร็จรูป
     newItems.push({
@@ -102,7 +134,7 @@ export const SanitaryEstimatorModal: React.FC<SanitaryEstimatorModalProps> = ({
       spec: 'ติดตั้งใต้ซิงค์ล้างจานในห้องครัว ดักจับคราบไขมันเศษอาหารก่อนลงท่อสาธารณะ',
       quantity: result.greaseTrapQty,
       unit: 'ชุด',
-      materialUnitPrice: greaseTrapLiters >= 50 ? 2800 : 1650,
+      materialUnitPrice: greaseTrapLiters >= 100 ? 3900 : greaseTrapLiters >= 50 ? 2800 : 1650,
       laborUnitPrice: 650,
       wastePercent: 0,
       basePerSqm: result.greaseTrapQty / (currentHouseAreaSqm || 120)
@@ -117,7 +149,7 @@ export const SanitaryEstimatorModal: React.FC<SanitaryEstimatorModalProps> = ({
         spec: 'ถังโพลีเมอร์เกรด มอก. สะอาดไร้ตะไคร่ + ปั๊มน้ำอินเวอร์เตอร์/แรงดันคงที่ พร้อมระบบบายพาส (Bypass) เช็ควาล์ว',
         quantity: 1,
         unit: 'ชุด',
-        materialUnitPrice: (waterTankLiters === 2000 ? 7200 : 5900) + (waterPumpWatt >= 250 ? 6900 : 5400) + 1200,
+        materialUnitPrice: (waterTankLiters === 2000 ? 7200 : waterTankLiters === 1500 ? 5900 : 4800) + (waterPumpWatt >= 250 ? 6900 : 5400) + 1200,
         laborUnitPrice: 2500,
         wastePercent: 0,
         basePerSqm: 1 / (currentHouseAreaSqm || 120)
@@ -251,6 +283,7 @@ export const SanitaryEstimatorModal: React.FC<SanitaryEstimatorModalProps> = ({
                   <option value={15}>15 ลิตร (กะทัดรัด)</option>
                   <option value={30}>30 ลิตร (มาตรฐานครัวไทย)</option>
                   <option value={50}>50 ลิตร (ครัวหนัก)</option>
+                  <option value={100}>100 ลิตร (บ้านใหญ่/ร้านอาหาร)</option>
                 </select>
               </div>
             </div>

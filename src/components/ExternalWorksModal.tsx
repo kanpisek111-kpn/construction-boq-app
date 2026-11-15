@@ -7,6 +7,7 @@ interface ExternalWorksModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAddItems: (items: BOQItem[]) => void;
+  currentHouseAreaSqm?: number;
 }
 
 const safeNum = (val: number | undefined | null): number => {
@@ -22,7 +23,8 @@ const safeToLocaleString = (val: number | undefined | null): string => {
 export const ExternalWorksModal: React.FC<ExternalWorksModalProps> = ({
   isOpen,
   onClose,
-  onAddItems
+  onAddItems,
+  currentHouseAreaSqm = 120
 }) => {
   const [activeFilter, setActiveFilter] = useState<'all' | ExternalItemType | 'fence_calc' | 'drain_calc'>('all');
   const [selectedItems, setSelectedItems] = useState<{ [id: string]: { qty: number; preset: ExternalWorksPreset } }>({});

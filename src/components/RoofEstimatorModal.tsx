@@ -6,9 +6,10 @@ interface RoofEstimatorModalProps {
   isOpen: boolean;
   onClose: () => void;
   onApplyToBOQ: (newItems: BOQItem[]) => void;
+  currentHouseAreaSqm?: number;
 }
 
-export const RoofEstimatorModal: React.FC<RoofEstimatorModalProps> = ({ isOpen, onClose, onApplyToBOQ }) => {
+export const RoofEstimatorModal: React.FC<RoofEstimatorModalProps> = ({ isOpen, onClose, onApplyToBOQ, currentHouseAreaSqm = 120 }) => {
   const [style, setStyle] = useState<RoofStyle>('gable');
   const [baseWidthM, setBaseWidthM] = useState<number>(8);
   const [baseLengthM, setBaseLengthM] = useState<number>(12);
@@ -73,6 +74,10 @@ export const RoofEstimatorModal: React.FC<RoofEstimatorModalProps> = ({ isOpen, 
       setBirdStopType('cpac_wave');
       setPurlinSpacingM(0.34);
       if (pitchDeg < 25) setPitchDeg(30);
+    } else if (newMat === 'shingle') {
+      setBirdStopType('none');
+      setPurlinSpacingM(0.30);
+      if (pitchDeg < 17) setPitchDeg(20);
     }
   };
 
@@ -175,6 +180,21 @@ export const RoofEstimatorModal: React.FC<RoofEstimatorModalProps> = ({ isOpen, 
       });
     }
 
+    // 3.5 เหล็กกล่อง/เหล็กฉากค้ำยันท้าวแขนและยึดโยงรับแรงลม (Wind Bracing & Strut)
+    if (result.boxSteelBars && result.boxSteelBars > 0) {
+      generatedItems.push({
+        id: `roof-gen-bracing-${timestamp + 25}`,
+        category: 'roof',
+        name: 'เหล็กกล่อง/เหล็กฉากค้ำยันท้าวแขนและยึดโยงรับแรงลม (Wind Bracing & Strut)',
+        spec: `เหล็กค้ำยันโครงสร้างรับแรงลมโยกตามสัดส่วน ${result.bracingPercent || 25}% ของโครงหลัก (${result.boxSteelBars} ท่อน @ 6ม.)`,
+        quantity: result.boxSteelBars,
+        unit: 'ท่อน',
+        materialUnitPrice: 580,
+        laborUnitPrice: 130,
+        wastePercent: 5,
+      });
+    }
+
     // 4. แปสำเร็จรูปกัลวาไนซ์ (Purlins) - พร้อมเผื่อระยะทาบต่อ 25 ซม. เหนือจันทัน
     if (result.purlin_bars > 0) {
       const purlinSpec = `แปกัลวาไนซ์สำเร็จรูป ${result.purlinRowsCount ? 'จำนวน ' + result.purlinRowsCount + ' แถว ' : ''}ระยะแป @ ${purlinSpacingM} ม. (เผื่อระยะทาบต่อ 25 ซม. เหนือจันทันทุกช่วง 6.00 ม.) รวมสั่ง ${result.purlin_bars} ท่อน @ 6ม.`;
@@ -216,6 +236,18 @@ export const RoofEstimatorModal: React.FC<RoofEstimatorModalProps> = ({ isOpen, 
         materialUnitPrice: 38,
         laborUnitPrice: 14,
         wastePercent: 6,
+      });
+    } else if (materialType === 'shingle') {
+      generatedItems.push({
+        id: `roof-gen-sheet-${timestamp + 4}`,
+        category: 'roof',
+        name: 'แผ่นหลังคาชิงเกิ้ลรูฟ (Asphalt Shingle) 2 ชั้น พร้อมแผ่นไม้อัด OSB หนา 9-12 มม. และแผ่นรองกันน้ำ (Underlayment)',
+        spec: `พื้นที่ผิวลาดเอียง ${result.effectiveRoofAreaSqm} ตร.ม. (องศา ${pitchDeg}°) พร้อมตะปูยึดและกาวมะตอยประสาน`,
+        quantity: result.effectiveRoofAreaSqm,
+        unit: 'ตร.ม.',
+        materialUnitPrice: 480,
+        laborUnitPrice: 140,
+        wastePercent: 8,
       });
     } else {
       generatedItems.push({
@@ -423,7 +455,12 @@ export const RoofEstimatorModal: React.FC<RoofEstimatorModalProps> = ({ isOpen, 
       });
     }
 
-    onApplyToBOQ(generatedItems);
+    const finalItems = generatedItems.map(it => ({
+      ...it,
+      basePerSqm: it.basePerSqm !== undefined ? it.basePerSqm : ((it.quantity || 0) / (currentHouseAreaSqm || 120))
+    }));
+
+    onApplyToBOQ(finalItems);
     onClose();
   };
 
@@ -818,6 +855,25 @@ export const RoofEstimatorModal: React.FC<RoofEstimatorModalProps> = ({ isOpen, 
                   </div>
                 </div>
 
+                {/* 3.5 เหล็กค้ำยัน & ท้าวแขนรับแรงลม */}
+                {result.boxSteelBars && result.boxSteelBars > 0 ? (
+                  <div className="flex justify-between items-center py-1.5 border-b border-slate-850">
+                    <div className="flex flex-col">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-indigo-400"></span>
+                        <span className="text-slate-300 font-medium">เหล็กค้ำยัน & ท้าวแขนรับลม (Bracing):</span>
+                      </div>
+                      <span className="text-[10px] text-slate-500 ml-4">
+                        เหล็กค้ำยันและยึดโยงรับแรงลมโยก ({result.bracingPercent || 25}% ของโครงหลัก)
+                      </span>
+                    </div>
+                    <div className="text-right">
+                      <span className="font-mono font-bold text-indigo-300 mr-1">{result.boxSteelBars} ท่อน</span>
+                      <span className="text-slate-500 font-mono text-[10px]">(@ 6ม.)</span>
+                    </div>
+                  </div>
+                ) : null}
+
                 {/* 4. แปหลังคา - Point 5 */}
                 <div className="flex justify-between items-center py-1.5 border-b border-slate-850">
                   <div className="flex flex-col">
@@ -845,6 +901,8 @@ export const RoofEstimatorModal: React.FC<RoofEstimatorModalProps> = ({ isOpen, 
                     <span className="font-mono font-bold text-emerald-300">
                       {materialType === 'concrete_tile' || materialType === 'cpac'
                         ? `${result.roofSheetsCount.toLocaleString()} แผ่น (${materialType === 'concrete_tile' ? 'ลอนคู่ @ 2.22 แผ่น/ตร.ม.' : 'ซีแพค @ 11 แผ่น/ตร.ม.'})`
+                        : materialType === 'shingle'
+                        ? `${result.effectiveRoofAreaSqm.toLocaleString()} ตร.ม. (ชิงเกิ้ลรูฟ + ไม้อัด OSB)`
                         : `${result.roofSheetsCount} ตร.ม. (เมทัลชีท)`}
                     </span>
                   </div>

@@ -9,12 +9,16 @@ import {
   getStoredRevokedKeys,
   revokeKey,
   unrevokeKey,
-  isKeyRevoked
+  isKeyRevoked,
+  validateAndEnforceDeviceQuota,
+  resetKeyDevices,
+  getKeyBinding,
+  getLocalDeviceBindings
 } from '../services/authService';
 
 interface AccessLockModalProps {
   isOpen: boolean;
-  onSuccess: (tier: LicenseTier, label: string) => void;
+  onSuccess: (tier: LicenseTier, label: string, keyOrPass?: string) => void;
   onEnterDemo: () => void;
   initialMessage?: string;
   allowClose?: boolean;
@@ -37,9 +41,10 @@ export const AccessLockModal: React.FC<AccessLockModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e?: React.FormEvent) => {
+  const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!passcode.trim()) {
+    const cleanPass = passcode.trim();
+    if (!cleanPass) {
       setErrorMsg('กรุณากรอกรหัสผ่านหรือ License Key');
       return;
     }
@@ -47,16 +52,27 @@ export const AccessLockModal: React.FC<AccessLockModalProps> = ({
     setIsSubmitting(true);
     setErrorMsg('');
 
-    setTimeout(() => {
-      const result = validatePasscodeOrKey(passcode.trim());
+    try {
+      const result = validatePasscodeOrKey(cleanPass);
       if (result.valid) {
+        // Enforce Device Quota (1 PC + 1 Mobile per key, Owner exempt)
+        const deviceCheck = await validateAndEnforceDeviceQuota(cleanPass, result.tier);
+        if (!deviceCheck.allowed) {
+          setErrorMsg(
+            deviceCheck.errorMessage || 
+            '❌ สิทธิ์อุปกรณ์เกินกำหนด (อนุญาต 1 คอมพิวเตอร์ + 1 โทรศัพท์มือถือ) หากต้องการใช้งานเพิ่ม กรุณาสั่งซื้อแพ็กเกจใหม่ ติดต่อ LINE: @003iwzqt'
+          );
+          setIsSubmitting(false);
+          return;
+        }
+
         saveSession({
           tier: result.tier,
-          keyOrPass: passcode.trim(),
+          keyOrPass: cleanPass,
           activatedAt: new Date().toISOString(),
           userLabel: result.label
         });
-        onSuccess(result.tier, result.label);
+        onSuccess(result.tier, result.label, cleanPass);
         setPasscode('');
         if (onClose) onClose();
       } else if (result.isRevoked) {
@@ -64,8 +80,11 @@ export const AccessLockModal: React.FC<AccessLockModalProps> = ({
       } else {
         setErrorMsg('❌ รหัสผ่านหรือ License Key ไม่ถูกต้อง กรุณาตรวจสอบใหม่อีกครั้ง');
       }
+    } catch (err: any) {
+      setErrorMsg('เกิดข้อผิดพลาดในการตรวจสอบสิทธิ์ กรุณาลองใหม่อีกครั้ง');
+    } finally {
       setIsSubmitting(false);
-    }, 200);
+    }
   };
 
   return (
@@ -199,6 +218,11 @@ export const OwnerKeyManagerModal: React.FC<OwnerKeyManagerModalProps> = ({ isOp
   // Revocation / Blacklist States
   const [keyToRevokeInput, setKeyToRevokeInput] = useState('');
   const [revokedList, setRevokedList] = useState<string[]>(getStoredRevokedKeys());
+  
+  // Device Quota & Binding States
+  const [keyToResetInput, setKeyToResetInput] = useState('');
+  const [deviceBindings, setDeviceBindings] = useState<Record<string, any>>(getLocalDeviceBindings());
+  
   const [actionNotice, setActionNotice] = useState<string>('');
 
   if (!isOpen) return null;
@@ -230,6 +254,16 @@ export const OwnerKeyManagerModal: React.FC<OwnerKeyManagerModalProps> = ({ isOp
     setRevokedList(getStoredRevokedKeys());
     setActionNotice(`✓ ปลดล็อครหัส ${key} เรียบร้อยแล้ว`);
     setTimeout(() => setActionNotice(''), 3000);
+  };
+
+  const handleResetDevices = async (targetKey?: string) => {
+    const key = (targetKey || keyToResetInput).trim().toUpperCase();
+    if (!key) return;
+    await resetKeyDevices(key);
+    setDeviceBindings(getLocalDeviceBindings());
+    setKeyToResetInput('');
+    setActionNotice(`🔄 ล้างสิทธิ์อุปกรณ์สำหรับรหัส ${key} เรียบร้อยแล้ว ลูกค้าสามารถผูกคอมและมือถือเครื่องใหม่ได้ทันที`);
+    setTimeout(() => setActionNotice(''), 4000);
   };
 
   return (
@@ -383,6 +417,34 @@ export const OwnerKeyManagerModal: React.FC<OwnerKeyManagerModalProps> = ({ isOp
             )}
           </div>
 
+          {/* 💻📱 DEVICE BINDING & QUOTA MANAGEMENT (1 PC + 1 MOBILE) */}
+          <div className="bg-sky-950/30 p-4 rounded-xl border border-sky-500/40 space-y-3">
+            <div className="flex items-center gap-2 text-sky-300 font-prompt font-bold text-xs">
+              <span className="material-symbols-outlined text-base text-sky-400">devices</span>
+              <span>ระบบตรวจสอบ & รีเซ็ตสิทธิ์อุปกรณ์ (1 คอมพิวเตอร์ + 1 โทรศัพท์มือถือ)</span>
+            </div>
+            <p className="text-[11px] text-slate-400 font-sarabun">
+              แต่ละรหัสลูกค้าจำกัด 1 คอมพิวเตอร์ และ 1 โทรศัพท์มือถือ (เจ้าของระบบใช้งานได้ไม่จำกัดเครื่อง) หากลูกค้าเปลี่ยนเครื่องใหม่ เจ้าของสามารถกรอกรหัสแล้วกด "รีเซ็ตเครื่อง" เพื่อให้ลูกค้าล็อกอินเครื่องใหม่ได้ทันที:
+            </p>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={keyToResetInput}
+                onChange={(e) => setKeyToResetInput(e.target.value)}
+                placeholder="กรอกรหัสที่ต้องการรีเซ็ตเครื่อง เช่น PRO-xxxx-xxxx"
+                className="flex-1 bg-slate-950 border border-sky-500/40 rounded-lg px-3 py-2 text-xs font-mono text-white placeholder:text-slate-600 focus:outline-none focus:border-sky-400"
+              />
+              <button
+                type="button"
+                onClick={() => handleResetDevices()}
+                className="px-3.5 py-2 bg-sky-600 hover:bg-sky-500 text-white font-prompt font-bold text-xs rounded-lg transition flex items-center gap-1 shrink-0"
+              >
+                <span className="material-symbols-outlined text-sm">restart_alt</span>
+                <span>รีเซ็ตเครื่อง</span>
+              </button>
+            </div>
+          </div>
+
           {/* Preset Demo Keys for Owner to Test */}
           <div className="bg-slate-800/40 p-3 rounded-xl border border-slate-700/80">
             <div className="text-xs font-prompt font-semibold text-amber-300 mb-2 flex items-center gap-1">
@@ -407,56 +469,78 @@ export const OwnerKeyManagerModal: React.FC<OwnerKeyManagerModalProps> = ({ isOp
             </div>
           </div>
 
-          {/* History / Stored Keys with Quick Ban Button */}
+          {/* History / Stored Keys with Quick Ban & Reset Devices */}
           <div>
             <h4 className="text-xs font-prompt font-semibold text-slate-300 mb-2 flex items-center justify-between">
               <span>ประวัติ License Key ที่สร้างแล้วในเครื่องนี้ ({keyList.length})</span>
             </h4>
-            <div className="max-h-44 overflow-y-auto space-y-1.5 text-xs font-mono">
+            <div className="max-h-56 overflow-y-auto space-y-2 text-xs">
               {keyList.length === 0 ? (
                 <div className="text-slate-500 text-center py-4 font-sarabun">ยังไม่มีประวัติการสร้าง Key</div>
               ) : (
                 keyList.map((item, idx) => {
                   const isRevoked = isKeyRevoked(item.key);
+                  const binding = deviceBindings[item.key.toUpperCase()] || getKeyBinding(item.key);
+                  const hasDesktop = !!(binding?.desktop?.deviceId);
+                  const hasMobile = !!(binding?.mobile?.deviceId);
                   return (
-                    <div key={idx} className="flex items-center justify-between bg-slate-800/60 px-3 py-2 rounded border border-slate-700/60">
-                      <div className="flex items-center gap-2">
-                        <span className={`font-bold ${isRevoked ? 'line-through text-rose-400' : 'text-white'}`}>
-                          {item.key}
-                        </span>
-                        <span className={`text-[10px] px-1.5 py-0.2 rounded uppercase font-semibold ${
-                          item.tier === 'starter' ? 'bg-emerald-900/80 text-emerald-300' :
-                          item.tier === 'vip' ? 'bg-indigo-900/80 text-indigo-300' :
-                          'bg-amber-900/80 text-amber-300'
-                        }`}>
-                          {item.tier}
-                        </span>
-                        {isRevoked && (
-                          <span className="text-[10px] px-1.5 py-0.2 rounded bg-rose-900/80 text-rose-300 font-prompt">
-                            ถูกระงับสิทธิ์
+                    <div key={idx} className="bg-slate-800/60 p-2.5 rounded-xl border border-slate-700/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className={`font-bold font-mono text-xs ${isRevoked ? 'line-through text-rose-400' : 'text-white'}`}>
+                            {item.key}
                           </span>
-                        )}
+                          <span className={`text-[10px] px-1.5 py-0.2 rounded uppercase font-semibold ${
+                            item.tier === 'starter' ? 'bg-emerald-900/80 text-emerald-300' :
+                            item.tier === 'vip' ? 'bg-indigo-900/80 text-indigo-300' :
+                            'bg-amber-900/80 text-amber-300'
+                          }`}>
+                            {item.tier}
+                          </span>
+                          {isRevoked && (
+                            <span className="text-[10px] px-1.5 py-0.2 rounded bg-rose-900/80 text-rose-300 font-prompt">
+                              ถูกระงับสิทธิ์
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 text-[10px] font-sarabun">
+                          <span className={`inline-flex items-center gap-1 ${hasDesktop ? 'text-sky-300 font-medium' : 'text-slate-500'}`}>
+                            💻 {hasDesktop ? (binding?.desktop?.platform || 'คอมพิวเตอร์') : 'คอมพิวเตอร์ (ว่าง)'}
+                          </span>
+                          <span className="text-slate-600">•</span>
+                          <span className={`inline-flex items-center gap-1 ${hasMobile ? 'text-emerald-300 font-medium' : 'text-slate-500'}`}>
+                            📱 {hasMobile ? (binding?.mobile?.platform || 'มือถือ') : 'มือถือ (ว่าง)'}
+                          </span>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 self-end sm:self-center">
                         <button
                           onClick={() => handleCopy(item.key)}
-                          className="text-amber-400 hover:text-amber-300 text-[11px] font-prompt"
+                          className="text-amber-400 hover:text-amber-300 text-[11px] font-prompt px-2 py-1 rounded bg-slate-700/50"
                         >
                           คัดลอก
+                        </button>
+                        <button
+                          onClick={() => handleResetDevices(item.key)}
+                          title="ล้างเครื่องที่ผูกไว้ เพื่อให้ลูกค้านำไปใช้กับเครื่องใหม่ได้"
+                          className="text-sky-300 hover:text-sky-200 text-[11px] font-prompt px-2 py-1 rounded bg-sky-950/80 border border-sky-500/30 flex items-center gap-0.5"
+                        >
+                          <span className="material-symbols-outlined text-[13px]">restart_alt</span>
+                          <span>รีเซ็ตเครื่อง</span>
                         </button>
                         {isRevoked ? (
                           <button
                             onClick={() => handleUnrevokeSpecificKey(item.key)}
-                            className="text-emerald-400 hover:text-emerald-300 text-[11px] font-prompt"
+                            className="text-emerald-400 hover:text-emerald-300 text-[11px] font-prompt px-2 py-1 rounded bg-emerald-950/80 border border-emerald-500/30"
                           >
                             ปลดแบน
                           </button>
                         ) : (
                           <button
                             onClick={() => handleRevokeSpecificKey(item.key)}
-                            className="text-rose-400 hover:text-rose-300 text-[11px] font-prompt"
+                            className="text-rose-400 hover:text-rose-300 text-[11px] font-prompt px-2 py-1 rounded bg-rose-950/80 border border-rose-500/30"
                           >
-                            🚫 ระงับสิทธิ์
+                            🚫 แบน
                           </button>
                         )}
                       </div>

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { StructureCalcParams, BOQItem, SlabSystemType, FootingItem, BeamItem, FoundationPileType } from '../types';
 import { calculateStructureMaterials } from '../services/calculator';
 
@@ -126,6 +126,22 @@ export const StructureEstimatorModal: React.FC<StructureEstimatorModalProps> = (
   const [wireMeshDiameterMm, setWireMeshDiameterMm] = useState<4 | 6>(4);
   const [castInPlaceRebarType, setCastInPlaceRebarType] = useState<'RB9' | 'DB12'>('RB9');
   const [castInPlaceRebarSpacingM, setCastInPlaceRebarSpacingM] = useState<number>(0.15);
+
+  useEffect(() => {
+    if (isOpen && currentHouseAreaSqm) {
+      setTotalFloorAreaSqm(currentHouseAreaSqm);
+      if (slabType === 'hybrid') {
+        setPrecastAreaSqm(Math.round(currentHouseAreaSqm * 0.85));
+        setCastInPlaceAreaSqm(Math.round(currentHouseAreaSqm * 0.15));
+      } else if (slabType === 'precast_plank') {
+        setPrecastAreaSqm(currentHouseAreaSqm);
+        setCastInPlaceAreaSqm(0);
+      } else {
+        setPrecastAreaSqm(0);
+        setCastInPlaceAreaSqm(currentHouseAreaSqm);
+      }
+    }
+  }, [isOpen, currentHouseAreaSqm, slabType]);
 
   // แท็บทำงาน: งานเสาเข็มและดินขุด, ฟุตติ้ง, คาน, เสา, พื้น
   const [activeTab, setActiveTab] = useState<'piles_earthwork' | 'footing' | 'beam' | 'column' | 'slab'>('piles_earthwork');
@@ -585,7 +601,12 @@ export const StructureEstimatorModal: React.FC<StructureEstimatorModalProps> = (
       wastePercent: 5,
     });
 
-    onApplyToBOQ(newItems);
+    const finalItems = newItems.map(it => ({
+      ...it,
+      basePerSqm: it.basePerSqm !== undefined ? it.basePerSqm : ((it.quantity || 0) / (currentHouseAreaSqm || 120))
+    }));
+
+    onApplyToBOQ(finalItems);
     onClose();
   };
 

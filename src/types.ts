@@ -1,4 +1,4 @@
-﻿export type ConstructionCategory = 
+export type ConstructionCategory = 
   | 'preparation'    // งานเตรียมการและฐานราก
   | 'structure'      // งานโครงสร้าง คสล.
   | 'roof'           // งานโครงหลังคาและมุงหลังคา
@@ -153,6 +153,11 @@ export interface PaintCalculationResult {
   steelPaintMaterialCost: number;
   steelPaintLaborCost: number;
   totalCost: number;
+  totalWallAndCeiling?: number;
+  primerBucketPrice?: number;
+  extBucketPrice?: number;
+  intBucketPrice?: number;
+  ceilBucketPrice?: number;
 }
 
 // 🚿 ข้อมูลการคำนวณงานสุขาภิบาล
@@ -529,6 +534,7 @@ export interface RoofCalculationResult {
   c_channel_bars: number;
   box_steel_kg: number;
   box_steel_bars: number;
+  boxSteelBars?: number;
   purlin_bars: number;
   roofSheetsCount: number;
   ridgeTilesM: number;
@@ -731,4 +737,9 @@ export interface CeilingCalculationResult {
   materialCost: number;
   laborCost: number;
   totalCost: number;
+  totalWallAndCeiling?: number;
+  primerBucketPrice?: number;
+  extBucketPrice?: number;
+  intBucketPrice?: number;
+  ceilBucketPrice?: number;
 }

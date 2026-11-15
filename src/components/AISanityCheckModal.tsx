@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { BOQItem, ConstructionCategory } from '../types';
 import { CATEGORY_LABELS } from '../constants';
 import { computeBOQSummary } from '../services/calculator';
@@ -44,6 +44,12 @@ export const AISanityCheckModal: React.FC<AISanityCheckModalProps> = ({
   const [isScanning, setIsScanning] = useState<boolean>(false);
   const [copyToast, setCopyToast] = useState<boolean>(false);
   const [fixedIssues, setFixedIssues] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    if (isOpen) {
+      setFixedIssues({});
+    }
+  }, [isOpen, projectName]);
 
   const summary = useMemo(() => {
     return computeBOQSummary(items, overheadPercent, vatPercent);
@@ -476,7 +482,8 @@ export const AISanityCheckModal: React.FC<AISanityCheckModalProps> = ({
         quantity: estStirrupKg,
         materialUnitPrice: 27,
         laborUnitPrice: 7,
-        wastePercent: 5
+        wastePercent: 5,
+        basePerSqm: estStirrupKg / Math.max(1, houseAreaSqm)
       };
 
       const newWireItem: BOQItem = {
@@ -488,7 +495,8 @@ export const AISanityCheckModal: React.FC<AISanityCheckModalProps> = ({
         quantity: estTieWireKg,
         materialUnitPrice: 48,
         laborUnitPrice: 0,
-        wastePercent: 5
+        wastePercent: 5,
+        basePerSqm: estTieWireKg / Math.max(1, houseAreaSqm)
       };
 
       updated.push(newStirrupItem, newWireItem);
@@ -507,7 +515,8 @@ export const AISanityCheckModal: React.FC<AISanityCheckModalProps> = ({
         quantity: estPlasterM2,
         materialUnitPrice: 95,
         laborUnitPrice: 105,
-        wastePercent: 5
+        wastePercent: 5,
+        basePerSqm: estPlasterM2 / Math.max(1, houseAreaSqm)
       };
 
       updated.push(newPlasterItem);
@@ -539,10 +548,30 @@ export const AISanityCheckModal: React.FC<AISanityCheckModalProps> = ({
         quantity: estLintelM,
         materialUnitPrice: 120,
         laborUnitPrice: 90,
-        wastePercent: 5
+        wastePercent: 5,
+        basePerSqm: estLintelM / Math.max(1, houseAreaSqm)
       };
 
       updated.push(newLintelItem);
+    } else if (issue.fixActionType === 'add_roof_structure') {
+      const roofCoverItems = updated.filter(i => i.category === 'roof' && /กระเบื้อง|เมทัลชีท|ชิงเกิ้ล|แผ่นมุง/i.test(i.name));
+      const roofCoverM2 = roofCoverItems.reduce((s, i) => s + (Number(i.quantity) || 0), 0);
+      const estRoofM2 = Math.round(roofCoverM2 > 0 ? roofCoverM2 : houseAreaSqm * 1.25);
+
+      const newRoofSteelItem: BOQItem = {
+        id: 'auto-roof-steel-' + Date.now(),
+        category: 'roof',
+        name: 'โครงสร้างเหล็กรูปพรรณหลังคา (อะเส จันทัน ดั้ง อกไก่ แปสำเร็จรูปกัลวาไนซ์)',
+        spec: 'เหล็กรูปพรรณ มอก. พ่นสีกันสนิม 2 เที่ยว พร้อมงานเชื่อมประกอบและติดตั้งครบชุด',
+        unit: 'ตร.ม.',
+        quantity: estRoofM2,
+        materialUnitPrice: 480,
+        laborUnitPrice: 180,
+        wastePercent: 5,
+        basePerSqm: estRoofM2 / Math.max(1, houseAreaSqm)
+      };
+
+      updated.push(newRoofSteelItem);
     }
 
     setFixedIssues(prev => ({ ...prev, [issue.id]: true }));

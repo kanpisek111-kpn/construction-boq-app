@@ -6,12 +6,14 @@ interface RoomDoorSelectorModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAddItems: (items: BOQItem[]) => void;
+  currentHouseAreaSqm?: number;
 }
 
 export const RoomDoorSelectorModal: React.FC<RoomDoorSelectorModalProps> = ({
   isOpen,
   onClose,
-  onAddItems
+  onAddItems,
+  currentHouseAreaSqm = 120
 }) => {
   const [filterWidth, setFilterWidth] = useState<'all' | '70' | '80' | '90'>('all');
   const [filterMaterial, setFilterMaterial] = useState<'all' | 'hdf' | 'solid_wood' | 'wpc' | 'upvc' | 'pvc'>('all');
@@ -67,7 +69,7 @@ export const RoomDoorSelectorModal: React.FC<RoomDoorSelectorModalProps> = ({
       laborUnitPrice: preset.defaultLaborPrice,
       wastePercent: 0,
       itemSubtype: preset.id,
-      basePerSqm: qty / 120
+      basePerSqm: qty / Math.max(1, currentHouseAreaSqm || 120)
     }));
 
     onAddItems(newBOQItems);

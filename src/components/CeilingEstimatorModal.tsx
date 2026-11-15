@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { BOQItem, CeilingBoardType, CeilingDesignType, CeilingCalculationResult } from '../types';
 import { calculateCeilingMaterials } from '../services/calculator';
 
@@ -25,6 +25,12 @@ export const CeilingEstimatorModal: React.FC<CeilingEstimatorModalProps> = ({
   const [materialUnitPrice, setMaterialUnitPrice] = useState<number>(185); // ราคาต่อ ตร.ม. ใน BOQ
   const [laborUnitPrice, setLaborUnitPrice] = useState<number>(95);
 
+  useEffect(() => {
+    if (isOpen) {
+      setCeilingAreaSqm(Math.round(currentHouseAreaSqm * 1.05));
+    }
+  }, [isOpen, currentHouseAreaSqm]);
+
   // คำนวณปริมาณวัสดุและอุปกรณ์ C-Line แบบเรียลไทม์
   const result: CeilingCalculationResult = useMemo(() => {
     return calculateCeilingMaterials(ceilingAreaSqm, boardType, designType, covePerimeterM);
@@ -49,17 +55,19 @@ export const CeilingEstimatorModal: React.FC<CeilingEstimatorModalProps> = ({
 
     const specText = `${boardName} โครงคร่าว C-Line ชุบสังกะสี มอก. เบอร์ 24 หนา 0.52 มม. โครงหลัก @1.00 ม. โครงซอย @0.40 ม. พร้อมฉากริม ผ้ารอยต่อ และปูนฉาบ 3 เที่ยวขัดเรียบ [อุปกรณ์ประเมิน: C-Line ${result.cLineTotalBars} ท่อน, ฉากริม ${result.wallAngleBars} ท่อน, ยิปซัม ${result.gypsumSheets} แผ่น, ปูนฉาบ ${result.jointCompoundBags} ถุง, ผ้าเทป ${result.jointTapeRolls} ม้วน, สกรู ${result.drywallScrewsBoxes} กล่อง, ลวดแขวน ${result.hangerSets} ชุด]`;
 
+    const qty = Math.round(ceilingAreaSqm * 10) / 10;
     const newItems: BOQItem[] = [
       {
         id: `fin-ceiling-${timestamp}`,
         category: 'finishes',
         name: `งาน${designName} (${boardName})`,
         spec: specText,
-        quantity: Math.round(ceilingAreaSqm * 10) / 10,
+        quantity: qty,
         unit: 'ตร.ม.',
         materialUnitPrice: materialUnitPrice || 185,
-        laborUnitPrice: laborUnitPrice || (designType === 'cove_stepped' ? 140 : 95),
-        wastePercent: 5
+        laborUnitPrice: laborUnitPrice || (designType === 'cove_stepped' ? 140 : designType === 'tbar_grid' ? 85 : 95),
+        wastePercent: 5,
+        basePerSqm: qty / Math.max(1, currentHouseAreaSqm || 120),
       }
     ];
 
@@ -157,7 +165,7 @@ export const CeilingEstimatorModal: React.FC<CeilingEstimatorModalProps> = ({
                 <option value="smartboard_6mm">สมาร์ทบอร์ด 6 มม. (ภายนอก/กันปลวก)</option>
               </select>
               <span className="text-[10px] text-slate-500">
-                ขนาดแผ่นมาตรฐาน $1.20 \times 2.40$ ม. (2.88 ตร.ม./แผ่น)
+                ขนาดแผ่นมาตรฐาน 1.20 × 2.40 ม. (2.88 ตร.ม./แผ่น)
               </span>
             </div>
 
@@ -173,12 +181,14 @@ export const CeilingEstimatorModal: React.FC<CeilingEstimatorModalProps> = ({
                   const val = e.target.value as CeilingDesignType;
                   setDesignType(val);
                   if (val === 'cove_stepped') setLaborUnitPrice(140);
+                  else if (val === 'tbar_grid') setLaborUnitPrice(85);
                   else setLaborUnitPrice(95);
                 }}
                 className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs font-semibold text-white focus:outline-none focus:border-teal-400 mt-1"
               >
                 <option value="flat_flush">ฝ้าเพดานฉาบเรียบมาตรฐาน</option>
                 <option value="cove_stepped">ฝ้าหลุมซ่อนไฟ / เล่นระดับ (Cove)</option>
+                <option value="tbar_grid">ฝ้าทีบาร์ 60x60 ซม. (T-Bar Grid)</option>
               </select>
               {designType === 'cove_stepped' && (
                 <div className="flex items-center gap-2 mt-1">

@@ -79,13 +79,13 @@ export const ElectricalEstimatorModal: React.FC<ElectricalEstimatorModalProps> =
         id: `elec-gen-wire-${w.wireSize}-${timestamp + idx + 1}`,
         category: 'electrical',
         name: `สายไฟทองแดง ${w.wireType} ขนาด ${w.wireSize} sq.mm. (${w.standardPurpose.split(',')[0]})`,
-        spec: `มาตรฐาน มอก. 11-2553 รวมระยะ ${w.totalOrderM} ม. (~สั่ง ${w.coils100m} ขด ม้วนละ 100ม. เผื่อ ${w.wastePercent}%) ${w.standardPurpose}`,
-        quantity: w.totalOrderM,
+        spec: `มาตรฐาน มอก. 11-2553 รวมระยะสุทธิ ${w.totalLengthM} ม. (~สั่ง ${w.coils100m} ขด ม้วนละ 100ม. เผื่อ ${w.wastePercent}%) ${w.standardPurpose}`,
+        quantity: w.totalLengthM,
         unit: 'ม.',
         materialUnitPrice: w.estPricePerM,
-        laborUnitPrice: w.wireSize === '1.5' ? 6.5 : w.wireSize === '2.5' ? 7.5 : w.wireSize === '4' ? 9.5 : w.wireSize === '6' ? 12 : 16,
+        laborUnitPrice: w.wireSize === '1.5' ? 6.5 : w.wireSize === '2.5' ? 7.5 : w.wireSize === '4' ? 9.5 : w.wireSize === '6' ? 12 : w.wireSize === '10' ? 16 : w.wireSize === '16' ? 20 : w.wireSize === '25' ? 25 : w.wireSize === '35' ? 32 : 16,
         wastePercent: w.wastePercent,
-        basePerSqm: w.totalOrderM / (currentHouseAreaSqm || 120)
+        basePerSqm: w.totalLengthM / (currentHouseAreaSqm || 120)
       });
     });
 
