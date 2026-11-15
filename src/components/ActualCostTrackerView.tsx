@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { BOQItem, ConstructionCategory, ActualExpenseItem, PaymentMilestone } from '../types';
 import { CATEGORY_LABELS } from '../constants';
 import { computeBOQSummary } from '../services/calculator';
+import { compressImage, copyToClipboardWithFallback } from '../services/imageUtils';
 
 interface ActualCostTrackerViewProps {
   items: BOQItem[];
@@ -31,6 +32,9 @@ export const ActualCostTrackerView: React.FC<ActualCostTrackerViewProps> = ({
   const [filterType, setFilterType] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [copyToast, setCopyToast] = useState<boolean>(false);
+  const [formError, setFormError] = useState<string>('');
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [showClearConfirm, setShowClearConfirm] = useState<boolean>(false);
 
   // New Expense Input State
   const [expenseDate, setExpenseDate] = useState<string>(new Date().toISOString().split('T')[0]);
@@ -200,19 +204,22 @@ export const ActualCostTrackerView: React.FC<ActualCostTrackerViewProps> = ({
     return list;
   }, [categoryBudgets, categoryActuals]);
 
-  // Handle Photo Upload
-  const handleReceiptImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle Photo Upload with Auto-compression
+  const handleReceiptImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 4 * 1024 * 1024) {
-        alert('ขนาดไฟล์รูปสลิปต้องไม่เกิน 4MB');
+      if (file.size > 10 * 1024 * 1024) {
+        setFormError('ขนาดไฟล์รูปสลิปต้องไม่เกิน 10MB');
         return;
       }
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        setReceiptImage(ev.target?.result as string);
-      };
-      reader.readAsDataURL(file);
+      try {
+        const compressed = await compressImage(file, 1200, 1200, 0.75);
+        setReceiptImage(compressed);
+        setFormError('');
+      } catch (err) {
+        console.error('Compress receipt error:', err);
+        setFormError('เกิดข้อผิดพลาดในการโหลดรูปสลิป');
+      }
     }
   };
 
@@ -221,11 +228,11 @@ export const ActualCostTrackerView: React.FC<ActualCostTrackerViewProps> = ({
     e.preventDefault();
     const numAmount = parseFloat(amount);
     if (isNaN(numAmount) || numAmount <= 0) {
-      alert('กรุณากรอกจำนวนเงินให้ถูกต้อง');
+      setFormError('กรุณากรอกจำนวนเงินให้ถูกต้องและมากกว่า 0');
       return;
     }
     if (!description.trim()) {
-      alert('กรุณากรอกรายละเอียดรายการหรือชื่อสินค้า');
+      setFormError('กรุณากรอกรายละเอียดรายการหรือชื่อสินค้า');
       return;
     }
 
@@ -251,14 +258,14 @@ export const ActualCostTrackerView: React.FC<ActualCostTrackerViewProps> = ({
     setInvoiceNumber('');
     setReceiptImage('');
     setNotes('');
+    setFormError('');
     setIsAddModalOpen(false);
   };
 
   // Delete Expense
   const handleDeleteExpense = (id: string) => {
-    if (confirm('คุณต้องการลบรายการค่าใช้จ่ายนี้ใช่หรือไม่?')) {
-      onUpdateExpenses(expenses.filter(e => e.id !== id));
-    }
+    onUpdateExpenses(expenses.filter(e => e.id !== id));
+    setDeleteConfirmId(null);
   };
 
   // Filtered Expenses
@@ -275,7 +282,7 @@ export const ActualCostTrackerView: React.FC<ActualCostTrackerViewProps> = ({
   }, [expenses, filterCategory, filterType, searchTerm]);
 
   // Copy Summary to LINE
-  const handleCopyLineReport = () => {
+  const handleCopyLineReport = async () => {
     let text = `📊 สรุปความคืบหน้าต้นทุนจริง vs BOQ (Actual Cost & Profit Tracker)\n`;
     text += `🏗️ โครงการ: ${projectName} (${houseAreaSqm} ตร.ม.)\n`;
     text += `💰 มูลค่าสัญญารวม: ฿${boqSummary.grandTotal.toLocaleString()} บาท\n`;
@@ -297,7 +304,7 @@ export const ActualCostTrackerView: React.FC<ActualCostTrackerViewProps> = ({
     text += `🧾 จำนวนบิลที่บันทึก: ${expenses.length} รายการ\n`;
     text += `✨ ตรวจสอบและบริหารต้นทุนด้วยระบบ Thai Construction BOQ Pro`;
 
-    navigator.clipboard.writeText(text);
+    await copyToClipboardWithFallback(text);
     setCopyToast(true);
     setTimeout(() => setCopyToast(false), 3000);
   };
@@ -347,19 +354,38 @@ export const ActualCostTrackerView: React.FC<ActualCostTrackerViewProps> = ({
               <span>+ บันทึกบิลซื้อของ / ค่าแรง</span>
             </button>
             {expenses.length > 0 && (
-              <button
-                type="button"
-                onClick={() => {
-                  if (confirm('คุณต้องการล้างประวัติการจ่ายเงินทั้งหมดให้เป็น 0 ใช่หรือไม่?')) {
-                    onUpdateExpenses([]);
-                  }
-                }}
-                className="px-3 py-1.5 rounded-xl bg-rose-950/60 hover:bg-rose-900 border border-rose-500/30 text-rose-300 text-xs font-semibold flex items-center gap-1 transition active:scale-95"
-                title="ล้างประวัติบิลทั้งหมดให้เป็น 0"
-              >
-                <span className="material-symbols-outlined text-xs">delete_sweep</span>
-                <span>ล้างทั้งหมด</span>
-              </button>
+              showClearConfirm ? (
+                <div className="flex items-center gap-1.5 p-1 rounded-xl bg-rose-950/80 border border-rose-500/50 text-xs">
+                  <span className="text-rose-200 text-[11px] px-1">ยืนยันล้างทั้งหมด?</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onUpdateExpenses([]);
+                      setShowClearConfirm(false);
+                    }}
+                    className="px-2 py-1 bg-rose-600 hover:bg-rose-500 text-white rounded font-bold text-[11px]"
+                  >
+                    ✓ ล้าง
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowClearConfirm(false)}
+                    className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[11px]"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowClearConfirm(true)}
+                  className="px-3 py-1.5 rounded-xl bg-rose-950/60 hover:bg-rose-900 border border-rose-500/30 text-rose-300 text-xs font-semibold flex items-center gap-1 transition active:scale-95"
+                  title="ล้างประวัติบิลทั้งหมดให้เป็น 0"
+                >
+                  <span className="material-symbols-outlined text-xs">delete_sweep</span>
+                  <span>ล้างทั้งหมด</span>
+                </button>
+              )
             )}
           </div>
         </div>
@@ -683,13 +709,34 @@ export const ActualCostTrackerView: React.FC<ActualCostTrackerViewProps> = ({
                         )}
                       </td>
                       <td className="py-2.5 px-2 text-center">
-                        <button
-                          onClick={() => handleDeleteExpense(exp.id)}
-                          className="p-1 rounded hover:bg-rose-950/60 text-slate-500 hover:text-rose-400 transition"
-                          title="ลบรายการนี้"
-                        >
-                          <span className="material-symbols-outlined text-sm">delete</span>
-                        </button>
+                        {deleteConfirmId === exp.id ? (
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteExpense(exp.id)}
+                              className="px-1.5 py-0.5 rounded bg-rose-600 hover:bg-rose-500 text-white font-bold text-[10px]"
+                              title="ยืนยันลบ"
+                            >
+                              ✓
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDeleteConfirmId(null)}
+                              className="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px]"
+                              title="ยกเลิก"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => setDeleteConfirmId(exp.id)}
+                            className="p-1 rounded hover:bg-rose-950/60 text-slate-500 hover:text-rose-400 transition"
+                            title="ลบรายการนี้"
+                          >
+                            <span className="material-symbols-outlined text-sm">delete</span>
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );
@@ -718,6 +765,12 @@ export const ActualCostTrackerView: React.FC<ActualCostTrackerViewProps> = ({
             </div>
 
             <form onSubmit={handleSaveExpense} className="p-6 overflow-y-auto flex flex-col gap-4 text-xs">
+              {formError && (
+                <div className="bg-rose-500/20 text-rose-300 border border-rose-500/40 p-2.5 rounded-xl text-xs font-medium flex items-center justify-between">
+                  <span>⚠️ {formError}</span>
+                  <button type="button" onClick={() => setFormError('')} className="text-rose-400 hover:text-white">✕</button>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-3">
                 <div className="flex flex-col gap-1">
                   <label className="text-slate-400 font-medium">วันที่จ่ายเงิน / วันที่ในบิล:</label>

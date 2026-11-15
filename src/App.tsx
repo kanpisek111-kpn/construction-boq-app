@@ -3,7 +3,6 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { BOQItem, ConstructionCategory, QuotationMeta, ProjectSaveState, PaymentMilestone, ProjectStatus, ActualExpenseItem, GanttTask } from './types';
 import { CATEGORY_LABELS, DEFAULT_STANDARD_BOQ, DEFAULT_BASE_AREA_SQM, DEFAULT_QUOTATION_META, DEFAULT_PAYMENT_MILESTONES, formatMilestonesToPaymentTerms } from './constants';
 import { computeBOQSummary, scaleBOQByArea, generateSiteMaterialsProcurementList } from './services/calculator';
-import { ProjectManagerModal } from './components/ProjectManagerModal';
 import { ProjectDashboardView } from './components/ProjectDashboardView';
 import { BOQTable } from './components/BOQTable';
 import { SiteProcurementView } from './components/SiteProcurementView';
@@ -100,8 +99,17 @@ function loadProjectsList(): ProjectSaveState[] {
   } catch {}
   return [];
 }
-function saveProjectsList(list: ProjectSaveState[]): void {
-  try { localStorage.setItem(PROJECTS_LIST_KEY, JSON.stringify(list)); } catch {}
+function saveProjectsList(list: ProjectSaveState[], onQuotaError?: (msg: string) => void): boolean {
+  try {
+    localStorage.setItem(PROJECTS_LIST_KEY, JSON.stringify(list));
+    return true;
+  } catch (err: any) {
+    console.error('Failed to save projects to localStorage:', err);
+    if (onQuotaError) {
+      onQuotaError('⚠️ พื้นที่เก็บข้อมูลในเครื่องเต็ม! กรุณากด "สำรองไฟล์โปรเจกต์ .json" หรือลดขนาดรูปสลิป/โลโก้');
+    }
+    return false;
+  }
 }
 
 function getInitialActiveProject(): { projects: ProjectSaveState[]; activeProject: ProjectSaveState } {
@@ -121,7 +129,6 @@ export default function App() {
   const initialData = useMemo(() => getInitialActiveProject(), []);
   const [projects, setProjects] = useState<ProjectSaveState[]>(initialData.projects);
   const [activeProjectId, setActiveProjectId] = useState<string>(initialData.activeProject.id);
-  const [isProjectManagerOpen, setIsProjectManagerOpen] = useState(false);
 
   // Active project reference
   const activeProject = useMemo(() => {
@@ -130,6 +137,7 @@ export default function App() {
 
   const [activeMainTab, setActiveMainTab] = useState<'dashboard' | 'boq_estimate' | 'site_procurement' | 'gantt_schedule' | 'actual_cost_tracker'>('dashboard');
   const [houseAreaSqm, setHouseAreaSqm] = useState<number>(() => initialData.activeProject.houseAreaSqm || 120);
+  const [areaInputText, setAreaInputText] = useState<string>(() => String(initialData.activeProject.houseAreaSqm || 120));
   const [items, setItems] = useState<BOQItem[]>(() => initialData.activeProject.items || DEFAULT_STANDARD_BOQ);
   const [selectedCategory, setSelectedCategory] = useState<ConstructionCategory | 'all'>('all');
   const [boqSearchQuery, setBoqSearchQuery] = useState<string>('');
@@ -189,6 +197,20 @@ export default function App() {
       return false;
     }
   });
+
+  // Sync Daylight Mode class & storage
+  useEffect(() => {
+    try {
+      localStorage.setItem('thai_boq_daylight_mode', String(isDaylightMode));
+    } catch {}
+    if (isDaylightMode) {
+      document.documentElement.classList.add('daylight-mode');
+      document.body.classList.add('daylight-mode');
+    } else {
+      document.documentElement.classList.remove('daylight-mode');
+      document.body.classList.remove('daylight-mode');
+    }
+  }, [isDaylightMode]);
   const [isSanityCheckOpen, setIsSanityCheckOpen] = useState<boolean>(false);
 
   // ======== LICENSE & AUTH STATE ========
@@ -549,6 +571,10 @@ export default function App() {
     localStorage.setItem(ACTIVE_PROJECT_ID_KEY, id);
     setProjectName(target.projectName);
     setHouseAreaSqm(target.houseAreaSqm);
+    setAreaInputText(String(target.houseAreaSqm || 120));
+    try {
+      window.sessionStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(target));
+    } catch {}
     setOverheadPercent(target.overheadPercent ?? 7);
     setVatPercent(target.vatPercent ?? 7);
     setItems(target.items || DEFAULT_STANDARD_BOQ);
@@ -616,6 +642,10 @@ export default function App() {
     localStorage.setItem(ACTIVE_PROJECT_ID_KEY, newProj.id);
     setProjectName(newProj.projectName);
     setHouseAreaSqm(newProj.houseAreaSqm);
+    setAreaInputText(String(newProj.houseAreaSqm || 120));
+    try {
+      window.sessionStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(newProj));
+    } catch {}
     setOverheadPercent(newProj.overheadPercent);
     setVatPercent(newProj.vatPercent);
     setItems(newProj.items);
@@ -680,19 +710,24 @@ export default function App() {
 
   const handleDeleteProject = (id: string) => {
     if (projects.length <= 1) {
-      alert('ไม่สามารถลบได้ เนื่องจากต้องมีอย่างน้อย 1 โครงการในระบบ');
+      setSaveStatusToast('⚠️ ไม่สามารถลบได้ เนื่องจากต้องมีอย่างน้อย 1 โครงการในระบบ');
+      setTimeout(() => setSaveStatusToast(''), 3000);
       return;
     }
     const isActive = id === activeProjectId;
     setProjects((prev) => {
       const next = prev.filter((p) => p.id !== id);
-      saveProjectsList(next);
+      saveProjectsList(next, setSaveStatusToast);
       if (isActive && next.length > 0) {
         const first = next[0];
         setActiveProjectId(first.id);
         localStorage.setItem(ACTIVE_PROJECT_ID_KEY, first.id);
         setProjectName(first.projectName);
         setHouseAreaSqm(first.houseAreaSqm);
+        setAreaInputText(String(first.houseAreaSqm || 120));
+        try {
+          window.sessionStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(first));
+        } catch {}
         setOverheadPercent(first.overheadPercent ?? 7);
         setVatPercent(first.vatPercent ?? 7);
         setItems(first.items || DEFAULT_STANDARD_BOQ);
@@ -712,8 +747,9 @@ export default function App() {
 
   // ปรับสเกลปริมาณงานทุกรายการใน BOQ ตามพื้นที่บ้าน
   const handleAreaChange = (newArea: number) => {
-    const targetArea = Math.max(1, newArea);
+    const targetArea = Math.max(10, newArea);
     setHouseAreaSqm(targetArea);
+    setAreaInputText(String(targetArea));
     setItems(prev => scaleBOQByArea(prev, targetArea, DEFAULT_BASE_AREA_SQM));
   };
   const handleStepArea = (delta: number) => {
@@ -735,6 +771,7 @@ export default function App() {
   // รีเซ็ตกลับเป็นค่าเริ่มต้นมาตรฐาน (120 ตร.ม.)
   const handleResetToDefaultStandard = () => {
     setHouseAreaSqm(120);
+    setAreaInputText('120');
     setItems(DEFAULT_STANDARD_BOQ);
     setIsResetZeroModalOpen(false);
     setSaveStatusToast('รีเซ็ตกลับเป็นค่ามาตรฐาน 120 ตร.ม. เรียบร้อย ✓');
@@ -917,6 +954,10 @@ export default function App() {
           localStorage.setItem(ACTIVE_PROJECT_ID_KEY, cleanProject.id);
           setProjectName(cleanProject.projectName);
           setHouseAreaSqm(cleanProject.houseAreaSqm);
+          setAreaInputText(String(cleanProject.houseAreaSqm || 120));
+          try {
+            window.sessionStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(cleanProject));
+          } catch {}
           setOverheadPercent(cleanProject.overheadPercent);
           setVatPercent(cleanProject.vatPercent);
           setItems(cleanProject.items);
@@ -931,18 +972,20 @@ export default function App() {
           setProjects(prev => {
             const exists = prev.some(p => p.id === cleanProject.id);
             const next = exists ? prev.map(p => p.id === cleanProject.id ? cleanProject : p) : [...prev, cleanProject];
-            saveProjectsList(next);
+            saveProjectsList(next, setSaveStatusToast);
             return next;
           });
 
           setSaveStatusToast(`นำเข้าโครงการ "${cleanProject.projectName}" สำเร็จ ✓`);
           setTimeout(() => setSaveStatusToast(''), 3500);
         } else {
-          alert('ไฟล์ไม่ถูกต้องหรือไม่ใช่ไฟล์โครงการของระบบนี้');
+          setSaveStatusToast('⚠️ รูปแบบไฟล์ไม่ถูกต้อง หรือไม่มีรายการข้อมูล');
+          setTimeout(() => setSaveStatusToast(''), 4000);
         }
       } catch (err) {
         console.error('Load project error:', err);
-        alert('เกิดข้อผิดพลาดในการอ่านไฟล์ กรุณาตรวจสอบว่าเป็นไฟล์ JSON ที่ถูกต้อง');
+        setSaveStatusToast('⚠️ เกิดข้อผิดพลาดในการอ่านไฟล์ JSON ของระบบ');
+        setTimeout(() => setSaveStatusToast(''), 4000);
       }
     };
     reader.readAsText(file);
@@ -968,7 +1011,8 @@ export default function App() {
       });
     } catch (err) {
       console.error('Failed to export Excel:', err);
-      alert('เกิดข้อผิดพลาดในการสร้างไฟล์ Excel');
+      setSaveStatusToast('⚠️ เกิดข้อผิดพลาดในการสร้างไฟล์ Excel');
+      setTimeout(() => setSaveStatusToast(''), 4000);
     } finally {
       setIsExporting(false);
     }
@@ -1531,10 +1575,10 @@ export default function App() {
         </div>
       </header>
       {/* Main Container */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-col md:flex-row flex-1 overflow-y-auto md:overflow-hidden">
         {/* Left Side: Category Navigator & House Area Controls */}
         {activeMainTab === 'boq_estimate' && (
-          <aside className="w-72 border-r border-slate-800 bg-slate-900/70 p-4 flex flex-col justify-between shrink-0 overflow-y-auto">
+          <aside className="w-full md:w-72 border-b md:border-b-0 md:border-r border-slate-800 bg-slate-900/70 p-4 flex flex-col justify-between shrink-0 overflow-y-auto max-md:max-h-80">
             <div className="flex flex-col gap-4">
               {/* HOUSE AREA CONTROLLER CARD */}
               <div className="bg-gradient-to-br from-indigo-950/80 via-slate-900 to-cyan-950/80 p-4 rounded-2xl border-2 border-indigo-500/50 shadow-xl shadow-indigo-950/40 flex flex-col gap-3">
@@ -1557,15 +1601,31 @@ export default function App() {
                     -
                   </button>
                   <input
-                    type="number"
-                    min="10"
-                    max="5000"
-                    step="1"
-                    value={houseAreaSqm === 0 ? '' : houseAreaSqm}
+                    type="text"
+                    value={areaInputText}
                     placeholder="120"
                     onChange={(e) => {
-                      const val = e.target.value === '' ? 0 : parseFloat(e.target.value);
-                      handleAreaChange(isNaN(val) ? 0 : val);
+                      const valStr = e.target.value;
+                      setAreaInputText(valStr);
+                      const val = parseFloat(valStr);
+                      if (!isNaN(val) && val >= 10) {
+                        handleAreaChange(val);
+                      }
+                    }}
+                    onBlur={() => {
+                      const val = parseFloat(areaInputText);
+                      if (isNaN(val) || val < 10) {
+                        const fallback = Math.max(10, houseAreaSqm);
+                        setAreaInputText(String(fallback));
+                        handleAreaChange(fallback);
+                      } else {
+                        handleAreaChange(val);
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        (e.currentTarget as HTMLInputElement).blur();
+                      }
                     }}
                     className="w-full text-center bg-transparent text-2xl font-black font-mono text-amber-400 focus:outline-none"
                   />

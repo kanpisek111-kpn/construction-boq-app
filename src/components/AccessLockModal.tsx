@@ -7,6 +7,7 @@ import {
   getStoredGeneratedKeys,
   PRESET_DEMO_KEYS 
 } from '../services/authService';
+import { copyToClipboardWithFallback } from '../services/imageUtils';
 
 interface AccessLockModalProps {
   isOpen: boolean;
@@ -196,8 +197,8 @@ export const OwnerKeyManagerModal: React.FC<OwnerKeyManagerModalProps> = ({ isOp
     setKeyList(getStoredGeneratedKeys());
   };
 
-  const handleCopy = (text: string) => {
-    navigator.clipboard.writeText(text);
+  const handleCopy = async (text: string) => {
+    await copyToClipboardWithFallback(text);
     setCopyToast(true);
     setTimeout(() => setCopyToast(false), 2000);
   };

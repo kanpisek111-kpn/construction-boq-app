@@ -4,6 +4,7 @@ import { CATEGORY_LABELS, formatMilestonesToPaymentTerms } from '../constants';
 import { exportBOQToExcel } from '../services/excelExporter';
 import { computeBOQSummary } from '../services/calculator';
 import { LicenseTier, canAccessFeature } from '../services/authService';
+import { compressImage } from '../services/imageUtils';
 
 interface QuotationPrintModalProps {
   isOpen: boolean;
@@ -50,28 +51,41 @@ export const QuotationPrintModal: React.FC<QuotationPrintModalProps> = ({
     ? formatMilestonesToPaymentTerms(milestones, summary.grandTotal)
     : meta.paymentTerms;
 
-  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const [logoToast, setLogoToast] = useState<string>('');
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!canAccessFeature('white_label_branding', licenseTier)) {
       if (onRequestUpgrade) onRequestUpgrade('White-label ปรับแต่งโลโก้บริษัทและชื่อผู้รับเหมา');
       return;
     }
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 2 * 1024 * 1024) {
-        alert('ขนาดไฟล์โลโก้ต้องไม่เกิน 2MB');
+      if (file.size > 5 * 1024 * 1024) {
+        setLogoToast('ขนาดไฟล์ภาพต้องไม่เกิน 5MB');
+        setTimeout(() => setLogoToast(''), 3000);
         return;
       }
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const base64 = event.target?.result as string;
-        setMeta(prev => ({ ...prev, companyLogo: base64 }));
-      };
-      reader.readAsDataURL(file);
+      try {
+        const compressedBase64 = await compressImage(file, 400, 200, 0.85);
+        const updatedMeta = { ...meta, companyLogo: compressedBase64 };
+        setMeta(updatedMeta);
+        onUpdateMeta(updatedMeta); // บันทึกลงโครงการทันที ไม่ต้องรอกดปุ่มบันทึก
+        setLogoToast('อัปโหลดและบันทึกโลโก้สำเร็จ ✓');
+        setTimeout(() => setLogoToast(''), 3000);
+      } catch (err) {
+        console.error('Logo upload error:', err);
+        setLogoToast('เกิดข้อผิดพลาดในการโหลดรูปโลโก้');
+        setTimeout(() => setLogoToast(''), 3000);
+      }
     }
   };
 
   const handleRemoveLogo = () => {
-    setMeta(prev => ({ ...prev, companyLogo: '' }));
+    const updatedMeta = { ...meta, companyLogo: '' };
+    setMeta(updatedMeta);
+    onUpdateMeta(updatedMeta); // บันทึกลงโครงการทันที
+    setLogoToast('ลบโลโก้เรียบร้อย ✓');
+    setTimeout(() => setLogoToast(''), 2500);
   };
 
   const handleSaveMeta = () => {
@@ -80,20 +94,34 @@ export const QuotationPrintModal: React.FC<QuotationPrintModalProps> = ({
   };
 
   const handlePrint = () => {
+    // บันทึกข้อมูลหัวบิลลงโครงการอัตโนมัติก่อนพิมพ์ เพื่อไม่ให้ข้อมูลสูญหาย
+    onUpdateMeta(meta);
+
     const printArea = document.getElementById('quotation-print-area');
     if (!printArea) {
       window.print();
       return;
     }
 
-    const printWindow = window.open('', '_blank', 'width=900,height=800');
-    if (!printWindow) {
-      // If popup is blocked by browser, fallback to standard window.print()
-      window.print();
-      return;
-    }
+    try {
+      // Remove any existing print iframe
+      const existingIframe = document.getElementById('quotation-print-iframe');
+      if (existingIframe) {
+        existingIframe.remove();
+      }
 
-    const htmlContent = `<!DOCTYPE html>
+      const iframe = document.createElement('iframe');
+      iframe.id = 'quotation-print-iframe';
+      iframe.style.position = 'fixed';
+      iframe.style.right = '0';
+      iframe.style.bottom = '0';
+      iframe.style.width = '0';
+      iframe.style.height = '0';
+      iframe.style.border = 'none';
+      iframe.style.visibility = 'hidden';
+      document.body.appendChild(iframe);
+
+      const htmlContent = `<!DOCTYPE html>
 <html lang="th">
 <head>
   <meta charset="UTF-8">
@@ -148,75 +176,41 @@ export const QuotationPrintModal: React.FC<QuotationPrintModalProps> = ({
       page-break-inside: avoid !important;
       break-inside: avoid !important;
     }
-    @media print {
-      body {
-        padding: 0;
-      }
-      .no-print {
-        display: none !important;
-      }
-    }
-    .action-bar {
-      position: sticky;
-      top: 0;
-      background: #0f172a;
-      color: #ffffff;
-      padding: 10px 20px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      box-shadow: 0 4px 6px -1px rgba(0,0,0,0.2);
-      z-index: 9999;
-      font-family: sans-serif;
-    }
-    .btn-print {
-      background: #f59e0b;
-      color: #0f172a;
-      border: none;
-      padding: 8px 18px;
-      border-radius: 8px;
-      font-weight: bold;
-      font-size: 13px;
-      cursor: pointer;
-    }
-    .btn-close {
-      background: #334155;
-      color: #f8fafc;
-      border: none;
-      padding: 8px 14px;
-      border-radius: 8px;
-      font-size: 13px;
-      cursor: pointer;
+    .no-print {
+      display: none !important;
     }
   </style>
 </head>
 <body>
-  <div class="action-bar no-print">
-    <div>
-      <strong>📄 ใบเสนอราคา (Quotation Preview)</strong>
-      <span style="font-size: 12px; opacity: 0.8; margin-left: 10px;">เลือก "บันทึกเป็น PDF" ในหน้าต่างพิมพ์</span>
-    </div>
-    <div style="display: flex; gap: 8px;">
-      <button class="btn-print" onclick="window.print()">🖨️ พิมพ์ / บันทึก PDF</button>
-      <button class="btn-close" onclick="window.close()">ปิดหน้าต่าง</button>
-    </div>
-  </div>
   <div class="print-sheet">
     ${printArea.innerHTML}
   </div>
-  <script>
-    window.addEventListener('load', () => {
-      setTimeout(() => {
-        window.print();
-      }, 500);
-    });
-  </script>
 </body>
 </html>`;
 
-    printWindow.document.open();
-    printWindow.document.write(htmlContent);
-    printWindow.document.close();
+      const doc = iframe.contentWindow?.document || iframe.contentDocument;
+      if (!doc || !iframe.contentWindow) {
+        window.print();
+        return;
+      }
+
+      doc.open();
+      doc.write(htmlContent);
+      doc.close();
+
+      setTimeout(() => {
+        try {
+          iframe.contentWindow?.focus();
+          iframe.contentWindow?.print();
+        } catch (e) {
+          console.warn('Iframe print failed, fallback to window.print()', e);
+          window.print();
+        }
+      }, 500);
+    } catch (err) {
+      console.warn('Hidden iframe print error:', err);
+      window.print();
+    }
   };
 
   if (!isOpen) return null;
@@ -287,6 +281,17 @@ export const QuotationPrintModal: React.FC<QuotationPrintModalProps> = ({
             </button>
           </div>
         </div>
+
+        {/* Status Toast Banner */}
+        {logoToast && (
+          <div className="print:hidden bg-emerald-500/20 border-b border-emerald-500/40 text-emerald-300 px-4 py-2 text-xs flex items-center justify-between animate-in">
+            <div className="flex items-center gap-1.5 font-medium">
+              <span className="material-symbols-outlined text-sm">info</span>
+              <span>{logoToast}</span>
+            </div>
+            <button onClick={() => setLogoToast('')} className="text-emerald-400 hover:text-white text-xs">✕</button>
+          </div>
+        )}
 
         {/* Edit Metadata Drawer */}
         {showMetaEdit && (

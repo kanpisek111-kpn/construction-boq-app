@@ -129,6 +129,7 @@ export const StructureEstimatorModal: React.FC<StructureEstimatorModalProps> = (
 
   // แท็บทำงาน: งานเสาเข็มและดินขุด, ฟุตติ้ง, คาน, เสา, พื้น
   const [activeTab, setActiveTab] = useState<'piles_earthwork' | 'footing' | 'beam' | 'column' | 'slab'>('piles_earthwork');
+  const [toastMessage, setToastMessage] = useState<string>('');
 
   // คำนวณปริมาณวัสดุ
   const result = useMemo(() => {
@@ -193,7 +194,8 @@ export const StructureEstimatorModal: React.FC<StructureEstimatorModalProps> = (
 
   const handleDeleteFooting = (id: string) => {
     if (footings.length <= 1) {
-      alert('ต้องมีฐานรากอย่างน้อย 1 ประเภท');
+      setToastMessage('ต้องมีฐานรากอย่างน้อย 1 ประเภท');
+      setTimeout(() => setToastMessage(''), 3000);
       return;
     }
     setFootings(prev => prev.filter(f => f.id !== id));
@@ -222,7 +224,8 @@ export const StructureEstimatorModal: React.FC<StructureEstimatorModalProps> = (
 
   const handleDeleteBeam = (id: string) => {
     if (beams.length <= 1) {
-      alert('ต้องมีคานอย่างน้อย 1 ประเภท');
+      setToastMessage('ต้องมีคานอย่างน้อย 1 ประเภท');
+      setTimeout(() => setToastMessage(''), 3000);
       return;
     }
     setBeams(prev => prev.filter(b => b.id !== id));
@@ -615,6 +618,17 @@ export const StructureEstimatorModal: React.FC<StructureEstimatorModalProps> = (
             <span className="material-symbols-outlined">close</span>
           </button>
         </div>
+
+        {/* Warning Toast Banner */}
+        {toastMessage && (
+          <div className="bg-amber-500/20 text-amber-300 border-b border-amber-500/40 px-6 py-2 text-xs font-semibold flex items-center justify-between animate-in">
+            <span className="flex items-center gap-1.5">
+              <span className="material-symbols-outlined text-sm">warning</span>
+              <span>{toastMessage}</span>
+            </span>
+            <button onClick={() => setToastMessage('')} className="text-amber-400 hover:text-white">✕</button>
+          </div>
+        )}
 
         {/* Tab Switcher */}
         <div className="px-6 py-2.5 bg-slate-950/80 border-b border-slate-800 flex items-center justify-between flex-wrap gap-2 text-xs shrink-0">

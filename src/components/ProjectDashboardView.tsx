@@ -52,6 +52,7 @@ export const ProjectDashboardView: React.FC<ProjectDashboardViewProps> = ({
   const [newCustomerPhone, setNewCustomerPhone] = useState('081-234-5678');
   const [newCustomerAddress, setNewCustomerAddress] = useState('แปลงที่ 14 หมู่บ้านสุขนิเวศน์ ต.บางกรวย อ.บางกรวย จ.นนทบุรี');
   const [newStatus, setNewStatus] = useState<ProjectStatus>('draft');
+  const [deleteConfirmProject, setDeleteConfirmProject] = useState<{ id: string; name: string } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -479,9 +480,7 @@ export const ProjectDashboardView: React.FC<ProjectDashboardViewProps> = ({
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (confirm(`คุณต้องการลบโครงการ "${proj.projectName}" ใช่หรือไม่?`)) {
-                            onDeleteProject(proj.id);
-                          }
+                          setDeleteConfirmProject({ id: proj.id, name: proj.projectName });
                         }}
                         className="w-8 h-8 rounded-lg bg-slate-800/90 hover:bg-rose-900/60 text-slate-400 hover:text-rose-300 flex items-center justify-center transition active:scale-95"
                         title="ลบโครงการ"
@@ -647,6 +646,43 @@ export const ProjectDashboardView: React.FC<ProjectDashboardViewProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Project Confirmation Modal */}
+      {deleteConfirmProject && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-sm animate-in">
+          <div className="bg-slate-900 border border-slate-700 w-full max-w-md rounded-2xl p-6 text-slate-100 shadow-2xl flex flex-col gap-4">
+            <div className="flex items-center gap-3 text-rose-400">
+              <span className="material-symbols-outlined text-3xl">warning</span>
+              <div>
+                <h3 className="text-base font-bold text-white">ยืนยันการลบโครงการ</h3>
+                <p className="text-xs text-slate-400">ข้อมูลทั้งหมดของโครงการนี้จะถูกลบออกจากระบบ</p>
+              </div>
+            </div>
+            <p className="text-sm text-slate-300 bg-slate-950 p-3 rounded-xl border border-slate-800">
+              คุณต้องการลบโครงการ <strong className="text-white">"{deleteConfirmProject.name}"</strong> ใช่หรือไม่?
+            </p>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmProject(null)}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onDeleteProject(deleteConfirmProject.id);
+                  setDeleteConfirmProject(null);
+                }}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold"
+              >
+                ยืนยันลบโครงการ
+              </button>
+            </div>
           </div>
         </div>
       )}

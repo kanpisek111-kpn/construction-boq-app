@@ -31,7 +31,7 @@ export const PlanAnalyzerModal: React.FC<PlanAnalyzerModalProps> = ({
     const file = e.target.files?.[0];
     if (file) {
       if (file.size > 15 * 1024 * 1024) {
-        alert('ขนาดไฟล์ต้องไม่เกิน 15MB');
+        setError('ขนาดไฟล์ต้องไม่เกิน 15MB');
         return;
       }
       const reader = new FileReader();
@@ -363,7 +363,6 @@ export const PlanAnalyzerModal: React.FC<PlanAnalyzerModalProps> = ({
 
     onMergeItems(newBoqItems);
     onClose();
-    alert(`นำเข้าข้อมูลจากแปลนบ้านเรียบร้อย!\n• พื้นที่อาคาร: ${Math.round(area)} ตร.ม.\n• จำนวนรายการ BOQ: ${newBoqItems.length} รายการ`);
   };
 
   return (

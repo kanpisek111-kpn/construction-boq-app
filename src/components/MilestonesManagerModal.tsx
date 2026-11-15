@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { PaymentMilestone, MilestoneTemplate, ConstructionCategory } from '../types';
 import { MILESTONE_TEMPLATES, DEFAULT_4_MILESTONES, CATEGORY_LABELS } from '../constants';
+import { copyToClipboardWithFallback } from '../services/imageUtils';
 
 interface MilestonesManagerModalProps {
   isOpen: boolean;
@@ -22,7 +23,8 @@ export const MilestonesManagerModal: React.FC<MilestonesManagerModalProps> = ({
   });
   const [activeEditingId, setActiveEditingId] = useState<string | null>(items[0]?.id || null);
   const [copiedLine, setCopiedLine] = useState<boolean>(false);
-  const handleCopyLineSummary = () => {
+  const [warnMessage, setWarnMessage] = useState<string>('');
+  const handleCopyLineSummary = async () => {
     let text = '📋 สรุปงวดงานก่อสร้าง & กำหนดการชำระเงิน\n';
     text += '🏗️ โครงการก่อสร้าง: ' + (items.length) + ' งวดงาน\n';
     text += '💰 ยอดรวมทั้งสิ้น: ฿' + grandTotal.toLocaleString() + ' บาท\n';
@@ -40,7 +42,7 @@ export const MilestonesManagerModal: React.FC<MilestonesManagerModalProps> = ({
     text += '------------------------------------\n';
     text += '✨ เอกสารสรุปงวดงานอ้างอิงตามสัญญาจ้างก่อสร้าง';
     
-    navigator.clipboard.writeText(text);
+    await copyToClipboardWithFallback(text);
     setCopiedLine(true);
     setTimeout(() => setCopiedLine(false), 3000);
   };
@@ -164,7 +166,8 @@ export const MilestonesManagerModal: React.FC<MilestonesManagerModalProps> = ({
   // ลบงวดงาน
   const handleDeleteMilestone = (id: string) => {
     if (items.length <= 2) {
-      alert('สัญญาจ้างควรกำหนดงวดงานอย่างน้อย 2 งวด');
+      setWarnMessage('สัญญาจ้างควรกำหนดงวดงานอย่างน้อย 2 งวด');
+      setTimeout(() => setWarnMessage(''), 3000);
       return;
     }
     const filtered = items.filter(m => m.id !== id);
@@ -249,6 +252,17 @@ export const MilestonesManagerModal: React.FC<MilestonesManagerModalProps> = ({
             <span className="material-symbols-outlined">close</span>
           </button>
         </div>
+
+        {/* Warning Toast Banner */}
+        {warnMessage && (
+          <div className="bg-amber-500/20 text-amber-300 border-b border-amber-500/40 px-6 py-2 text-xs font-semibold flex items-center justify-between animate-in">
+            <span className="flex items-center gap-1.5">
+              <span className="material-symbols-outlined text-sm">warning</span>
+              <span>{warnMessage}</span>
+            </span>
+            <button onClick={() => setWarnMessage('')} className="text-amber-400 hover:text-white">✕</button>
+          </div>
+        )}
 
         {/* Template Selector & Percentage Balance Bar */}
         <div className="px-6 py-3 bg-slate-950/90 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs shrink-0">

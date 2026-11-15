@@ -75,12 +75,14 @@ export const GanttChartScheduleView: React.FC<GanttChartScheduleViewProps> = ({
     }
   }, [initialStartDate, projectName]);
 
-  // Sync when propTasks change externally
+  // Sync when propTasks, milestones, or projectName change externally
   React.useEffect(() => {
     if (propTasks && propTasks.length > 0) {
       setTasks(propTasks);
+    } else {
+      setTasks(generateDefaultGanttTasks(milestones));
     }
-  }, [propTasks]);
+  }, [propTasks, milestones, projectName]);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState<boolean>(false);
 

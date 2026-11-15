@@ -14,6 +14,14 @@ body {
   color: #f8fafc;
 }
 
+/* Custom intermediate slate shades */
+.bg-slate-650 { background-color: #3f4e66 !important; }
+.bg-slate-750 { background-color: #26334a !important; }
+.border-slate-650 { border-color: #3f4e66 !important; }
+.border-slate-750 { border-color: #26334a !important; }
+.hover\:bg-slate-650:hover { background-color: #3f4e66 !important; }
+.hover\:bg-slate-750:hover { background-color: #26334a !important; }
+
 /* Material Symbols font configuration */
 .material-symbols-outlined {
   font-variation-settings:
