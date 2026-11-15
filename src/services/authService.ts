@@ -664,6 +664,11 @@ export function canAccessFeature(
     return true;
   }
 
+  // ฐานราคาภูมิภาคและคลังราคาเปิดให้ทุกระดับเข้าดูและเลือกโซนได้ (โหมด Demo จะแจ้งเตือนเมื่อดึงลง BOQ)
+  if (feature === 'price_book') {
+    return true;
+  }
+
   if (tier === 'pro') {
     switch (feature) {
       case 'export_quotation':
@@ -677,7 +682,6 @@ export function canAccessFeature(
       case 'gantt_schedule':
       case 'project_files_json':
       case 'white_label_branding':
-      case 'price_book':
         return true;
       case 'actual_cost_tracker':
       case 'ai_sanity_check':
@@ -696,7 +700,6 @@ export function canAccessFeature(
       case 'milestones_manager':
       case 'cost_analytics':
       case 'advanced_calculators':
-      case 'price_book':
         return true;
       case 'multi_projects':
       case 'site_procurement':

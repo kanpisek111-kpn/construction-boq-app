@@ -11,6 +11,7 @@ import {
 import { 
   REGIONAL_PRESETS, 
   DEFAULT_MASTER_RATES, 
+  INITIAL_SAVED_CUSTOM_ITEMS,
   applyPriceBookToItems, 
   resetPriceBookConfig 
 } from '../services/priceBookService';
@@ -60,10 +61,20 @@ export const PriceBookModal: React.FC<PriceBookModalProps> = ({
   const [customItemFilterCategory, setCustomItemFilterCategory] = useState<string>('all');
   const [customItemSearch, setCustomItemSearch] = useState('');
 
-  // Sync draft when opened
+  // Sync draft when opened - ensure savedCustomItems has default library if empty
   useEffect(() => {
     if (isOpen) {
-      setDraftConfig(currentConfig);
+      const validItems = (currentConfig.savedCustomItems && currentConfig.savedCustomItems.length > 0)
+        ? currentConfig.savedCustomItems
+        : [...INITIAL_SAVED_CUSTOM_ITEMS];
+      const validConfig: PriceBookConfig = {
+        ...currentConfig,
+        savedCustomItems: validItems
+      };
+      setDraftConfig(validConfig);
+      if (!currentConfig.savedCustomItems || currentConfig.savedCustomItems.length === 0) {
+        onSaveConfig(validConfig);
+      }
       setToast(null);
       setIsAddingNewItem(false);
     }
@@ -246,6 +257,16 @@ export const PriceBookModal: React.FC<PriceBookModalProps> = ({
     showToast('ลบรายการออกจากคลังเรียบร้อย', 'info');
   };
 
+  const handleRestoreDefaultItems = () => {
+    const updatedConfig: PriceBookConfig = {
+      ...draftConfig,
+      savedCustomItems: [...INITIAL_SAVED_CUSTOM_ITEMS]
+    };
+    setDraftConfig(updatedConfig);
+    onSaveConfig(updatedConfig);
+    showToast(`โหลดคลังรายการมาตรฐาน (${INITIAL_SAVED_CUSTOM_ITEMS.length} รายการ) เรียบร้อยแล้ว ✓`, 'success');
+  };
+
   const handleInsertIntoBOQ = (customItem: SavedPriceBookItem) => {
     if (isDemo) {
       if (onRequestUpgrade) onRequestUpgrade('คลังราคาส่วนตัว');
@@ -368,7 +389,7 @@ export const PriceBookModal: React.FC<PriceBookModalProps> = ({
             }`}
           >
             <span className="material-symbols-outlined text-base">inventory_2</span>
-            <span>3. คลังรายการส่วนตัว ({draftConfig.savedCustomItems?.length || 0})</span>
+            <span>3. คลังรายการวัสดุ & งาน ({draftConfig.savedCustomItems?.length || 0})</span>
           </button>
         </div>
 
@@ -747,32 +768,45 @@ export const PriceBookModal: React.FC<PriceBookModalProps> = ({
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-slate-950/70 p-4 rounded-xl border border-slate-800">
                 <div>
                   <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                    <span>คลังรายการวัสดุและงานส่วนตัว (Personal Price Book Library)</span>
+                    <span>คลังรายการวัสดุและงานก่อสร้าง (Construction Price Book Library)</span>
                     <span className="px-2 py-0.5 rounded-full text-[10px] bg-indigo-500/20 text-indigo-300 font-mono border border-indigo-500/30">
                       {draftConfig.savedCustomItems?.length || 0} รายการ
                     </span>
                   </h3>
                   <p className="text-xs text-slate-400">
-                    บันทึกรายการวัสดุ งานสั่งทำพิเศษ หรืองานเฉพาะไซต์ที่ใช้บ่อย เพื่อกดดึงลงตาราง BOQ ได้ใน 1 คลิก
+                    รายการวัสดุพร้อมราคากลางมาตรฐานและงานสั่งทำพิเศษ กดดึงลงตาราง BOQ ได้ใน 1 คลิก พร้อมคำนวณตามโซนภูมิภาคทันที
                   </p>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (isDemo) {
-                      if (onRequestUpgrade) onRequestUpgrade('คลังราคาส่วนตัว');
-                      return;
-                    }
-                    setIsAddingNewItem(!isAddingNewItem);
-                  }}
-                  className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center gap-1.5 shadow transition"
-                >
-                  <span className="material-symbols-outlined text-sm">
-                    {isAddingNewItem ? 'close' : 'add'}
-                  </span>
-                  <span>{isAddingNewItem ? 'ปิดฟอร์ม' : '+ เพิ่มรายการใหม่'}</span>
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleRestoreDefaultItems}
+                    className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs flex items-center gap-1.5 border border-slate-700 transition"
+                    title="โหลดรายการวัสดุ-ค่าแรงมาตรฐานทั้งหมดของระบบเข้ามาใหม่"
+                  >
+                    <span className="material-symbols-outlined text-sm text-amber-400">restart_alt</span>
+                    <span className="hidden sm:inline">โหลดรายการมาตรฐาน</span>
+                    <span>({INITIAL_SAVED_CUSTOM_ITEMS.length})</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (isDemo) {
+                        if (onRequestUpgrade) onRequestUpgrade('คลังราคาส่วนตัว');
+                        return;
+                      }
+                      setIsAddingNewItem(!isAddingNewItem);
+                    }}
+                    className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center gap-1.5 shadow transition"
+                  >
+                    <span className="material-symbols-outlined text-sm">
+                      {isAddingNewItem ? 'close' : 'add'}
+                    </span>
+                    <span>{isAddingNewItem ? 'ปิดฟอร์ม' : '+ เพิ่มรายการใหม่'}</span>
+                  </button>
+                </div>
               </div>
 
               {/* Add New Item Form Collapsible */}
@@ -937,22 +971,32 @@ export const PriceBookModal: React.FC<PriceBookModalProps> = ({
 
               {/* Saved Items List */}
               {filteredSavedItems.length === 0 ? (
-                <div className="bg-slate-950/50 border border-slate-800 rounded-2xl p-8 text-center text-slate-400 space-y-2">
+                <div className="bg-slate-950/50 border border-slate-800 rounded-2xl p-8 text-center text-slate-400 space-y-3">
                   <span className="material-symbols-outlined text-4xl text-slate-600">inventory_2</span>
-                  <p className="text-xs">ไม่พบรายการที่ตรงกับเงื่อนไขค้นหา</p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (isDemo) {
-                        if (onRequestUpgrade) onRequestUpgrade('คลังราคาส่วนตัว');
-                        return;
-                      }
-                      setIsAddingNewItem(true);
-                    }}
-                    className="mt-2 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-indigo-300 font-semibold"
-                  >
-                    + สร้างรายการแรกของคุณ
-                  </button>
+                  <p className="text-xs">ไม่พบรายการที่ตรงกับเงื่อนไขค้นหา หรือคลังรายการว่างเปล่า</p>
+                  <div className="flex items-center justify-center gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={handleRestoreDefaultItems}
+                      className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs text-white font-bold flex items-center gap-1.5 shadow transition"
+                    >
+                      <span className="material-symbols-outlined text-sm">restart_alt</span>
+                      <span>โหลดรายการมาตรฐานของระบบ ({INITIAL_SAVED_CUSTOM_ITEMS.length} รายการ)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (isDemo) {
+                          if (onRequestUpgrade) onRequestUpgrade('คลังราคาส่วนตัว');
+                          return;
+                        }
+                        setIsAddingNewItem(true);
+                      }}
+                      className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 font-semibold"
+                    >
+                      + เพิ่มรายการใหม่เอง
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">

@@ -218,8 +218,11 @@ export default function App() {
 
   const handleInsertPriceBookItem = (item: BOQItem) => {
     setItems(prev => [...prev, item]);
+    if (selectedCategory !== 'all' && selectedCategory !== item.category) {
+      setSelectedCategory('all');
+    }
     setSaveStatusToast(`+ ดึงรายการ "${item.name}" เข้าสู่ตาราง BOQ แล้ว ✓`);
-    setTimeout(() => setSaveStatusToast(''), 2500);
+    setTimeout(() => setSaveStatusToast(''), 3000);
   };
   const [isDaylightMode, setIsDaylightMode] = useState<boolean>(() => {
     try {
@@ -1519,13 +1522,7 @@ export default function App() {
                 {licenseSession.tier === 'demo' && <span className="text-[10px]">🔒</span>}
               </button>
               <button
-                onClick={() => {
-                  if (!canAccessFeature('price_book', licenseSession.tier)) {
-                    setIsPriceBookModalOpen(true);
-                    return;
-                  }
-                  setIsPriceBookModalOpen(true);
-                }}
+                onClick={() => setIsPriceBookModalOpen(true)}
                 className="px-2.5 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 hover:text-white border border-amber-500/40 text-xs font-bold flex items-center gap-1.5 transition active:scale-95 shadow-sm"
                 title={`ฐานราคาภูมิภาค: ${priceBookConfig.regionName} (วัสดุ ${(priceBookConfig.materialMultiplier * 100).toFixed(0)}%, ค่าแรง ${(priceBookConfig.laborMultiplier * 100).toFixed(0)}%)`}
               >
