@@ -49,10 +49,13 @@ export const ProjectSnapshotSection: React.FC<ProjectSnapshotSectionProps> = ({
     if (!currentProject || !currentProject.items) return map;
 
     currentProject.items.forEach((item) => {
-      const q = item.quantity || 0;
-      const mat = item.materialUnitPrice || 0;
-      const lab = item.laborUnitPrice || 0;
-      const total = q * (mat + lab);
+      const q = Number(item.quantity) || 0;
+      const mat = Number(item.materialUnitPrice) || 0;
+      const lab = Number(item.laborUnitPrice) || 0;
+      const waste = 1 + ((Number(item.wastePercent) || 0) / 100);
+      const matTotal = q * mat * waste;
+      const labTotal = q * lab;
+      const total = matTotal + labTotal;
       if (map[item.category] !== undefined) {
         map[item.category] += Math.round(total);
       }

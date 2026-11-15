@@ -20,6 +20,7 @@ interface ProjectDashboardViewProps {
   onDeleteProject: (id: string) => void;
   onImportProjectFile: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onUpdateProjectExpenses?: (projectId: string, expenses: ActualExpenseItem[]) => void;
+  onUpdateProjectStatus?: (id: string, status: ProjectStatus) => void;
 }
 
 export const ProjectDashboardView: React.FC<ProjectDashboardViewProps> = ({
@@ -31,6 +32,7 @@ export const ProjectDashboardView: React.FC<ProjectDashboardViewProps> = ({
   onDeleteProject,
   onImportProjectFile,
   onUpdateProjectExpenses,
+  onUpdateProjectStatus,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | ProjectStatus>('all');
@@ -301,6 +303,16 @@ export const ProjectDashboardView: React.FC<ProjectDashboardViewProps> = ({
           >
             <span>กำลังก่อสร้าง</span>
           </button>
+          <button
+            onClick={() => setStatusFilter('completed')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1 shrink-0 ${
+              statusFilter === 'completed'
+                ? 'bg-amber-500 text-slate-950 font-black shadow-md shadow-amber-500/20'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+            }`}
+          >
+            <span>แล้วเสร็จ</span>
+          </button>
         </div>
       </div>
 
@@ -344,13 +356,54 @@ export const ProjectDashboardView: React.FC<ProjectDashboardViewProps> = ({
                   {/* Badges row */}
                   <div className="flex items-center justify-between gap-2 flex-wrap">
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      {/* Status Badge */}
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
-                        {projectStatus === 'draft' && 'ร่างแบบ'}
-                        {projectStatus === 'quotation' && 'เสนอราคา'}
-                        {projectStatus === 'construction' && 'กำลังก่อสร้าง'}
-                        {projectStatus === 'completed' && 'แล้วเสร็จ'}
-                      </span>
+                      {/* Status Dropdown / Badge */}
+                      {onUpdateProjectStatus ? (
+                        <div
+                          className="relative inline-flex items-center"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <select
+                            value={projectStatus}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              onUpdateProjectStatus(proj.id, e.target.value as ProjectStatus);
+                            }}
+                            className={`text-[11px] font-bold pl-2.5 pr-6 py-0.5 rounded-full border cursor-pointer outline-none transition appearance-none ${
+                              projectStatus === 'completed'
+                                ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40 hover:bg-emerald-500/25'
+                                : projectStatus === 'construction'
+                                ? 'bg-amber-500/15 text-amber-300 border-amber-500/40 hover:bg-amber-500/25'
+                                : projectStatus === 'quotation'
+                                ? 'bg-sky-500/15 text-sky-300 border-sky-500/40 hover:bg-sky-500/25'
+                                : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
+                            }`}
+                            title="คลิกเพื่อเปลี่ยนสถานะโครงการ"
+                          >
+                            <option value="draft" className="bg-slate-900 text-slate-200">📝 ร่างแบบ</option>
+                            <option value="quotation" className="bg-slate-900 text-sky-300">💼 เสนอราคา</option>
+                            <option value="construction" className="bg-slate-900 text-amber-300">🏗️ กำลังก่อสร้าง</option>
+                            <option value="completed" className="bg-slate-900 text-emerald-300">✅ แล้วเสร็จ</option>
+                          </select>
+                          <span className="material-symbols-outlined text-[13px] absolute right-1.5 pointer-events-none opacity-60">
+                            arrow_drop_down
+                          </span>
+                        </div>
+                      ) : (
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                          projectStatus === 'completed'
+                            ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
+                            : projectStatus === 'construction'
+                            ? 'bg-amber-500/15 text-amber-300 border-amber-500/40'
+                            : projectStatus === 'quotation'
+                            ? 'bg-sky-500/15 text-sky-300 border-sky-500/40'
+                            : 'bg-slate-800 text-slate-300 border-slate-700'
+                        }`}>
+                          {projectStatus === 'draft' && 'ร่างแบบ'}
+                          {projectStatus === 'quotation' && 'เสนอราคา'}
+                          {projectStatus === 'construction' && 'กำลังก่อสร้าง'}
+                          {projectStatus === 'completed' && 'แล้วเสร็จ'}
+                        </span>
+                      )}
 
                       {/* Active Project Badge */}
                       {isActive && (

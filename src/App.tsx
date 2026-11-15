@@ -523,35 +523,35 @@ export default function App() {
   useEffect(() => {
     const timer = setTimeout(() => {
       try {
-        const state: ProjectSaveState = {
-          id: activeProjectId || generateId(),
-          version: '1.0',
-          savedAt: new Date().toISOString(),
-          projectName,
-          houseAreaSqm,
-          overheadPercent,
-          vatPercent,
-          items,
-          quotationMeta,
-          milestones,
-          projectStartDate,
-          projectEndDate,
-          customTasks: ganttTasks,
-          actualExpenses,
-          procurementCheckedItems,
-          status: activeProject?.status || 'draft'
-        };
-
         // Sync into projects list & localStorage
         setProjects((prev) => {
+          const currentProj = prev.find((p) => p.id === activeProjectId);
+          const state: ProjectSaveState = {
+            id: activeProjectId || generateId(),
+            version: '1.0',
+            savedAt: new Date().toISOString(),
+            projectName,
+            houseAreaSqm,
+            overheadPercent,
+            vatPercent,
+            items,
+            quotationMeta,
+            milestones,
+            projectStartDate,
+            projectEndDate,
+            customTasks: ganttTasks,
+            actualExpenses,
+            procurementCheckedItems,
+            status: currentProj?.status || activeProject?.status || 'draft'
+          };
           const next = prev.map((p) => (p.id === activeProjectId ? state : p));
           saveProjectsList(next);
+          if (typeof window !== 'undefined' && window.sessionStorage) {
+            window.sessionStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(state));
+          }
           return next;
         });
 
-        if (typeof window !== 'undefined' && window.sessionStorage) {
-          window.sessionStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(state));
-        }
         const now = new Date();
         const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
         setLastAutoSavedTime(timeStr);
@@ -565,6 +565,7 @@ export default function App() {
   const handleSwitchProject = (id: string) => {
     // 1. Save current active project state first
     setProjects((prev) => {
+      const currentProj = prev.find((p) => p.id === activeProjectId);
       const currentState: ProjectSaveState = {
         id: activeProjectId,
         version: '1.0',
@@ -581,7 +582,7 @@ export default function App() {
         customTasks: ganttTasks,
         actualExpenses,
         procurementCheckedItems,
-        status: activeProject?.status || 'draft'
+        status: currentProj?.status || activeProject?.status || 'draft'
       };
       const next = prev.map((p) => (p.id === activeProjectId ? currentState : p));
       saveProjectsList(next);
@@ -700,6 +701,22 @@ export default function App() {
       }
       return updated;
     });
+  };
+
+  const handleUpdateProjectStatus = (id: string, newStatus: ProjectStatus) => {
+    setProjects((prev) => {
+      const updated = prev.map((p) => (p.id === id ? { ...p, status: newStatus } : p));
+      saveProjectsList(updated, setSaveStatusToast);
+      return updated;
+    });
+    const statusLabels: Record<ProjectStatus, string> = {
+      draft: 'ร่างแบบ',
+      quotation: 'เสนอราคา',
+      construction: 'กำลังก่อสร้าง',
+      completed: 'แล้วเสร็จ',
+    };
+    setSaveStatusToast(`เปลี่ยนสถานะโครงการเป็น "${statusLabels[newStatus] || newStatus}" เรียบร้อย ✓`);
+    setTimeout(() => setSaveStatusToast(''), 3000);
   };
 
   const handleDuplicateProject = (id: string) => {
@@ -1854,6 +1871,7 @@ export default function App() {
               onDeleteProject={handleDeleteProject}
               onImportProjectFile={handleLoadProjectFile}
               onUpdateProjectExpenses={handleUpdateProjectExpenses}
+              onUpdateProjectStatus={handleUpdateProjectStatus}
             />
           )}
           {/* TAB 1: BOQ ESTIMATE TABLE */}

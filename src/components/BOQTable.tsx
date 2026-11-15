@@ -217,7 +217,7 @@ export const BOQTable: React.FC<BOQTableProps> = ({
                             <button
                               type="button"
                               onClick={() => onDeleteItem(item.id)}
-                              className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-red-400 transition p-1"
+                              className="opacity-70 md:opacity-0 md:group-hover:opacity-100 text-slate-500 hover:text-red-400 transition p-1"
                               title="ลบรายการ"
                             >
                               <span className="material-symbols-outlined text-sm">delete</span>

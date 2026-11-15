@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { PaymentMilestone, MilestoneTemplate, ConstructionCategory } from '../types';
 import { MILESTONE_TEMPLATES, DEFAULT_4_MILESTONES, CATEGORY_LABELS } from '../constants';
 import { copyToClipboardWithFallback } from '../services/imageUtils';
@@ -24,6 +24,16 @@ export const MilestonesManagerModal: React.FC<MilestonesManagerModalProps> = ({
   const [activeEditingId, setActiveEditingId] = useState<string | null>(items[0]?.id || null);
   const [copiedLine, setCopiedLine] = useState<boolean>(false);
   const [warnMessage, setWarnMessage] = useState<string>('');
+
+  // ซิงค์ milestones และ activeEditingId ทุกครั้งที่ modal เปิดขึ้นมา หรือ milestones เปลี่ยน
+  useEffect(() => {
+    if (isOpen) {
+      const nextMilestones = milestones && milestones.length > 0 ? milestones : DEFAULT_4_MILESTONES;
+      setItems(nextMilestones);
+      setActiveEditingId(nextMilestones[0]?.id || null);
+      setWarnMessage('');
+    }
+  }, [isOpen, milestones]);
   const handleCopyLineSummary = async () => {
     let text = '📋 สรุปงวดงานก่อสร้าง & กำหนดการชำระเงิน\n';
     text += '🏗️ โครงการก่อสร้าง: ' + (items.length) + ' งวดงาน\n';
