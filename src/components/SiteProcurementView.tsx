@@ -40,6 +40,7 @@ export const SiteProcurementView: React.FC<SiteProcurementViewProps> = ({
   const [selectedMilestoneFilter, setSelectedMilestoneFilter] = useState<'all' | number>('all');
   const [selectedGroup, setSelectedGroup] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [isConsolidated, setIsConsolidated] = useState<boolean>(true);
   const [localChecked, setLocalChecked] = useState<Record<string, boolean>>({});
 
   const activeChecked = propCheckedItems !== undefined ? propCheckedItems : localChecked;
@@ -66,14 +67,53 @@ export const SiteProcurementView: React.FC<SiteProcurementViewProps> = ({
     });
   }, [items, selectedMilestoneFilter, selectedGroup, searchQuery]);
 
+  // รวมรายการชนิดเดียวกันหากเปิดโหมดรวมรายการซ้ำ (Consolidated)
+  const displayItems = useMemo(() => {
+    if (!isConsolidated) return filteredItems;
+
+    const map = new Map<string, SiteMaterialItem & { originalIds: string[] }>();
+    filteredItems.forEach(item => {
+      const groupKey = `${item.name.trim()}__${item.unit.trim()}__${item.materialGroup}`;
+      if (!map.has(groupKey)) {
+        map.set(groupKey, {
+          ...item,
+          id: `consolidated-${item.id}`,
+          originalIds: [item.id]
+        });
+      } else {
+        const existing = map.get(groupKey)!;
+        existing.netQuantity = Math.round((existing.netQuantity + item.netQuantity) * 100) / 100;
+        existing.orderQuantity = Math.round((existing.orderQuantity + item.orderQuantity) * 100) / 100;
+        existing.totalEstimatedCost = (existing.totalEstimatedCost || 0) + (item.totalEstimatedCost || 0);
+        existing.originalIds.push(item.id);
+      }
+    });
+
+    return Array.from(map.values()).map(item => {
+      if (item.originalIds.length > 1) {
+        return {
+          ...item,
+          spec: `${item.spec} (รวมจาก ${item.originalIds.length} รายการใน BOQ)`
+        };
+      }
+      return item;
+    });
+  }, [filteredItems, isConsolidated]);
+
   // สรุปยอดเงินรวมรายการสั่งซื้อ
   const totalCost = useMemo(() => {
-    return filteredItems.reduce((acc, cur) => acc + (cur.totalEstimatedCost || 0), 0);
-  }, [filteredItems]);
+    return displayItems.reduce((acc, cur) => acc + (cur.totalEstimatedCost || 0), 0);
+  }, [displayItems]);
 
   const orderedCount = useMemo(() => {
-    return filteredItems.filter(item => Boolean(activeChecked[item.id])).length;
-  }, [filteredItems, activeChecked]);
+    return displayItems.filter(item => {
+      const origIds = (item as any).originalIds as string[] | undefined;
+      if (origIds && origIds.length > 0) {
+        return origIds.every(id => Boolean(activeChecked[id]));
+      }
+      return Boolean(activeChecked[item.id]);
+    }).length;
+  }, [displayItems, activeChecked]);
 
   const handleToggleCheck = (id: string) => {
     if (propOnToggleCheck) {
@@ -86,10 +126,35 @@ export const SiteProcurementView: React.FC<SiteProcurementViewProps> = ({
     }
   };
 
+  const handleToggleItem = (item: SiteMaterialItem) => {
+    const origIds = (item as any).originalIds as string[] | undefined;
+    if (origIds && origIds.length > 0) {
+      const nextChecked = !origIds.every(id => Boolean(activeChecked[id]));
+      const updated = { ...activeChecked };
+      origIds.forEach(id => {
+        updated[id] = nextChecked;
+      });
+      if (propOnBulkCheck) {
+        propOnBulkCheck(updated);
+      } else {
+        setLocalChecked(updated);
+      }
+    } else {
+      handleToggleCheck(item.id);
+    }
+  };
+
   const handleCheckAll = (status: boolean) => {
     const updated: Record<string, boolean> = { ...activeChecked };
-    filteredItems.forEach(i => {
-      updated[i.id] = status;
+    displayItems.forEach(i => {
+      const origIds = (i as any).originalIds as string[] | undefined;
+      if (origIds) {
+        origIds.forEach(id => {
+          updated[id] = status;
+        });
+      } else {
+        updated[i.id] = status;
+      }
     });
     if (propOnBulkCheck) {
       propOnBulkCheck(updated);
@@ -108,11 +173,13 @@ export const SiteProcurementView: React.FC<SiteProcurementViewProps> = ({
       csv += `ยอดงบประมาณวัสดุรวม,${totalCost},บาท\n\n`;
       csv += 'ลำดับ,งวดงานหน้างาน,หมวดวัสดุ,รายการวัสดุที่ต้องสั่งซื้อ,สเปก / ขนาด,ปริมาณสุทธิ,เผื่อเศษ(%),จำนวนสั่งซื้อจริง,หน่วยสั่งซื้อ,ราคาประเมิน/หน่วย,งบรวมโดยประมาณ(บาท),คำแนะนำการสั่งและการขนส่ง,สถานะสั่งแล้ว\n';
 
-      filteredItems.forEach((item, idx) => {
+      displayItems.forEach((item, idx) => {
         const phaseName = `งวดที่ ${item.milestoneNumber}: ${item.milestoneTitle}`;
         const groupName = GROUP_LABELS[item.materialGroup]?.label || item.materialGroup;
-        const isChecked = activeChecked[item.id] ? 'สั่งแล้ว ✓' : 'รอดำเนินการ';
-        csv += `${idx + 1},"${phaseName}","${groupName}","${item.name.replace(/"/g, '""')}","${item.spec.replace(/"/g, '""')}",${item.netQuantity},${item.wastePercent}%,${item.orderQuantity},"${item.unit}",${item.unitPriceEstimate},${item.totalEstimatedCost},"${item.packageNote.replace(/"/g, '""')}","${isChecked}"\n`;
+        const origIds = (item as any).originalIds as string[] | undefined;
+        const isChecked = origIds ? origIds.every(id => Boolean(activeChecked[id])) : Boolean(activeChecked[item.id]);
+        const statusText = isChecked ? 'สั่งแล้ว ✓' : 'รอดำเนินการ';
+        csv += `${idx + 1},"${phaseName}","${groupName}","${item.name.replace(/"/g, '""')}","${item.spec.replace(/"/g, '""')}",${item.netQuantity},${item.wastePercent}%,${item.orderQuantity},"${item.unit}",${item.unitPriceEstimate},${item.totalEstimatedCost},"${item.packageNote.replace(/"/g, '""')}","${statusText}"\n`;
       });
 
       const base64 = btoa(unescape(encodeURIComponent(csv)));
@@ -133,7 +200,7 @@ export const SiteProcurementView: React.FC<SiteProcurementViewProps> = ({
     let text = `📦 ใบสั่งซื้อและจัดส่งวัสดุหน้างานจริง - โครงการ: ${projectName} (${houseAreaSqm} ตร.ม.)\n`;
     text += `========================================\n\n`;
 
-    filteredItems.forEach((item, idx) => {
+    displayItems.forEach((item, idx) => {
       text += `${idx + 1}. [งวดที่ ${item.milestoneNumber}] ${item.name}\n`;
       text += `   - สเปก: ${item.spec}\n`;
       text += `   - สั่งซื้อจริง: ${safeToLocaleString(item.orderQuantity)} ${item.unit} (เผื่อเศษ ${item.wastePercent}%)\n`;
@@ -355,6 +422,25 @@ export const SiteProcurementView: React.FC<SiteProcurementViewProps> = ({
             </select>
           </div>
 
+          {/* Consolidate Toggle Button */}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setIsConsolidated(prev => !prev)}
+              className={`text-xs px-3 py-1.5 rounded-xl border flex items-center gap-1.5 font-medium transition ${
+                isConsolidated 
+                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-sm shadow-amber-500/10' 
+                  : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-white'
+              }`}
+              title="สลับระหว่าง: รวมยอดรายการวัสดุชนิดเดียวกัน (เช่น รวมแผ่นยิปซัม/เหล็ก/ปูนทุกห้อง) หรือ แยกตามงานละเอียดใน BOQ"
+            >
+              <span className="material-symbols-outlined text-sm">
+                {isConsolidated ? 'inventory_2' : 'view_list'}
+              </span>
+              <span>{isConsolidated ? 'รวมรายการชนิดเดียวกัน (ON)' : 'แยกตามรายการ BOQ (OFF)'}</span>
+            </button>
+          </div>
+
           {/* Check All Actions */}
           <div className="flex items-center gap-2">
             <button
@@ -383,7 +469,7 @@ export const SiteProcurementView: React.FC<SiteProcurementViewProps> = ({
           <div className="flex items-center gap-2">
             <span className="material-symbols-outlined text-amber-400 text-lg">fact_check</span>
             <span className="font-bold text-slate-100">
-              ตารางสั่งซื้อและเช็คยอดส่งเข้าหน้างาน ({filteredItems.length} รายการ)
+              ตารางสั่งซื้อและเช็คยอดส่งเข้าหน้างาน ({displayItems.length} รายการ {isConsolidated ? '• สรุปรวมยอด' : ''})
             </span>
           </div>
           <span className="text-[11px] text-slate-400 font-mono">
@@ -410,15 +496,16 @@ export const SiteProcurementView: React.FC<SiteProcurementViewProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-850">
-              {filteredItems.length === 0 ? (
+              {displayItems.length === 0 ? (
                 <tr>
                   <td colSpan={9} className="py-12 text-center text-slate-500 italic">
                     ไม่พบรายการวัสดุในงวดงานนี้ ลองเลือกดู "ทุกงวดงาน" หรือเปลี่ยนประเภทวัสดุ
                   </td>
                 </tr>
               ) : (
-                filteredItems.map((item) => {
-                  const isChecked = !!activeChecked[item.id];
+                displayItems.map((item) => {
+                  const origIds = (item as any).originalIds as string[] | undefined;
+                  const isChecked = origIds ? origIds.every(id => Boolean(activeChecked[id])) : Boolean(activeChecked[item.id]);
                   return (
                     <tr 
                       key={item.id} 
@@ -427,7 +514,7 @@ export const SiteProcurementView: React.FC<SiteProcurementViewProps> = ({
                       {/* Checkbox */}
                       <td className="py-3 px-3 text-center">
                         <button
-                          onClick={() => handleToggleCheck(item.id)}
+                          onClick={() => handleToggleItem(item)}
                           className={`w-5 h-5 rounded flex items-center justify-center transition border ${
                             isChecked
                               ? 'bg-emerald-500 border-emerald-400 text-slate-950 font-bold'
