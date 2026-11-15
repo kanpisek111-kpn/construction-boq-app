@@ -235,24 +235,43 @@ export const ProjectSnapshotSection: React.FC<ProjectSnapshotSectionProps> = ({
     if (!currentProject) return;
 
     const timestamp = Date.now();
-    const newExpenses: ActualExpenseItem[] = [];
+    const existingExpenses = Array.isArray(currentProject.actualExpenses) ? currentProject.actualExpenses : [];
+    
+    // เก็บรายการบิลจริงจาก ActualCostTrackerView (รายการที่ไม่ใช่ exp-snap-*) ไว้อย่างสมบูรณ์
+    const nonSnapshotExpenses = existingExpenses.filter(e => !e.id.startsWith('exp-snap-'));
 
+    // คำนวณยอดบิลจริงรายหมวดที่มีอยู่เดิม
+    const detailedExpensesByCat: Record<ConstructionCategory, number> = {} as any;
+    categoryKeys.forEach(k => { detailedExpensesByCat[k] = 0; });
+    nonSnapshotExpenses.forEach(exp => {
+      if (detailedExpensesByCat[exp.category] !== undefined) {
+        detailedExpensesByCat[exp.category] += Number(exp.amount) || 0;
+      }
+    });
+
+    // สร้างหรือปรับยอดเฉพาะส่วนต่าง (exp-snap-*) สำหรับหมวดที่ต้องการปรับยอด
+    const newSnapshotAdjustments: ActualExpenseItem[] = [];
     categoryKeys.forEach((catKey, idx) => {
-      const amt = editorInputs[catKey] || 0;
-      if (amt > 0) {
-        newExpenses.push({
+      const targetTotal = Number(editorInputs[catKey]) || 0;
+      const detailedSum = detailedExpensesByCat[catKey] || 0;
+      const diff = targetTotal - detailedSum;
+
+      if (diff > 0) {
+        newSnapshotAdjustments.push({
           id: `exp-snap-${catKey}-${timestamp + idx}`,
           date: new Date().toISOString().split('T')[0],
           category: catKey,
           expenseType: 'material',
-          vendorOrPayee: 'สรุปต้นทุนจริงหน้างาน (Project Snapshot)',
-          description: `ต้นทุนจริงสะสมหมวด ${CATEGORY_LABELS[catKey]?.title || catKey}`,
-          amount: amt,
+          vendorOrPayee: 'ปรับยอดต้นทุนจริง (Project Snapshot)',
+          description: `ปรับยอดต้นทุนสะสมหมวด ${CATEGORY_LABELS[catKey]?.title || catKey} ให้ตรงตาม Snapshot`,
+          amount: Math.round(diff),
         });
       }
     });
 
-    onUpdateProjectExpenses(currentProject.id, newExpenses);
+    // รวมบิลจริงเดิม + รายการปรับยอด Snapshot
+    const finalExpenses = [...nonSnapshotExpenses, ...newSnapshotAdjustments];
+    onUpdateProjectExpenses(currentProject.id, finalExpenses);
     setIsEditorOpen(false);
   };
 

@@ -545,6 +545,7 @@ export default function App() {
           if (parsed && Array.isArray(parsed.items) && parsed.items.length > 0 && (parsed.id === activeProjectId || !parsed.id)) {
             setProjectName(parsed.projectName || 'บ้านพักอาศัย คสล. 1-2 ชั้น');
             setHouseAreaSqm(parsed.houseAreaSqm || 120);
+            setAreaInputText(String(parsed.houseAreaSqm || 120));
             setOverheadPercent(typeof parsed.overheadPercent === 'number' ? parsed.overheadPercent : 7);
             setVatPercent(typeof parsed.vatPercent === 'number' ? parsed.vatPercent : 7);
             setItems(parsed.items);
@@ -849,7 +850,7 @@ export default function App() {
     const targetArea = Math.max(10, newArea);
     setHouseAreaSqm(targetArea);
     setAreaInputText(String(targetArea));
-    setItems(prev => scaleBOQByArea(prev, targetArea, DEFAULT_BASE_AREA_SQM));
+    setItems(prev => scaleBOQByArea(prev, targetArea, houseAreaSqm || DEFAULT_BASE_AREA_SQM));
   };
   const handleStepArea = (delta: number) => {
     handleAreaChange(houseAreaSqm + delta);
@@ -903,6 +904,10 @@ export default function App() {
     setItems(prev => prev.map(item => {
       if (item.id !== id) return item;
       const nextItem = { ...item, ...updated };
+      // อัปเดต basePerSqm เมื่อผู้ใช้แก้ไขปริมาณเอง เพื่อไม่ให้การปรับพื้นที่ภายหลังดีดค่าทิ้ง
+      if (typeof updated.quantity === 'number') {
+        nextItem.basePerSqm = updated.quantity / Math.max(1, houseAreaSqm);
+      }
       // อัปเดต baseMaterialUnitPrice และ baseLaborUnitPrice ด้วยเมื่อผู้ใช้แก้ไขราคาเอง
       // เพื่อไม่ให้ราคาที่ผู้ใช้ตั้งใจแก้ไขเพี้ยนหรือทบซ้ำเวลาเปลี่ยนโซนภูมิภาค
       // หารย้อนกลับเฉพาะเมื่อ item เดิมมี base อยู่แล้ว (เคยถูกคูณโซนมาก่อน) มิฉะนั้นเก็บค่าตรงๆ
@@ -953,6 +958,20 @@ export default function App() {
     setItems(prev => [...prev, ...finalItems]);
     setSaveStatusToast(`เพิ่มวัสดุ ${finalItems.length} รายการลง BOQ เรียบร้อย ✓`);
     setTimeout(() => setSaveStatusToast(''), 3000);
+  };
+
+  const handleMergePlanItems = (newItems: BOQItem[], mode: 'replace' | 'append' = 'replace') => {
+    const finalItems = priceBookConfig.autoApplyToNewItems 
+      ? applyPriceBookToItems(newItems, priceBookConfig) 
+      : newItems;
+    if (mode === 'replace') {
+      setItems(finalItems);
+      setSaveStatusToast(`สร้างตาราง BOQ ใหม่จากการสแกนแปลน (${finalItems.length} รายการ) เรียบร้อยแล้ว ✓`);
+    } else {
+      setItems(prev => [...prev, ...finalItems]);
+      setSaveStatusToast(`เพิ่มรายการจากการสแกนแปลน (${finalItems.length} รายการ) ต่อท้าย BOQ เดิมเรียบร้อย ✓`);
+    }
+    setTimeout(() => setSaveStatusToast(''), 3500);
   };
 
   const handleApplyCategoryItems = (newItems: BOQItem[], replaceCategory?: ConstructionCategory | ConstructionCategory[]) => {
@@ -1154,8 +1173,8 @@ export default function App() {
           setItems(cleanProject.items);
           setQuotationMeta(cleanProject.quotationMeta);
           setMilestones(cleanProject.milestones || DEFAULT_PAYMENT_MILESTONES);
-          setProjectStartDate(cleanProject.projectStartDate);
-          setProjectEndDate(cleanProject.projectEndDate);
+          setProjectStartDate(cleanProject.projectStartDate || new Date().toISOString().split('T')[0]);
+          setProjectEndDate(cleanProject.projectEndDate || '');
           setActualExpenses(cleanExpenses);
           setProcurementCheckedItems(cleanProject.procurementCheckedItems || {});
           setGanttTasks(cleanProject.customTasks || []);
@@ -2437,7 +2456,7 @@ export default function App() {
       <PlanAnalyzerModal
         isOpen={isPlanModalOpen}
         onClose={() => setIsPlanModalOpen(false)}
-        onMergeItems={handleMergeNewItems}
+        onMergeItems={handleMergePlanItems}
         onUpdateHouseArea={handleAreaChange}
       />
     
@@ -2499,6 +2518,7 @@ export default function App() {
         onInsertCustomItem={handleInsertPriceBookItem}
         licenseTier={licenseSession.tier}
         onRequestUpgrade={(feature) => setUpgradeModalFeature(feature)}
+        currentHouseAreaSqm={houseAreaSqm}
       />
 
       {/* Security & Access Lock Modal */}

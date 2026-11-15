@@ -604,6 +604,8 @@ export const INITIAL_SAVED_CUSTOM_ITEMS: SavedPriceBookItem[] = [
   }
 ];
 
+export const PRICE_BOOK_LIBRARY_VERSION = 2;
+
 export const DEFAULT_PRICE_BOOK_CONFIG: PriceBookConfig = {
   regionId: 'central_bkk',
   regionName: 'กรุงเทพฯ และปริมณฑล',
@@ -611,6 +613,7 @@ export const DEFAULT_PRICE_BOOK_CONFIG: PriceBookConfig = {
   laborMultiplier: 1.00,
   autoApplyToNewItems: true,
   enableMasterRateOverride: false,
+  libraryVersion: PRICE_BOOK_LIBRARY_VERSION,
   masterRates: { ...DEFAULT_MASTER_RATES },
   savedCustomItems: [...INITIAL_SAVED_CUSTOM_ITEMS],
   lastUpdated: new Date().toISOString()
@@ -624,9 +627,16 @@ export function loadPriceBookConfig(): PriceBookConfig {
     const raw = localStorage.getItem(PRICE_BOOK_STORAGE_KEY);
     if (!raw) return { ...DEFAULT_PRICE_BOOK_CONFIG };
     const parsed = JSON.parse(raw);
-    const savedCustomItems = (Array.isArray(parsed.savedCustomItems) && parsed.savedCustomItems.length > 0)
-      ? parsed.savedCustomItems
-      : [...INITIAL_SAVED_CUSTOM_ITEMS];
+    let savedCustomItems: SavedPriceBookItem[] = Array.isArray(parsed.savedCustomItems) ? parsed.savedCustomItems : [];
+
+    // ถ้า libraryVersion ในเครื่องยังไม่ตรงกับเวอร์ชันปัจจุบัน ให้ Merge รายการมาตรฐานที่ขาดให้ครบ 10 หมวด
+    if (parsed.libraryVersion !== PRICE_BOOK_LIBRARY_VERSION) {
+      const existingIds = new Set(savedCustomItems.map(item => item.savedId));
+      const missingDefaults = INITIAL_SAVED_CUSTOM_ITEMS.filter(def => !existingIds.has(def.savedId));
+      savedCustomItems = [...savedCustomItems, ...missingDefaults];
+    } else if (savedCustomItems.length === 0) {
+      savedCustomItems = [...INITIAL_SAVED_CUSTOM_ITEMS];
+    }
 
     return {
       regionId: parsed.regionId || 'central_bkk',
@@ -635,6 +645,7 @@ export function loadPriceBookConfig(): PriceBookConfig {
       laborMultiplier: typeof parsed.laborMultiplier === 'number' ? parsed.laborMultiplier : 1.00,
       autoApplyToNewItems: parsed.autoApplyToNewItems ?? true,
       enableMasterRateOverride: parsed.enableMasterRateOverride ?? false,
+      libraryVersion: PRICE_BOOK_LIBRARY_VERSION,
       masterRates: { ...DEFAULT_MASTER_RATES, ...(parsed.masterRates || {}) },
       savedCustomItems,
       lastUpdated: parsed.lastUpdated || new Date().toISOString()

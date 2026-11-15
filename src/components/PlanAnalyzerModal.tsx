@@ -6,7 +6,7 @@ import { Flow } from 'flow-sdk';
 interface PlanAnalyzerModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onMergeItems: (newItems: BOQItem[]) => void;
+  onMergeItems: (newItems: BOQItem[], mode?: 'replace' | 'append') => void;
   onUpdateHouseArea?: (newArea: number) => void;
 }
 
@@ -21,6 +21,8 @@ export const PlanAnalyzerModal: React.FC<PlanAnalyzerModalProps> = ({
   const [analysisResult, setAnalysisResult] = useState<PlanAnalysisResult | null>(null);
   const [activeTab, setActiveTab] = useState<'boq' | 'rooms' | 'doors_windows' | 'grid'>('boq');
   const [error, setError] = useState<string | null>(null);
+  const [applyMode, setApplyMode] = useState<'replace' | 'append'>('replace');
+  const [isHeuristicMode, setIsHeuristicMode] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
@@ -166,6 +168,7 @@ export const PlanAnalyzerModal: React.FC<PlanAnalyzerModalProps> = ({
         else if (cleaned.startsWith('```')) cleaned = cleaned.replace(/^```/, '').replace(/```$/, '');
         cleaned = cleaned.trim();
         parsedResult = JSON.parse(cleaned);
+        setIsHeuristicMode(false);
       }
     } catch (flowErr) {
       console.warn('Flow SDK call failed or not in Flow environment, switching to Vision Heuristic Engine:', flowErr);
@@ -173,6 +176,7 @@ export const PlanAnalyzerModal: React.FC<PlanAnalyzerModalProps> = ({
 
     // High-Fidelity Architectural Vision Takeoff Engine (Ensures 100% Reliability on Web/Mobile)
     if (!parsedResult) {
+      setIsHeuristicMode(true);
       await new Promise(r => setTimeout(r, 1200)); // realistic scanning feel
 
       const isSample2Fl = selectedImage.name.includes('2Storey');
@@ -361,7 +365,7 @@ export const PlanAnalyzerModal: React.FC<PlanAnalyzerModalProps> = ({
       basePerSqm: (Number(item.quantity) || 1) / area,
     }));
 
-    onMergeItems(newBoqItems);
+    onMergeItems(newBoqItems, applyMode);
     onClose();
   };
 
@@ -564,6 +568,19 @@ export const PlanAnalyzerModal: React.FC<PlanAnalyzerModalProps> = ({
           {analysisResult && (
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-col gap-4 animate-in fade-in">
               
+              {/* Heuristic Mode Notice Banner */}
+              {isHeuristicMode && (
+                <div className="bg-amber-950/60 border border-amber-500/50 rounded-xl p-3.5 flex items-center gap-3 text-amber-200 text-xs">
+                  <span className="material-symbols-outlined text-amber-400 text-xl shrink-0">smart_toy</span>
+                  <div>
+                    <span className="font-bold text-amber-300">โหมดคำนวณจำลองสถาปัตยกรรม (Heuristic Vision Engine):</span>
+                    <span className="text-amber-200/80 ml-1.5">
+                      ระบบตรวจพบโครงสร้างและคำนวณสัดส่วนวัสดุตามเกณฑ์วิศวกรรมมาตรฐาน (เนื่องจากไม่ได้เชื่อมต่อ Gemini API ภายนอก)
+                    </span>
+                  </div>
+                </div>
+              )}
+
               {/* Detected Metrics Header Cards */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div className="p-3 bg-slate-950/80 rounded-xl border border-cyan-500/30">
@@ -766,7 +783,35 @@ export const PlanAnalyzerModal: React.FC<PlanAnalyzerModalProps> = ({
             <span>Gemini Vision Takeoff ถอดแบบและคำนวณราคาวัสดุ-ค่าแรงมาตรฐาน วสท.</span>
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex items-center gap-3 flex-wrap">
+            {analysisResult && (
+              <div className="flex items-center gap-3 text-xs bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800">
+                <span className="text-slate-400 font-medium">รูปแบบนำเข้า BOQ:</span>
+                <label className="flex items-center gap-1.5 cursor-pointer text-slate-200 hover:text-white">
+                  <input 
+                    type="radio" 
+                    name="planApplyMode" 
+                    value="replace" 
+                    checked={applyMode === 'replace'} 
+                    onChange={() => setApplyMode('replace')}
+                    className="accent-cyan-500"
+                  />
+                  <span>สร้างตารางใหม่ทั้งหมด (แทนที่เดิม)</span>
+                </label>
+                <label className="flex items-center gap-1.5 cursor-pointer text-slate-200 hover:text-white">
+                  <input 
+                    type="radio" 
+                    name="planApplyMode" 
+                    value="append" 
+                    checked={applyMode === 'append'} 
+                    onChange={() => setApplyMode('append')}
+                    className="accent-cyan-500"
+                  />
+                  <span>เพิ่มต่อท้ายเดิม</span>
+                </label>
+              </div>
+            )}
+
             <button
               onClick={onClose}
               className="px-4 py-2 rounded-xl text-xs font-medium text-slate-300 hover:bg-slate-800"
@@ -779,7 +824,7 @@ export const PlanAnalyzerModal: React.FC<PlanAnalyzerModalProps> = ({
                 className="px-5 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-emerald-500 hover:brightness-110 text-slate-950 text-xs font-black flex items-center gap-1.5 shadow-lg shadow-cyan-500/20 transition active:scale-95"
               >
                 <span className="material-symbols-outlined text-sm font-bold">check_circle</span>
-                <span>นำเข้าตาราง BOQ ทันที ({analysisResult.suggestedItems?.length || 0} รายการ)</span>
+                <span>นำเข้าตาราง BOQ ({analysisResult.suggestedItems?.length || 0} รายการ)</span>
               </button>
             )}
           </div>

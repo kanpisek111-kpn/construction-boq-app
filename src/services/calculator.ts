@@ -927,21 +927,27 @@ export function generateSiteMaterialsProcurementList(
         const screwBoxes = Math.max(1, Math.ceil((areaVal * 20) / 1000));
         const hangerSets = Math.ceil(areaVal * 1.3);
 
+        // คำนวณอัตราส่วนราคาตามตัวคูณโซนภูมิภาคของรายการ BOQ นี้ (ถ้ามี)
+        const priceRatio = (item.baseMaterialUnitPrice && item.baseMaterialUnitPrice > 0 && item.materialUnitPrice > 0)
+          ? (item.materialUnitPrice / item.baseMaterialUnitPrice)
+          : 1.0;
+
         // 1. แผ่นยิปซัมบอร์ด / สมาร์ทบอร์ด ตามสเปกจริง
         let boardName = 'แผ่นยิปซัมบอร์ด 9 มม. (ขอบลาด) 1.20x2.40 ม.';
-        let boardPrice = 165;
+        let baseBoardPrice = 165;
         let boardNote = 'แผ่นยิปซัมขอบลาดหนา 9 มม. มอก. สำหรับฝ้าฉาบเรียบทั่วไป';
 
         if (nameLower.includes('ทนชื้น') || specLower.includes('ทนชื้น')) {
           boardName = 'แผ่นยิปซัมทนชื้น (Moisture Resistant) 9 มม. 1.20x2.40 ม.';
-          boardPrice = 245;
+          baseBoardPrice = 245;
           boardNote = 'แผ่นยิปซัมทนชื้น สำหรับห้องน้ำ ห้องครัว และระเบียง';
         } else if (nameLower.includes('สมาร์ทบอร์ด') || specLower.includes('สมาร์ทบอร์ด') || nameLower.includes('ไฟเบอร์ซีเมนต์')) {
           boardName = 'แผ่นสมาร์ทบอร์ดไฟเบอร์ซีเมนต์ 6 มม. 1.20x2.40 ม.';
-          boardPrice = 195;
+          baseBoardPrice = 195;
           boardNote = 'แผ่นสมาร์ทบอร์ด ทนน้ำ ปลวกไม่กิน สำหรับภายนอกและชายคา';
         }
 
+        const estBoardPrice = Math.round(baseBoardPrice * priceRatio);
         materials.push({
           id: `mat-proc-ceiling-sheet-${item.id}-${index}`,
           materialGroup: 'tiles_finishes',
@@ -951,8 +957,8 @@ export function generateSiteMaterialsProcurementList(
           wastePercent,
           orderQuantity: gypsumSheets,
           unit: 'แผ่น',
-          unitPriceEstimate: boardPrice,
-          totalEstimatedCost: gypsumSheets * boardPrice,
+          unitPriceEstimate: estBoardPrice,
+          totalEstimatedCost: gypsumSheets * estBoardPrice,
           priorityPhase,
           milestoneNumber,
           milestoneTitle,
@@ -961,6 +967,7 @@ export function generateSiteMaterialsProcurementList(
         });
 
         // 2. โครงคร่าว C-Line
+        const estClinePrice = Math.round(58 * priceRatio);
         materials.push({
           id: `mat-proc-ceiling-cline-${item.id}-${index}`,
           materialGroup: 'tiles_finishes',
@@ -970,8 +977,8 @@ export function generateSiteMaterialsProcurementList(
           wastePercent,
           orderQuantity: cLineBars,
           unit: 'ท่อน (ยาว 4.00 ม.)',
-          unitPriceEstimate: 58,
-          totalEstimatedCost: cLineBars * 58,
+          unitPriceEstimate: estClinePrice,
+          totalEstimatedCost: cLineBars * estClinePrice,
           priorityPhase,
           milestoneNumber,
           milestoneTitle,
@@ -980,6 +987,7 @@ export function generateSiteMaterialsProcurementList(
         });
 
         // 3. ฉากริมผนัง Wall Angle
+        const estAnglePrice = Math.round(35 * priceRatio);
         materials.push({
           id: `mat-proc-ceiling-angle-${item.id}-${index}`,
           materialGroup: 'tiles_finishes',
@@ -989,8 +997,8 @@ export function generateSiteMaterialsProcurementList(
           wastePercent,
           orderQuantity: wallAngleBars,
           unit: 'ท่อน (ยาว 2.40 ม.)',
-          unitPriceEstimate: 35,
-          totalEstimatedCost: wallAngleBars * 35,
+          unitPriceEstimate: estAnglePrice,
+          totalEstimatedCost: wallAngleBars * estAnglePrice,
           priorityPhase,
           milestoneNumber,
           milestoneTitle,
@@ -999,6 +1007,7 @@ export function generateSiteMaterialsProcurementList(
         });
 
         // 4. ปูนฉาบรอยต่อยิปซัม
+        const estJointPrice = Math.round(280 * priceRatio);
         materials.push({
           id: `mat-proc-ceiling-joint-${item.id}-${index}`,
           materialGroup: 'tiles_finishes',
@@ -1008,8 +1017,8 @@ export function generateSiteMaterialsProcurementList(
           wastePercent,
           orderQuantity: jointBags,
           unit: 'ถุง (25 กก.)',
-          unitPriceEstimate: 280,
-          totalEstimatedCost: jointBags * 280,
+          unitPriceEstimate: estJointPrice,
+          totalEstimatedCost: jointBags * estJointPrice,
           priorityPhase,
           milestoneNumber,
           milestoneTitle,
@@ -1018,6 +1027,8 @@ export function generateSiteMaterialsProcurementList(
         });
 
         // 5. ผ้าเทปรอยต่อ & สกรู & ชุดแขวนลวดปรับระดับ
+        const baseAccPrice = Math.round((tapeRolls * 95) + (screwBoxes * 160) + (hangerSets * 14));
+        const estAccPrice = Math.round(baseAccPrice * priceRatio);
         materials.push({
           id: `mat-proc-ceiling-acc-${item.id}-${index}`,
           materialGroup: 'tiles_finishes',
@@ -1027,8 +1038,8 @@ export function generateSiteMaterialsProcurementList(
           wastePercent,
           orderQuantity: 1,
           unit: 'ชุดรวม',
-          unitPriceEstimate: Math.round((tapeRolls * 95) + (screwBoxes * 160) + (hangerSets * 14)),
-          totalEstimatedCost: Math.round((tapeRolls * 95) + (screwBoxes * 160) + (hangerSets * 14)),
+          unitPriceEstimate: estAccPrice,
+          totalEstimatedCost: estAccPrice,
           priorityPhase,
           milestoneNumber,
           milestoneTitle,

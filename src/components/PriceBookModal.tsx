@@ -12,7 +12,9 @@ import {
   REGIONAL_PRESETS, 
   DEFAULT_MASTER_RATES, 
   INITIAL_SAVED_CUSTOM_ITEMS,
+  PRICE_BOOK_LIBRARY_VERSION,
   applyPriceBookToItems, 
+  applyPriceBookToSingleItem,
   resetPriceBookConfig 
 } from '../services/priceBookService';
 import { CATEGORY_LABELS } from '../constants';
@@ -28,6 +30,7 @@ interface PriceBookModalProps {
   onInsertCustomItem: (item: BOQItem) => void;
   licenseTier?: LicenseTier;
   onRequestUpgrade?: (feature: string) => void;
+  currentHouseAreaSqm?: number;
 }
 
 export const PriceBookModal: React.FC<PriceBookModalProps> = ({
@@ -39,11 +42,15 @@ export const PriceBookModal: React.FC<PriceBookModalProps> = ({
   onApplyToBOQ,
   onInsertCustomItem,
   licenseTier = 'starter',
-  onRequestUpgrade
+  onRequestUpgrade,
+  currentHouseAreaSqm = 120
 }) => {
   const [activeTab, setActiveTab] = useState<'regional' | 'master_rates' | 'my_items'>('regional');
   const [draftConfig, setDraftConfig] = useState<PriceBookConfig>(currentConfig);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'info' | 'warning' } | null>(null);
+
+  // Local string state for Tab 2 Master Rates inputs to allow full backspacing/editing without snapping
+  const [masterRateInputs, setMasterRateInputs] = useState<Record<string, string>>({});
 
   // Form state for creating a new custom item in Tab 3
   const [newItemName, setNewItemName] = useState('');
@@ -61,22 +68,40 @@ export const PriceBookModal: React.FC<PriceBookModalProps> = ({
   const [customItemFilterCategory, setCustomItemFilterCategory] = useState<string>('all');
   const [customItemSearch, setCustomItemSearch] = useState('');
 
-  // Sync draft when opened - ensure savedCustomItems has default library if empty
+  // Sync draft when opened - ensure savedCustomItems has default library merged without deleting user custom items
   useEffect(() => {
     if (isOpen) {
-      const validItems = (currentConfig.savedCustomItems && currentConfig.savedCustomItems.length > 0)
-        ? currentConfig.savedCustomItems
-        : [...INITIAL_SAVED_CUSTOM_ITEMS];
+      let items = currentConfig.savedCustomItems || [];
+      if (currentConfig.libraryVersion !== PRICE_BOOK_LIBRARY_VERSION) {
+        const existingIds = new Set(items.map(i => i.savedId));
+        const missingDefaults = INITIAL_SAVED_CUSTOM_ITEMS.filter(def => !existingIds.has(def.savedId));
+        items = [...items, ...missingDefaults];
+      } else if (items.length === 0) {
+        items = [...INITIAL_SAVED_CUSTOM_ITEMS];
+      }
+
       const validConfig: PriceBookConfig = {
         ...currentConfig,
-        savedCustomItems: validItems
+        libraryVersion: PRICE_BOOK_LIBRARY_VERSION,
+        savedCustomItems: items
       };
       setDraftConfig(validConfig);
-      if (!currentConfig.savedCustomItems || currentConfig.savedCustomItems.length === 0) {
+      if (currentConfig.libraryVersion !== PRICE_BOOK_LIBRARY_VERSION || !currentConfig.savedCustomItems || currentConfig.savedCustomItems.length === 0) {
         onSaveConfig(validConfig);
       }
       setToast(null);
       setIsAddingNewItem(false);
+
+      // Initialize Master Rates input strings
+      setMasterRateInputs({
+        concreteReadyMixedPerCuM: String(validConfig.masterRates?.concreteReadyMixedPerCuM ?? DEFAULT_MASTER_RATES.concreteReadyMixedPerCuM ?? 2150),
+        steelDeformedBarPerKg: String(validConfig.masterRates?.steelDeformedBarPerKg ?? DEFAULT_MASTER_RATES.steelDeformedBarPerKg ?? 28),
+        formworkPerSqm: String(validConfig.masterRates?.formworkPerSqm ?? DEFAULT_MASTER_RATES.formworkPerSqm ?? 240),
+        masonryLaborPerSqm: String(validConfig.masterRates?.masonryLaborPerSqm ?? DEFAULT_MASTER_RATES.masonryLaborPerSqm ?? 100),
+        plasterLaborPerSqm: String(validConfig.masterRates?.plasterLaborPerSqm ?? DEFAULT_MASTER_RATES.plasterLaborPerSqm ?? 95),
+        tileLaborPerSqm: String(validConfig.masterRates?.tileLaborPerSqm ?? DEFAULT_MASTER_RATES.tileLaborPerSqm ?? 200),
+        paintLaborPerSqm: String(validConfig.masterRates?.paintLaborPerSqm ?? DEFAULT_MASTER_RATES.paintLaborPerSqm ?? 40),
+      });
     }
   }, [isOpen]);
 
@@ -198,7 +223,33 @@ export const PriceBookModal: React.FC<PriceBookModalProps> = ({
     };
     setDraftConfig(updatedConfig);
     onSaveConfig(updatedConfig);
+    setMasterRateInputs({
+      concreteReadyMixedPerCuM: String(DEFAULT_MASTER_RATES.concreteReadyMixedPerCuM || 2150),
+      steelDeformedBarPerKg: String(DEFAULT_MASTER_RATES.steelDeformedBarPerKg || 28),
+      formworkPerSqm: String(DEFAULT_MASTER_RATES.formworkPerSqm || 240),
+      masonryLaborPerSqm: String(DEFAULT_MASTER_RATES.masonryLaborPerSqm || 100),
+      plasterLaborPerSqm: String(DEFAULT_MASTER_RATES.plasterLaborPerSqm || 95),
+      tileLaborPerSqm: String(DEFAULT_MASTER_RATES.tileLaborPerSqm || 200),
+      paintLaborPerSqm: String(DEFAULT_MASTER_RATES.paintLaborPerSqm || 40),
+    });
     showToast('คืนค่ามาตรฐาน Master Rates เรียบร้อยแล้ว', 'info');
+  };
+
+  const handleMasterRateInputChange = (key: keyof MasterRatesConfig, valStr: string) => {
+    setMasterRateInputs(prev => ({ ...prev, [key]: valStr }));
+    const parsed = parseFloat(valStr);
+    if (!isNaN(parsed) && parsed >= 0) {
+      handleMasterRateChange(key, parsed);
+    }
+  };
+
+  const handleMasterRateInputBlur = (key: keyof MasterRatesConfig, fallback: number) => {
+    const currentStr = masterRateInputs[key];
+    const parsed = parseFloat(currentStr);
+    if (isNaN(parsed) || parsed <= 0) {
+      setMasterRateInputs(prev => ({ ...prev, [key]: String(fallback) }));
+      handleMasterRateChange(key, fallback);
+    }
   };
 
   // 3. จัดการคลังรายการส่วนตัว (My Saved Items)
@@ -247,6 +298,10 @@ export const PriceBookModal: React.FC<PriceBookModalProps> = ({
   };
 
   const handleDeleteCustomItem = (savedId: string) => {
+    if (isDemo) {
+      if (onRequestUpgrade) onRequestUpgrade('คลังราคาส่วนตัว');
+      return;
+    }
     const updatedList = (draftConfig.savedCustomItems || []).filter(item => item.savedId !== savedId);
     const updatedConfig: PriceBookConfig = {
       ...draftConfig,
@@ -258,13 +313,18 @@ export const PriceBookModal: React.FC<PriceBookModalProps> = ({
   };
 
   const handleRestoreDefaultItems = () => {
+    const defaultIds = new Set(INITIAL_SAVED_CUSTOM_ITEMS.map(item => item.savedId));
+    const userCustomItems = (draftConfig.savedCustomItems || []).filter(item => !defaultIds.has(item.savedId));
+    const mergedList = [...INITIAL_SAVED_CUSTOM_ITEMS, ...userCustomItems];
+
     const updatedConfig: PriceBookConfig = {
       ...draftConfig,
-      savedCustomItems: [...INITIAL_SAVED_CUSTOM_ITEMS]
+      libraryVersion: PRICE_BOOK_LIBRARY_VERSION,
+      savedCustomItems: mergedList
     };
     setDraftConfig(updatedConfig);
     onSaveConfig(updatedConfig);
-    showToast(`โหลดคลังรายการมาตรฐาน (${INITIAL_SAVED_CUSTOM_ITEMS.length} รายการ) เรียบร้อยแล้ว ✓`, 'success');
+    showToast(`คืนค่ารายการมาตรฐานสำเร็จ โดยคงรายการส่วนตัวไว้ครบถ้วน (${mergedList.length} รายการ) ✓`, 'success');
   };
 
   const handleInsertIntoBOQ = (customItem: SavedPriceBookItem) => {
@@ -273,11 +333,9 @@ export const PriceBookModal: React.FC<PriceBookModalProps> = ({
       return;
     }
     const timestamp = Date.now();
-    // คำนวณปรับราคาตามภูมิภาคถ้า autoApplyToNewItems เปิดอยู่
-    const matMul = draftConfig.autoApplyToNewItems ? draftConfig.materialMultiplier : 1.0;
-    const labMul = draftConfig.autoApplyToNewItems ? draftConfig.laborMultiplier : 1.0;
+    const effectiveArea = Math.max(1, currentHouseAreaSqm || 120);
 
-    const boqItem: BOQItem = {
+    let boqItem: BOQItem = {
       id: `custom-book-${timestamp}`,
       category: customItem.category,
       name: customItem.name,
@@ -286,11 +344,16 @@ export const PriceBookModal: React.FC<PriceBookModalProps> = ({
       unit: customItem.unit,
       baseMaterialUnitPrice: customItem.materialUnitPrice,
       baseLaborUnitPrice: customItem.laborUnitPrice,
-      materialUnitPrice: Math.round(customItem.materialUnitPrice * matMul),
-      laborUnitPrice: Math.round(customItem.laborUnitPrice * labMul),
+      materialUnitPrice: customItem.materialUnitPrice,
+      laborUnitPrice: customItem.laborUnitPrice,
       wastePercent: customItem.wastePercent,
+      basePerSqm: customItem.quantity / effectiveArea,
       itemSubtype: 'custom_price_book'
     };
+
+    if (draftConfig.autoApplyToNewItems) {
+      boqItem = applyPriceBookToSingleItem(boqItem, draftConfig);
+    }
 
     onInsertCustomItem(boqItem);
     showToast(`+ ดึงรายการ "${customItem.name}" เข้าสู่ตาราง BOQ แล้ว! ✓`, 'success');
@@ -602,8 +665,9 @@ export const PriceBookModal: React.FC<PriceBookModalProps> = ({
                     type="number"
                     min="1000"
                     step="50"
-                    value={draftConfig.masterRates.concreteReadyMixedPerCuM || 2150}
-                    onChange={(e) => handleMasterRateChange('concreteReadyMixedPerCuM', parseFloat(e.target.value) || 0)}
+                    value={masterRateInputs.concreteReadyMixedPerCuM ?? ''}
+                    onChange={(e) => handleMasterRateInputChange('concreteReadyMixedPerCuM', e.target.value)}
+                    onBlur={() => handleMasterRateInputBlur('concreteReadyMixedPerCuM', DEFAULT_MASTER_RATES.concreteReadyMixedPerCuM || 2150)}
                     className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm font-mono text-white focus:outline-none focus:border-amber-400"
                   />
                   <p className="text-[10px] text-slate-500">
@@ -624,8 +688,9 @@ export const PriceBookModal: React.FC<PriceBookModalProps> = ({
                     type="number"
                     min="15"
                     step="0.5"
-                    value={draftConfig.masterRates.steelDeformedBarPerKg || 28}
-                    onChange={(e) => handleMasterRateChange('steelDeformedBarPerKg', parseFloat(e.target.value) || 0)}
+                    value={masterRateInputs.steelDeformedBarPerKg ?? ''}
+                    onChange={(e) => handleMasterRateInputChange('steelDeformedBarPerKg', e.target.value)}
+                    onBlur={() => handleMasterRateInputBlur('steelDeformedBarPerKg', DEFAULT_MASTER_RATES.steelDeformedBarPerKg || 28)}
                     className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm font-mono text-white focus:outline-none focus:border-amber-400"
                   />
                   <p className="text-[10px] text-slate-500">
@@ -646,8 +711,9 @@ export const PriceBookModal: React.FC<PriceBookModalProps> = ({
                     type="number"
                     min="50"
                     step="10"
-                    value={draftConfig.masterRates.formworkPerSqm || 240}
-                    onChange={(e) => handleMasterRateChange('formworkPerSqm', parseFloat(e.target.value) || 0)}
+                    value={masterRateInputs.formworkPerSqm ?? ''}
+                    onChange={(e) => handleMasterRateInputChange('formworkPerSqm', e.target.value)}
+                    onBlur={() => handleMasterRateInputBlur('formworkPerSqm', DEFAULT_MASTER_RATES.formworkPerSqm || 240)}
                     className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm font-mono text-white focus:outline-none focus:border-amber-400"
                   />
                   <p className="text-[10px] text-slate-500">
@@ -668,8 +734,9 @@ export const PriceBookModal: React.FC<PriceBookModalProps> = ({
                     type="number"
                     min="50"
                     step="5"
-                    value={draftConfig.masterRates.masonryLaborPerSqm || 100}
-                    onChange={(e) => handleMasterRateChange('masonryLaborPerSqm', parseFloat(e.target.value) || 0)}
+                    value={masterRateInputs.masonryLaborPerSqm ?? ''}
+                    onChange={(e) => handleMasterRateInputChange('masonryLaborPerSqm', e.target.value)}
+                    onBlur={() => handleMasterRateInputBlur('masonryLaborPerSqm', DEFAULT_MASTER_RATES.masonryLaborPerSqm || 100)}
                     className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm font-mono text-white focus:outline-none focus:border-cyan-400"
                   />
                   <p className="text-[10px] text-slate-500">
@@ -690,8 +757,9 @@ export const PriceBookModal: React.FC<PriceBookModalProps> = ({
                     type="number"
                     min="50"
                     step="5"
-                    value={draftConfig.masterRates.plasterLaborPerSqm || 95}
-                    onChange={(e) => handleMasterRateChange('plasterLaborPerSqm', parseFloat(e.target.value) || 0)}
+                    value={masterRateInputs.plasterLaborPerSqm ?? ''}
+                    onChange={(e) => handleMasterRateInputChange('plasterLaborPerSqm', e.target.value)}
+                    onBlur={() => handleMasterRateInputBlur('plasterLaborPerSqm', DEFAULT_MASTER_RATES.plasterLaborPerSqm || 95)}
                     className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm font-mono text-white focus:outline-none focus:border-cyan-400"
                   />
                   <p className="text-[10px] text-slate-500">
@@ -712,8 +780,9 @@ export const PriceBookModal: React.FC<PriceBookModalProps> = ({
                     type="number"
                     min="100"
                     step="10"
-                    value={draftConfig.masterRates.tileLaborPerSqm || 200}
-                    onChange={(e) => handleMasterRateChange('tileLaborPerSqm', parseFloat(e.target.value) || 0)}
+                    value={masterRateInputs.tileLaborPerSqm ?? ''}
+                    onChange={(e) => handleMasterRateInputChange('tileLaborPerSqm', e.target.value)}
+                    onBlur={() => handleMasterRateInputBlur('tileLaborPerSqm', DEFAULT_MASTER_RATES.tileLaborPerSqm || 200)}
                     className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm font-mono text-white focus:outline-none focus:border-cyan-400"
                   />
                   <p className="text-[10px] text-slate-500">
@@ -734,8 +803,9 @@ export const PriceBookModal: React.FC<PriceBookModalProps> = ({
                     type="number"
                     min="30"
                     step="5"
-                    value={draftConfig.masterRates.paintLaborPerSqm || 40}
-                    onChange={(e) => handleMasterRateChange('paintLaborPerSqm', parseFloat(e.target.value) || 0)}
+                    value={masterRateInputs.paintLaborPerSqm ?? ''}
+                    onChange={(e) => handleMasterRateInputChange('paintLaborPerSqm', e.target.value)}
+                    onBlur={() => handleMasterRateInputBlur('paintLaborPerSqm', DEFAULT_MASTER_RATES.paintLaborPerSqm || 40)}
                     className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm font-mono text-white focus:outline-none focus:border-cyan-400"
                   />
                   <p className="text-[10px] text-slate-500">

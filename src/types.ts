@@ -70,6 +70,7 @@ export interface PriceBookConfig {
   laborMultiplier: number;
   autoApplyToNewItems: boolean;
   enableMasterRateOverride?: boolean;
+  libraryVersion?: number;
   masterRates: MasterRatesConfig;
   savedCustomItems: SavedPriceBookItem[];
   lastUpdated?: string;
