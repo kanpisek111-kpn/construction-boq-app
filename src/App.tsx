@@ -913,6 +913,14 @@ export default function App() {
       
       const filtered = prev.filter(item => {
         if (catsToReplace.includes(item.category)) {
+          // อย่าลบรายการบันไดเมื่องานโครงสร้างอัปเดตใหม่
+          if (catsToReplace.includes('structure') && item.id.startsWith('stair-')) {
+            return true;
+          }
+          // อย่าลบรายการสุขภัณฑ์/อุปกรณ์ห้องน้ำเมื่องานสุขาภิบาลอัปเดตใหม่
+          if (catsToReplace.includes('sanitary') && item.id.startsWith('san-fixture-')) {
+            return true;
+          }
           return false;
         }
         if (catsToReplace.includes('structure') && item.category === 'preparation') {
@@ -941,6 +949,33 @@ export default function App() {
     });
 
     setSaveStatusToast(`อัปเดตคำนวณใหม่ ${newItems.length} รายการลง BOQ เรียบร้อย (ไม่มียอดซ้ำ) ✓`);
+    setTimeout(() => setSaveStatusToast(''), 3000);
+  };
+
+  const handleApplyStairItems = (newItems: BOQItem[]) => {
+    setItems(prev => {
+      const filtered = prev.filter(item => !item.id.startsWith('stair-'));
+      return [...filtered, ...newItems];
+    });
+    setSaveStatusToast(`อัปเดตงานบันได ${newItems.length} รายการลง BOQ เรียบร้อย ✓`);
+    setTimeout(() => setSaveStatusToast(''), 3000);
+  };
+
+  const handleApplyCeilingItems = (newItems: BOQItem[]) => {
+    setItems(prev => {
+      const filtered = prev.filter(item => !(item.id.startsWith('fin-ceiling-') || item.id.startsWith('ceil-')));
+      return [...filtered, ...newItems];
+    });
+    setSaveStatusToast(`อัปเดตงานฝ้าเพดาน ${newItems.length} รายการลง BOQ เรียบร้อย ✓`);
+    setTimeout(() => setSaveStatusToast(''), 3000);
+  };
+
+  const handleApplyPaintItems = (newItems: BOQItem[]) => {
+    setItems(prev => {
+      const filtered = prev.filter(item => !item.id.startsWith('paint-'));
+      return [...filtered, ...newItems];
+    });
+    setSaveStatusToast(`อัปเดตงานสี ${newItems.length} รายการลง BOQ เรียบร้อย ✓`);
     setTimeout(() => setSaveStatusToast(''), 3000);
   };
   const handleSaveMilestones = (updatedMilestones: PaymentMilestone[]) => {
@@ -1116,13 +1151,13 @@ export default function App() {
         const cleanCat = `"${(catName || '').replace(/"/g, '""')}"`;
         csvContent += `${cleanCat},${cleanName},${cleanSpec},${item.quantity},"${item.unit}",${item.materialUnitPrice},${item.wastePercent},${Math.round(matTotal)},${item.laborUnitPrice},${Math.round(labTotal)},${Math.round(lineTotal)}\n`;
       });
-      csvContent += `\n,,,สรุปรวมค่าวัสดุ,,,,${summary.totalMaterial}\n`;
-      csvContent += `,,,สรุปรวมค่าแรงงาน,,,,${summary.totalLabor}\n`;
-      csvContent += `,,,รวมต้นทุนตรง (Direct Cost),,,,${summary.directCost}\n`;
-      csvContent += `,,,ค่าดำเนินการ/กำไร (${overheadPercent}%),,,,${summary.overheadCost}\n`;
-      csvContent += `,,,ภาษีมูลค่าเพิ่ม VAT (${vatPercent}%),,,,${summary.vatAmount}\n`;
-      csvContent += `,,,ราคาสุทธิรวมทั้งสิ้น (Grand Total),,,,${summary.grandTotal}\n`;
-      csvContent += `,,,ราคาต่อ ตร.ม. (บาท/ตร.ม.),,,,${costPerSqm}\n\n`;
+      csvContent += `\n,,,,,,,,,สรุปรวมค่าวัสดุ,${summary.totalMaterial}\n`;
+      csvContent += `,,,,,,,,,สรุปรวมค่าแรงงาน,${summary.totalLabor}\n`;
+      csvContent += `,,,,,,,,,รวมต้นทุนตรง (Direct Cost),${summary.directCost}\n`;
+      csvContent += `,,,,,,,,,ค่าดำเนินการ/กำไร (${overheadPercent}%),${summary.overheadCost}\n`;
+      csvContent += `,,,,,,,,,ภาษีมูลค่าเพิ่ม VAT (${vatPercent}%),${summary.vatAmount}\n`;
+      csvContent += `,,,,,,,,,ราคาสุทธิรวมทั้งสิ้น (Grand Total),${summary.grandTotal}\n`;
+      csvContent += `,,,,,,,,,ราคาต่อ ตร.ม. (บาท/ตร.ม.),${costPerSqm}\n\n`;
       const bytes = new TextEncoder().encode(csvContent);
       const base64 = btoa(Array.from(bytes, b => String.fromCharCode(b)).join(''));
       await Flow.download({
@@ -1768,7 +1803,13 @@ export default function App() {
                     งวดงานชำระเงิน ({milestones.length} งวด)
                   </span>
                   <button
-                    onClick={() => setActiveMainTab('gantt_schedule')}
+                    onClick={() => {
+                      if (!canAccessFeature('gantt_schedule', licenseSession.tier)) {
+                        setUpgradeModalFeature('ผังความคืบหน้าโครงการ Gantt Chart');
+                        return;
+                      }
+                      setActiveMainTab('gantt_schedule');
+                    }}
                     className="text-[10px] font-mono text-cyan-400 hover:underline flex items-center gap-0.5"
                   >
                     <span>ผัง Gantt</span>
@@ -1788,7 +1829,13 @@ export default function App() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => setIsMilestonesModalOpen(true)}
+                  onClick={() => {
+                    if (!canAccessFeature('milestones_manager', licenseSession.tier)) {
+                      setUpgradeModalFeature('ระบบจัดการงวดงานและเกณฑ์การตรวจรับ');
+                      return;
+                    }
+                    setIsMilestonesModalOpen(true);
+                  }}
                   className="w-full mt-1 py-1.5 px-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition shadow"
                 >
                   <span className="material-symbols-outlined text-sm">tune</span>
@@ -1981,21 +2028,39 @@ export default function App() {
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
                   <button
-                    onClick={() => setActiveMainTab('gantt_schedule')}
+                    onClick={() => {
+                      if (!canAccessFeature('gantt_schedule', licenseSession.tier)) {
+                        setUpgradeModalFeature('ผังความคืบหน้าโครงการ Gantt Chart');
+                        return;
+                      }
+                      setActiveMainTab('gantt_schedule');
+                    }}
                     className="px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold transition shadow flex items-center gap-1.5"
                   >
                     <span className="material-symbols-outlined text-sm">timeline</span>
                     <span>ดูผัง Gantt</span>
                   </button>
                   <button
-                    onClick={() => setIsMilestonesModalOpen(true)}
+                    onClick={() => {
+                      if (!canAccessFeature('milestones_manager', licenseSession.tier)) {
+                        setUpgradeModalFeature('ระบบจัดการงวดงานและเกณฑ์การตรวจรับ');
+                        return;
+                      }
+                      setIsMilestonesModalOpen(true);
+                    }}
                     className="px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition shadow flex items-center gap-1.5"
                   >
                     <span className="material-symbols-outlined text-sm">tune</span>
                     <span>ปรับแต่งงวดงาน</span>
                   </button>
                   <button
-                    onClick={() => setIsQuotationModalOpen(true)}
+                    onClick={() => {
+                      if (!canAccessFeature('export_quotation', licenseSession.tier)) {
+                        setUpgradeModalFeature('พิมพ์และส่งออกใบเสนอราคา PDF');
+                        return;
+                      }
+                      setIsQuotationModalOpen(true);
+                    }}
                     className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 text-xs font-semibold transition border border-slate-700 flex items-center gap-1.5"
                   >
                     <span className="material-symbols-outlined text-sm">picture_as_pdf</span>
@@ -2147,7 +2212,7 @@ export default function App() {
       <StairEstimatorModal
         isOpen={isStairModalOpen}
         onClose={() => setIsStairModalOpen(false)}
-        onApplyToBOQ={handleMergeNewItems}
+        onApplyToBOQ={handleApplyStairItems}
         currentHouseAreaSqm={houseAreaSqm}
       />
       {/* 🚿 Sanitary & Plumbing Estimator Modal 🚿 */}
@@ -2168,14 +2233,14 @@ export default function App() {
       <CeilingEstimatorModal
         isOpen={isCeilingModalOpen}
         onClose={() => setIsCeilingModalOpen(false)}
-        onApplyToBOQ={handleMergeNewItems}
+        onApplyToBOQ={handleApplyCeilingItems}
         currentHouseAreaSqm={houseAreaSqm}
       />
       {/* 🎨 Paint & Steel Coating Estimator Modal 🎨 */}
       <PaintEstimatorModal
         isOpen={isPaintModalOpen}
         onClose={() => setIsPaintModalOpen(false)}
-        onApplyToBOQ={handleMergeNewItems}
+        onApplyToBOQ={handleApplyPaintItems}
         currentHouseAreaSqm={houseAreaSqm}
       />
       {/* Milestones Manager Modal */}
@@ -2220,6 +2285,7 @@ export default function App() {
         isOpen={isExternalModalOpen}
         onClose={() => setIsExternalModalOpen(false)}
         onAddItems={handleMergeNewItems}
+        currentHouseAreaSqm={houseAreaSqm}
       />
       {/* Masonry Estimator Modal */}
       <MasonryEstimatorModal
@@ -2233,18 +2299,21 @@ export default function App() {
         isOpen={isRoomDoorModalOpen}
         onClose={() => setIsRoomDoorModalOpen(false)}
         onAddItems={handleMergeNewItems}
+        currentHouseAreaSqm={houseAreaSqm}
       />
       {/* Aluminum Selector Modal */}
       <AluminumSelectorModal
         isOpen={isAluminumModalOpen}
         onClose={() => setIsAluminumModalOpen(false)}
         onAddItems={handleMergeNewItems}
+        currentHouseAreaSqm={houseAreaSqm}
       />
       {/* Tile Selector Modal */}
       <TileSelectorModal
         isOpen={isTileModalOpen}
         onClose={() => setIsTileModalOpen(false)}
         onAddItems={handleMergeNewItems}
+        currentHouseAreaSqm={houseAreaSqm}
       />
       {/* Structure Estimator Modal */}
       <StructureEstimatorModal
@@ -2258,6 +2327,7 @@ export default function App() {
         isOpen={isRoofModalOpen}
         onClose={() => setIsRoofModalOpen(false)}
         onApplyToBOQ={(newItems) => handleApplyCategoryItems(newItems, 'roof')}
+        currentHouseAreaSqm={houseAreaSqm}
       />
       {/* AI Plan Analyzer Modal */}
       <PlanAnalyzerModal

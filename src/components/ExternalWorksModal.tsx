@@ -130,7 +130,7 @@ export const ExternalWorksModal: React.FC<ExternalWorksModalProps> = ({
       laborUnitPrice: safeNum(preset.laborUnitPrice),
       wastePercent: safeNum(preset.wastePercent),
       itemSubtype: preset.id,
-      basePerSqm: safeNum(qty) / 120
+      basePerSqm: safeNum(qty) / Math.max(1, currentHouseAreaSqm || 120)
     }));
 
     onAddItems(newBOQItems);
@@ -159,7 +159,7 @@ export const ExternalWorksModal: React.FC<ExternalWorksModalProps> = ({
         materialUnitPrice: Math.round(totalMaterialCost / Math.max(1, fenceLengthM)),
         laborUnitPrice: Math.round(totalLaborCost / Math.max(1, fenceLengthM)),
         wastePercent: 5,
-        basePerSqm: fenceLengthM / 120
+        basePerSqm: fenceLengthM / Math.max(1, currentHouseAreaSqm || 120)
       }
     ];
 
@@ -174,7 +174,7 @@ export const ExternalWorksModal: React.FC<ExternalWorksModalProps> = ({
         materialUnitPrice: 65,
         laborUnitPrice: 90,
         wastePercent: 5,
-        basePerSqm: plasterAreaSqm / 120
+        basePerSqm: plasterAreaSqm / Math.max(1, currentHouseAreaSqm || 120)
       });
     }
 
@@ -203,7 +203,7 @@ export const ExternalWorksModal: React.FC<ExternalWorksModalProps> = ({
         materialUnitPrice: Math.round(totalMaterialCost / Math.max(1, pipeLengthM)),
         laborUnitPrice: Math.round(totalLaborCost / Math.max(1, pipeLengthM)),
         wastePercent: 5,
-        basePerSqm: pipeLengthM / 120
+        basePerSqm: pipeLengthM / Math.max(1, currentHouseAreaSqm || 120)
       }
     ];
 
@@ -218,7 +218,7 @@ export const ExternalWorksModal: React.FC<ExternalWorksModalProps> = ({
         materialUnitPrice: 1250,
         laborUnitPrice: 450,
         wastePercent: 0,
-        basePerSqm: gratingDitchLengthM / 120
+        basePerSqm: gratingDitchLengthM / Math.max(1, currentHouseAreaSqm || 120)
       });
     }
 
