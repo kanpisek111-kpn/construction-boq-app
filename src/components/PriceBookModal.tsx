@@ -67,7 +67,7 @@ export const PriceBookModal: React.FC<PriceBookModalProps> = ({
       setToast(null);
       setIsAddingNewItem(false);
     }
-  }, [isOpen, currentConfig]);
+  }, [isOpen]);
 
   const showToast = (message: string, type: 'success' | 'info' | 'warning' = 'success') => {
     setToast({ message, type });
@@ -120,6 +120,23 @@ export const PriceBookModal: React.FC<PriceBookModalProps> = ({
     showToast(updated.autoApplyToNewItems ? 'เปิดการคูณสัดส่วนภูมิภาคกับรายการใหม่อัตโนมัติ ✓' : 'ปิดการคูณอัตโนมัติ (จะใช้ราคาตั้งต้นเดิม)');
   };
 
+  // สลับการเปิดใช้ Master Rates เขียนทับราคาวัสดุหลัก
+  const handleToggleMasterRateOverride = () => {
+    const nextVal = !draftConfig.enableMasterRateOverride;
+    const updated: PriceBookConfig = {
+      ...draftConfig,
+      enableMasterRateOverride: nextVal
+    };
+    setDraftConfig(updated);
+    onSaveConfig(updated);
+    showToast(
+      nextVal 
+        ? 'เปิดใช้ Master Rates เขียนทับราคาวัสดุหลักใน BOQ แล้ว ✓' 
+        : 'ปิดใช้ Master Rates (จะปรับเฉพาะตัวคูณภูมิภาคตามราคาเดิมของแต่ละรายการ)',
+      'info'
+    );
+  };
+
   // นำตัวคูณภูมิภาค & Master Rates ไปคำนวณปรับราคาทั้งตาราง BOQ ปัจจุบัน
   const handleApplyToCurrentBOQ = () => {
     if (isDemo) {
@@ -131,6 +148,23 @@ export const PriceBookModal: React.FC<PriceBookModalProps> = ({
     showToast(`อัปเดตปรับฐานราคาทั้งตาราง BOQ (${updated.length} รายการ) ตามโซน ${draftConfig.regionName} สำเร็จแล้ว! ✓`, 'success');
   };
 
+  // บันทึกและอัปเดตราคา Master Rates ลงตาราง BOQ (เปิด enableMasterRateOverride ให้อัตโนมัติ)
+  const handleApplyMasterRatesToBOQ = () => {
+    if (isDemo) {
+      if (onRequestUpgrade) onRequestUpgrade('ราคากลาง Master Rates');
+      return;
+    }
+    const updatedConfig: PriceBookConfig = {
+      ...draftConfig,
+      enableMasterRateOverride: true
+    };
+    setDraftConfig(updatedConfig);
+    onSaveConfig(updatedConfig);
+    const updated = applyPriceBookToItems(currentBOQItems, updatedConfig);
+    onApplyToBOQ(updated);
+    showToast(`เปิดใช้ Master Rates และอัปเดตราคาลงตาราง BOQ (${updated.length} รายการ) สำเร็จแล้ว! ✓`, 'success');
+  };
+
   // 2. จัดการ Master Rates
   const handleMasterRateChange = (key: keyof MasterRatesConfig, val: number) => {
     const updatedRates: MasterRatesConfig = {
@@ -139,6 +173,7 @@ export const PriceBookModal: React.FC<PriceBookModalProps> = ({
     };
     const updatedConfig: PriceBookConfig = {
       ...draftConfig,
+      enableMasterRateOverride: true, // เปิดอัตโนมัติเมื่อผู้ใช้แก้ไขตัวเลขในแท็บ 2
       masterRates: updatedRates
     };
     setDraftConfig(updatedConfig);
@@ -158,6 +193,10 @@ export const PriceBookModal: React.FC<PriceBookModalProps> = ({
   // 3. จัดการคลังรายการส่วนตัว (My Saved Items)
   const handleSaveNewCustomItem = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isDemo) {
+      if (onRequestUpgrade) onRequestUpgrade('คลังราคาส่วนตัว');
+      return;
+    }
     if (!newItemName.trim()) {
       showToast('กรุณากรอกชื่อรายการวัสดุ/งาน', 'warning');
       return;
@@ -208,6 +247,10 @@ export const PriceBookModal: React.FC<PriceBookModalProps> = ({
   };
 
   const handleInsertIntoBOQ = (customItem: SavedPriceBookItem) => {
+    if (isDemo) {
+      if (onRequestUpgrade) onRequestUpgrade('คลังราคาส่วนตัว');
+      return;
+    }
     const timestamp = Date.now();
     // คำนวณปรับราคาตามภูมิภาคถ้า autoApplyToNewItems เปิดอยู่
     const matMul = draftConfig.autoApplyToNewItems ? draftConfig.materialMultiplier : 1.0;
@@ -486,21 +529,41 @@ export const PriceBookModal: React.FC<PriceBookModalProps> = ({
           {/* TAB 2: MASTER RATES */}
           {activeTab === 'master_rates' && (
             <div className="space-y-5">
-              <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-4 flex items-center justify-between">
-                <div>
-                  <h3 className="text-sm font-bold text-white">ราคากลางวัสดุและค่าแรงหลักของผู้รับเหมา (Master Unit Rates)</h3>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    กำหนดราคากลางที่ผู้รับเหมาซื้อได้จริงกับร้านค้าวัสดุประจำ เมื่อกดอัปเดตระบบจะจับคู่กับรายการใน BOQ และคำนวณใหม่ให้อัตโนมัติ
+              <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-bold text-white">ราคากลางวัสดุและค่าแรงหลักของผู้รับเหมา (Master Unit Rates)</h3>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                      draftConfig.enableMasterRateOverride
+                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                        : 'bg-slate-800 text-slate-400 border border-slate-700'
+                    }`}>
+                      {draftConfig.enableMasterRateOverride ? 'เปิดใช้งานอยู่' : 'ปิดใช้งาน'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400">
+                    กำหนดราคากลางที่ผู้รับเหมาซื้อได้จริงกับร้านค้าวัสดุประจำ เมื่อเปิดใช้งานระบบจะจับคู่กับรายการใน BOQ และเขียนทับราคาฐานอัตโนมัติ
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={handleResetMasterRates}
-                  className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold flex items-center gap-1 border border-slate-700 transition"
-                >
-                  <span className="material-symbols-outlined text-sm">refresh</span>
-                  <span>คืนค่ามาตรฐาน</span>
-                </button>
+                <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-300 bg-slate-900 border border-slate-700 px-3 py-2 rounded-xl hover:bg-slate-800 transition">
+                    <input 
+                      type="checkbox"
+                      checked={!!draftConfig.enableMasterRateOverride}
+                      onChange={handleToggleMasterRateOverride}
+                      className="accent-amber-500 rounded"
+                    />
+                    <span>เปิดใช้ Master Rates เขียนทับราคาวัสดุหลักใน BOQ</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleResetMasterRates}
+                    className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold flex items-center gap-1 border border-slate-700 transition"
+                  >
+                    <span className="material-symbols-outlined text-sm">refresh</span>
+                    <span>คืนค่ามาตรฐาน</span>
+                  </button>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -540,12 +603,12 @@ export const PriceBookModal: React.FC<PriceBookModalProps> = ({
                     type="number"
                     min="15"
                     step="0.5"
-                    value={draftConfig.masterRates.steelDeformedBarPerKg || 26}
+                    value={draftConfig.masterRates.steelDeformedBarPerKg || 28}
                     onChange={(e) => handleMasterRateChange('steelDeformedBarPerKg', parseFloat(e.target.value) || 0)}
                     className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm font-mono text-white focus:outline-none focus:border-amber-400"
                   />
                   <p className="text-[10px] text-slate-500">
-                    ราคาตลาดโรงใหญ่ มอก. โรงเลื่อย/ร้านค้าส่ง: 24 - 28 บาท/กก.
+                    ราคาตลาดโรงใหญ่ มอก. โรงเลื่อย/ร้านค้าส่ง: 26 - 32 บาท/กก.
                   </p>
                 </div>
 
@@ -562,12 +625,12 @@ export const PriceBookModal: React.FC<PriceBookModalProps> = ({
                     type="number"
                     min="50"
                     step="10"
-                    value={draftConfig.masterRates.formworkPerSqm || 140}
+                    value={draftConfig.masterRates.formworkPerSqm || 240}
                     onChange={(e) => handleMasterRateChange('formworkPerSqm', parseFloat(e.target.value) || 0)}
                     className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm font-mono text-white focus:outline-none focus:border-amber-400"
                   />
                   <p className="text-[10px] text-slate-500">
-                    เฉลี่ยคิดหมุนเวียน 3-4 ครั้ง: 120 - 160 บาท/ตร.ม.
+                    เฉลี่ยคิดหมุนเวียน 3-4 ครั้ง: 200 - 280 บาท/ตร.ม.
                   </p>
                 </div>
 
@@ -650,12 +713,12 @@ export const PriceBookModal: React.FC<PriceBookModalProps> = ({
                     type="number"
                     min="30"
                     step="5"
-                    value={draftConfig.masterRates.paintLaborPerSqm || 55}
+                    value={draftConfig.masterRates.paintLaborPerSqm || 40}
                     onChange={(e) => handleMasterRateChange('paintLaborPerSqm', parseFloat(e.target.value) || 0)}
                     className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm font-mono text-white focus:outline-none focus:border-cyan-400"
                   />
                   <p className="text-[10px] text-slate-500">
-                    งานทาสีปูนใหม่ รวมเก็บรอยโป๊ว: 45 - 65 บาท/ตร.ม.
+                    งานทาสีปูนใหม่ รวมเก็บรอยโป๊ว: 35 - 50 บาท/ตร.ม.
                   </p>
                 </div>
 
@@ -665,11 +728,11 @@ export const PriceBookModal: React.FC<PriceBookModalProps> = ({
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-800">
                 <button
                   type="button"
-                  onClick={handleApplyToCurrentBOQ}
+                  onClick={handleApplyMasterRatesToBOQ}
                   className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center gap-2 shadow-lg shadow-amber-500/20 active:scale-95 transition"
                 >
                   <span className="material-symbols-outlined text-sm">sync</span>
-                  <span>บันทึกและอัปเดตราคา Master Rates ลงตาราง BOQ ทันที</span>
+                  <span>บันทึกและเปิดใช้ Master Rates ลงตาราง BOQ ทันที</span>
                 </button>
               </div>
 
@@ -696,7 +759,13 @@ export const PriceBookModal: React.FC<PriceBookModalProps> = ({
 
                 <button
                   type="button"
-                  onClick={() => setIsAddingNewItem(!isAddingNewItem)}
+                  onClick={() => {
+                    if (isDemo) {
+                      if (onRequestUpgrade) onRequestUpgrade('คลังราคาส่วนตัว');
+                      return;
+                    }
+                    setIsAddingNewItem(!isAddingNewItem);
+                  }}
                   className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center gap-1.5 shadow transition"
                 >
                   <span className="material-symbols-outlined text-sm">
@@ -873,7 +942,13 @@ export const PriceBookModal: React.FC<PriceBookModalProps> = ({
                   <p className="text-xs">ไม่พบรายการที่ตรงกับเงื่อนไขค้นหา</p>
                   <button
                     type="button"
-                    onClick={() => setIsAddingNewItem(true)}
+                    onClick={() => {
+                      if (isDemo) {
+                        if (onRequestUpgrade) onRequestUpgrade('คลังราคาส่วนตัว');
+                        return;
+                      }
+                      setIsAddingNewItem(true);
+                    }}
                     className="mt-2 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-indigo-300 font-semibold"
                   >
                     + สร้างรายการแรกของคุณ

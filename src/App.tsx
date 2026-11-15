@@ -902,13 +902,20 @@ export default function App() {
       const nextItem = { ...item, ...updated };
       // อัปเดต baseMaterialUnitPrice และ baseLaborUnitPrice ด้วยเมื่อผู้ใช้แก้ไขราคาเอง
       // เพื่อไม่ให้ราคาที่ผู้ใช้ตั้งใจแก้ไขเพี้ยนหรือทบซ้ำเวลาเปลี่ยนโซนภูมิภาค
+      // หารย้อนกลับเฉพาะเมื่อ item เดิมมี base อยู่แล้ว (เคยถูกคูณโซนมาก่อน) มิฉะนั้นเก็บค่าตรงๆ
       if (typeof updated.materialUnitPrice === 'number') {
         const matMul = priceBookConfig.materialMultiplier || 1.0;
-        nextItem.baseMaterialUnitPrice = Math.round(updated.materialUnitPrice / matMul);
+        const hasExistingBase = typeof item.baseMaterialUnitPrice === 'number';
+        nextItem.baseMaterialUnitPrice = hasExistingBase 
+          ? Math.round(updated.materialUnitPrice / matMul) 
+          : updated.materialUnitPrice;
       }
       if (typeof updated.laborUnitPrice === 'number') {
         const labMul = priceBookConfig.laborMultiplier || 1.0;
-        nextItem.baseLaborUnitPrice = Math.round(updated.laborUnitPrice / labMul);
+        const hasExistingBase = typeof item.baseLaborUnitPrice === 'number';
+        nextItem.baseLaborUnitPrice = hasExistingBase 
+          ? Math.round(updated.laborUnitPrice / labMul) 
+          : updated.laborUnitPrice;
       }
       return nextItem;
     }));

@@ -69,6 +69,7 @@ export interface PriceBookConfig {
   materialMultiplier: number;
   laborMultiplier: number;
   autoApplyToNewItems: boolean;
+  enableMasterRateOverride?: boolean;
   masterRates: MasterRatesConfig;
   savedCustomItems: SavedPriceBookItem[];
   lastUpdated?: string;

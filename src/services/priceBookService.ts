@@ -57,12 +57,12 @@ export const REGIONAL_PRESETS: RegionalPreset[] = [
 // ราคากลางวัสดุและค่าแรงหลักเริ่มต้น (Master Rates)
 export const DEFAULT_MASTER_RATES: MasterRatesConfig = {
   concreteReadyMixedPerCuM: 2150, // คอนกรีตผสมเสร็จ 240 ksc คิวละ
-  steelDeformedBarPerKg: 26,      // เหล็กข้ออ้อย มอก. กก.ละ
-  formworkPerSqm: 140,            // ไม้แบบหล่อโครงสร้าง ตร.ม.ละ
+  steelDeformedBarPerKg: 28,      // เหล็กข้ออ้อย มอก. กก.ละ
+  formworkPerSqm: 240,            // ไม้แบบหล่อโครงสร้าง ตร.ม.ละ
   masonryLaborPerSqm: 100,        // ค่าแรงก่อผนัง ตร.ม.ละ
   plasterLaborPerSqm: 95,         // ค่าแรงฉาบปูน 2 ด้าน ตร.ม.ละ
   tileLaborPerSqm: 200,           // ค่าแรงปูกระเบื้อง ตร.ม.ละ
-  paintLaborPerSqm: 55            // ค่าแรงทาสี ตร.ม.ละ
+  paintLaborPerSqm: 40            // ค่าแรงทาสี ตร.ม.ละ
 };
 
 // ตัวอย่างรายการในคลังส่วนตัวเริ่มต้น (Preset Custom Items)
@@ -111,6 +111,7 @@ export const DEFAULT_PRICE_BOOK_CONFIG: PriceBookConfig = {
   materialMultiplier: 1.00,
   laborMultiplier: 1.00,
   autoApplyToNewItems: true,
+  enableMasterRateOverride: false,
   masterRates: { ...DEFAULT_MASTER_RATES },
   savedCustomItems: [...INITIAL_SAVED_CUSTOM_ITEMS],
   lastUpdated: new Date().toISOString()
@@ -130,6 +131,7 @@ export function loadPriceBookConfig(): PriceBookConfig {
       materialMultiplier: typeof parsed.materialMultiplier === 'number' ? parsed.materialMultiplier : 1.00,
       laborMultiplier: typeof parsed.laborMultiplier === 'number' ? parsed.laborMultiplier : 1.00,
       autoApplyToNewItems: parsed.autoApplyToNewItems ?? true,
+      enableMasterRateOverride: parsed.enableMasterRateOverride ?? false,
       masterRates: { ...DEFAULT_MASTER_RATES, ...(parsed.masterRates || {}) },
       savedCustomItems: Array.isArray(parsed.savedCustomItems) ? parsed.savedCustomItems : [...INITIAL_SAVED_CUSTOM_ITEMS],
       lastUpdated: parsed.lastUpdated || new Date().toISOString()
@@ -235,7 +237,9 @@ function checkAndUpdateMasterRate(item: BOQItem, baseMat: number, baseLab: numbe
   if (
     masterRates.paintLaborPerSqm && masterRates.paintLaborPerSqm > 0 &&
     unitLower.includes('ตร.ม.') &&
-    (nameLower.includes('ทาสี') || nameLower.includes('งานสี') || nameLower.includes('สีรองพื้น'))
+    (nameLower.includes('ทาสี') || nameLower.includes('งานสี')) &&
+    !nameLower.includes('รองพื้น') &&
+    !nameLower.includes('กันสนิม')
   ) {
     newBaseLab = masterRates.paintLaborPerSqm;
   }
@@ -251,8 +255,8 @@ export function applyPriceBookToSingleItem(item: BOQItem, config: PriceBookConfi
   let baseMat = typeof item.baseMaterialUnitPrice === 'number' ? item.baseMaterialUnitPrice : item.materialUnitPrice;
   let baseLab = typeof item.baseLaborUnitPrice === 'number' ? item.baseLaborUnitPrice : item.laborUnitPrice;
 
-  // 2) ตรวจสอบและอัปเดตราคาฐานตาม Master Rates ถ้ามีระบุ
-  if (config.masterRates) {
+  // 2) ตรวจสอบและอัปเดตราคาฐานตาม Master Rates ถ้ามีระบุ และเปิดสวิตช์ enableMasterRateOverride
+  if (config.enableMasterRateOverride === true && config.masterRates) {
     const updated = checkAndUpdateMasterRate(item, baseMat, baseLab, config.masterRates);
     baseMat = updated.baseMat;
     baseLab = updated.baseLab;
