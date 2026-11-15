@@ -29,7 +29,15 @@ import { CostAnalyticsModal } from './components/CostAnalyticsModal';
 import { PaintEstimatorModal } from './components/PaintEstimatorModal';
 import { CeilingEstimatorModal } from './components/CeilingEstimatorModal';
 import { Flow } from 'flow-sdk';
-import { LicenseTier, getCurrentSession, saveSession, logout as logoutAuth, canAccessFeature } from './services/authService';
+import { 
+  LicenseTier, 
+  getCurrentSession, 
+  saveSession, 
+  logout as logoutAuth, 
+  canAccessFeature,
+  syncRemoteBlacklist,
+  checkAndEnforceSessionRevocation 
+} from './services/authService';
 import { AccessLockModal, OwnerKeyManagerModal } from './components/AccessLockModal';
 import { UpgradePromptModal } from './components/UpgradePromptModal';
 
@@ -221,6 +229,23 @@ export default function App() {
   });
   const [upgradeModalFeature, setUpgradeModalFeature] = useState<string | null>(null);
   const [isOwnerKeyModalOpen, setIsOwnerKeyModalOpen] = useState<boolean>(false);
+  const [accessLockNotice, setAccessLockNotice] = useState<string>('');
+
+  // Check remote blacklist & session revocation on startup
+  useEffect(() => {
+    syncRemoteBlacklist().then(() => {
+      if (checkAndEnforceSessionRevocation()) {
+        setLicenseSession({
+          tier: 'locked',
+          keyOrPass: '',
+          activatedAt: '',
+          userLabel: 'ยังไม่ได้ยืนยันสิทธิ์'
+        });
+        setAccessLockNotice('❌ สิทธิ์การใช้งานของคุณถูกระงับ เนื่องจากตรวจพบการละเมิดเงื่อนไข กรุณาติดต่อผู้ดูแลระบบผ่าน LINE: @003iwzqt');
+        setIsAccessLockOpen(true);
+      }
+    });
+  }, []);
 
   const handleAuthSuccess = (tier: LicenseTier, label: string) => {
     const newSess = {
@@ -2234,8 +2259,12 @@ export default function App() {
       {/* Security & Access Lock Modal */}
       <AccessLockModal
         isOpen={isAccessLockOpen}
-        onSuccess={handleAuthSuccess}
+        onSuccess={(tier, label) => {
+          setAccessLockNotice('');
+          handleAuthSuccess(tier, label);
+        }}
         onEnterDemo={handleEnterDemo}
+        initialMessage={accessLockNotice}
         allowClose={licenseSession.tier !== 'locked'}
         onClose={() => setIsAccessLockOpen(false)}
       />

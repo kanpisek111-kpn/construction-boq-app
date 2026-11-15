@@ -1,0 +1,6 @@
+{
+  "updatedAt": "2026-11-15T20:15:00.000Z",
+  "version": "1.0",
+  "description": "รายการ License Keys ที่ถูกระงับสิทธิ์การใช้งาน (Blacklist / Revoked Keys)",
+  "revokedKeys": []
+}

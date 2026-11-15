@@ -5,9 +5,12 @@ import {
   saveSession, 
   generateChecksumLicenseKey, 
   getStoredGeneratedKeys,
-  PRESET_DEMO_KEYS 
+  PRESET_DEMO_KEYS,
+  getStoredRevokedKeys,
+  revokeKey,
+  unrevokeKey,
+  isKeyRevoked
 } from '../services/authService';
-import { copyToClipboardWithFallback } from '../services/imageUtils';
 
 interface AccessLockModalProps {
   isOpen: boolean;
@@ -56,6 +59,8 @@ export const AccessLockModal: React.FC<AccessLockModalProps> = ({
         onSuccess(result.tier, result.label);
         setPasscode('');
         if (onClose) onClose();
+      } else if (result.isRevoked) {
+        setErrorMsg(result.errorMessage || '❌ รหัสนี้ถูกระงับสิทธิ์การใช้งาน เนื่องจากตรวจพบการละเมิดเงื่อนไข กรุณาติดต่อ LINE: @003iwzqt');
       } else {
         setErrorMsg('❌ รหัสผ่านหรือ License Key ไม่ถูกต้อง กรุณาตรวจสอบใหม่อีกครั้ง');
       }
@@ -120,7 +125,9 @@ export const AccessLockModal: React.FC<AccessLockModalProps> = ({
               </span>
             </div>
             {errorMsg && (
-              <p className="text-red-400 text-xs mt-1.5 font-sarabun">{errorMsg}</p>
+              <p className="text-red-400 text-xs mt-1.5 font-sarabun bg-red-950/40 p-2 rounded-lg border border-red-500/30">
+                {errorMsg}
+              </p>
             )}
           </div>
 
@@ -176,7 +183,7 @@ export const AccessLockModal: React.FC<AccessLockModalProps> = ({
 };
 
 // =====================================================================
-// OWNER KEY GENERATOR & MANAGEMENT MODAL (3-TIER CHECKSUM + TEST KEYS)
+// OWNER KEY GENERATOR & MANAGEMENT MODAL (WITH REVOCATION & BLACKLIST)
 // =====================================================================
 interface OwnerKeyManagerModalProps {
   isOpen: boolean;
@@ -188,6 +195,11 @@ export const OwnerKeyManagerModal: React.FC<OwnerKeyManagerModalProps> = ({ isOp
   const [createdKey, setCreatedKey] = useState<string>('');
   const [copyToast, setCopyToast] = useState(false);
   const [keyList, setKeyList] = useState(getStoredGeneratedKeys());
+  
+  // Revocation / Blacklist States
+  const [keyToRevokeInput, setKeyToRevokeInput] = useState('');
+  const [revokedList, setRevokedList] = useState<string[]>(getStoredRevokedKeys());
+  const [actionNotice, setActionNotice] = useState<string>('');
 
   if (!isOpen) return null;
 
@@ -197,15 +209,32 @@ export const OwnerKeyManagerModal: React.FC<OwnerKeyManagerModalProps> = ({ isOp
     setKeyList(getStoredGeneratedKeys());
   };
 
-  const handleCopy = async (text: string) => {
-    await copyToClipboardWithFallback(text);
+  const handleCopy = (text: string) => {
+    navigator.clipboard.writeText(text);
     setCopyToast(true);
     setTimeout(() => setCopyToast(false), 2000);
   };
 
+  const handleRevokeSpecificKey = (targetKey?: string) => {
+    const key = (targetKey || keyToRevokeInput).trim().toUpperCase();
+    if (!key) return;
+    revokeKey(key);
+    setRevokedList(getStoredRevokedKeys());
+    setKeyToRevokeInput('');
+    setActionNotice(`🚫 ระงับสิทธิ์รหัส ${key} สำเร็จแล้ว!`);
+    setTimeout(() => setActionNotice(''), 3000);
+  };
+
+  const handleUnrevokeSpecificKey = (key: string) => {
+    unrevokeKey(key);
+    setRevokedList(getStoredRevokedKeys());
+    setActionNotice(`✓ ปลดล็อครหัส ${key} เรียบร้อยแล้ว`);
+    setTimeout(() => setActionNotice(''), 3000);
+  };
+
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 overflow-y-auto">
-      <div className="w-full max-w-xl bg-slate-900 border border-amber-500/40 rounded-2xl p-6 text-slate-100 shadow-2xl relative">
+      <div className="w-full max-w-2xl bg-slate-900 border border-amber-500/40 rounded-2xl p-6 text-slate-100 shadow-2xl relative max-h-[92vh] flex flex-col">
         <button
           onClick={onClose}
           className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800"
@@ -213,142 +242,229 @@ export const OwnerKeyManagerModal: React.FC<OwnerKeyManagerModalProps> = ({ isOp
           <span className="material-symbols-outlined text-xl">close</span>
         </button>
 
-        <div className="flex items-center gap-3 mb-5">
+        <div className="flex items-center gap-3 mb-4 shrink-0">
           <div className="w-10 h-10 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center font-bold">
             👑
           </div>
           <div>
-            <h3 className="font-prompt font-bold text-lg text-white">ระบบจัดการ License Key สำหรับเจ้าของ</h3>
-            <p className="text-xs text-amber-400">สร้างรหัสผ่านส่งให้ลูกค้าที่ชำระเงินเรียบร้อยแล้ว (ระบบ Checksum ป้องกันการสุ่ม)</p>
+            <h3 className="font-prompt font-bold text-lg text-white">ระบบจัดการ License Key & บัญชีดำ (เจ้าของ)</h3>
+            <p className="text-xs text-amber-400">สร้างรหัสลูกค้า และสั่งระงับสิทธิ์ผู้ละเมิดได้ทันที</p>
           </div>
         </div>
 
-        {/* Generator Controls */}
-        <div className="bg-slate-800/80 p-4 rounded-xl border border-slate-700 mb-5 space-y-3">
-          <label className="block text-xs font-prompt font-semibold text-slate-300">
-            เลือกประเภทแพ็กเกจที่ต้องการสร้าง:
-          </label>
-          <div className="grid grid-cols-3 gap-2">
-            <button
-              type="button"
-              onClick={() => setSelectedTier('starter')}
-              className={`py-2 px-2 rounded-lg text-xs font-prompt font-semibold border transition text-center ${
-                selectedTier === 'starter'
-                  ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md font-bold'
-                  : 'bg-slate-700 text-slate-300 border-slate-600 hover:bg-slate-650'
-              }`}
-            >
-              🟢 Starter (฿890)
-            </button>
-            <button
-              type="button"
-              onClick={() => setSelectedTier('pro')}
-              className={`py-2 px-2 rounded-lg text-xs font-prompt font-semibold border transition text-center ${
-                selectedTier === 'pro'
-                  ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md font-bold'
-                  : 'bg-slate-700 text-slate-300 border-slate-600 hover:bg-slate-650'
-              }`}
-            >
-              ⭐ Pro (฿1,490)
-            </button>
-            <button
-              type="button"
-              onClick={() => setSelectedTier('vip')}
-              className={`py-2 px-2 rounded-lg text-xs font-prompt font-semibold border transition text-center ${
-                selectedTier === 'vip'
-                  ? 'bg-indigo-500 text-white border-indigo-400 shadow-md font-bold'
-                  : 'bg-slate-700 text-slate-300 border-slate-600 hover:bg-slate-650'
-              }`}
-            >
-              💎 VIP (฿2,990)
-            </button>
+        {actionNotice && (
+          <div className="mb-3 py-2 px-3 bg-amber-500/20 border border-amber-400/40 rounded-xl text-amber-300 text-xs font-prompt flex items-center justify-between">
+            <span>{actionNotice}</span>
+            <button onClick={() => setActionNotice('')} className="text-slate-400 hover:text-white">✕</button>
           </div>
+        )}
 
-          <button
-            type="button"
-            onClick={handleGenerate}
-            className="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-prompt font-bold py-2.5 rounded-lg text-xs transition flex items-center justify-center gap-2 shadow"
-          >
-            <span className="material-symbols-outlined text-base">add_circle</span>
-            <span>กดสร้าง License Key ทันที</span>
-          </button>
-
-          {createdKey && (
-            <div className="mt-3 p-3 bg-slate-900 border-2 border-emerald-500/80 rounded-xl text-center">
-              <span className="text-[11px] text-emerald-400 block font-prompt mb-1">
-                สร้าง License Key สำเร็จ! คัดลอกส่งให้ลูกค้าได้เลย:
-              </span>
-              <div className="flex items-center justify-center gap-2">
-                <span className="font-mono font-bold text-lg text-white selection:bg-amber-500">
-                  {createdKey}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => handleCopy(createdKey)}
-                  className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-xs font-prompt flex items-center gap-1 transition"
-                >
-                  <span className="material-symbols-outlined text-sm">content_copy</span>
-                  <span>{copyToast ? 'คัดลอกแล้ว!' : 'คัดลอก'}</span>
-                </button>
-              </div>
+        <div className="overflow-y-auto space-y-4 pr-1 flex-1">
+          {/* Generator Controls */}
+          <div className="bg-slate-800/80 p-4 rounded-xl border border-slate-700 space-y-3">
+            <label className="block text-xs font-prompt font-semibold text-slate-300">
+              เลือกประเภทแพ็กเกจที่ต้องการสร้าง:
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => setSelectedTier('starter')}
+                className={`py-2 px-2 rounded-lg text-xs font-prompt font-semibold border transition text-center ${
+                  selectedTier === 'starter'
+                    ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md font-bold'
+                    : 'bg-slate-700 text-slate-300 border-slate-600 hover:bg-slate-650'
+                }`}
+              >
+                🟢 Starter (฿890)
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedTier('pro')}
+                className={`py-2 px-2 rounded-lg text-xs font-prompt font-semibold border transition text-center ${
+                  selectedTier === 'pro'
+                    ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md font-bold'
+                    : 'bg-slate-700 text-slate-300 border-slate-600 hover:bg-slate-650'
+                }`}
+              >
+                ⭐ Pro (฿1,490)
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedTier('vip')}
+                className={`py-2 px-2 rounded-lg text-xs font-prompt font-semibold border transition text-center ${
+                  selectedTier === 'vip'
+                    ? 'bg-indigo-500 text-white border-indigo-400 shadow-md font-bold'
+                    : 'bg-slate-700 text-slate-300 border-slate-600 hover:bg-slate-650'
+                }`}
+              >
+                💎 VIP (฿2,990)
+              </button>
             </div>
-          )}
-        </div>
 
-        {/* Preset Demo Keys for Owner to Test */}
-        <div className="bg-slate-800/40 p-3.5 rounded-xl border border-slate-700/80 mb-4">
-          <div className="text-xs font-prompt font-semibold text-amber-300 mb-2 flex items-center gap-1">
-            <span className="material-symbols-outlined text-sm">key</span>
-            <span>รหัสตัวอย่างสำหรับเจ้าของทดสอบระบบ (บันทึกไว้ในระบบ):</span>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-            {PRESET_DEMO_KEYS.map((k, i) => (
-              <div key={i} className="bg-slate-900/90 p-2 rounded-lg border border-slate-700 flex flex-col justify-between">
-                <span className="text-[10px] text-slate-400 font-prompt">{k.label}</span>
-                <div className="flex items-center justify-between mt-1">
-                  <span className="font-mono text-xs text-white font-bold">{k.key}</span>
+            <button
+              type="button"
+              onClick={handleGenerate}
+              className="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-prompt font-bold py-2.5 rounded-lg text-xs transition flex items-center justify-center gap-2 shadow"
+            >
+              <span className="material-symbols-outlined text-base">add_circle</span>
+              <span>กดสร้าง License Key ทันที (พร้อม Checksum)</span>
+            </button>
+
+            {createdKey && (
+              <div className="mt-3 p-3 bg-slate-900 border-2 border-emerald-500/80 rounded-xl text-center">
+                <span className="text-[11px] text-emerald-400 block font-prompt mb-1">
+                  สร้าง License Key สำเร็จ! คัดลอกส่งให้ลูกค้าได้เลย:
+                </span>
+                <div className="flex items-center justify-center gap-2">
+                  <span className="font-mono font-bold text-lg text-white selection:bg-amber-500">
+                    {createdKey}
+                  </span>
                   <button
-                    onClick={() => handleCopy(k.key)}
-                    className="text-amber-400 hover:text-white text-[10px] font-prompt underline"
+                    type="button"
+                    onClick={() => handleCopy(createdKey)}
+                    className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-xs font-prompt flex items-center gap-1 transition"
                   >
-                    คัดลอก
+                    <span className="material-symbols-outlined text-sm">content_copy</span>
+                    <span>{copyToast ? 'คัดลอกแล้ว!' : 'คัดลอก'}</span>
                   </button>
                 </div>
               </div>
-            ))}
-          </div>
-        </div>
-
-        {/* History / Stored Keys */}
-        <div>
-          <h4 className="text-xs font-prompt font-semibold text-slate-300 mb-2 flex items-center justify-between">
-            <span>ประวัติ License Key ที่สร้างแล้วในเครื่องนี้ ({keyList.length})</span>
-          </h4>
-          <div className="max-h-40 overflow-y-auto space-y-1.5 text-xs font-mono">
-            {keyList.length === 0 ? (
-              <div className="text-slate-500 text-center py-4 font-sarabun">ยังไม่มีประวัติการสร้าง Key</div>
-            ) : (
-              keyList.map((item, idx) => (
-                <div key={idx} className="flex items-center justify-between bg-slate-800/60 px-3 py-2 rounded border border-slate-700/60">
-                  <div>
-                    <span className="text-white font-bold">{item.key}</span>
-                    <span className={`ml-2 text-[10px] px-1.5 py-0.5 rounded uppercase font-semibold ${
-                      item.tier === 'starter' ? 'bg-emerald-900/80 text-emerald-300' :
-                      item.tier === 'vip' ? 'bg-indigo-900/80 text-indigo-300' :
-                      'bg-amber-900/80 text-amber-300'
-                    }`}>
-                      {item.tier}
-                    </span>
-                  </div>
-                  <button
-                    onClick={() => handleCopy(item.key)}
-                    className="text-amber-400 hover:text-amber-300 text-[11px] font-prompt"
-                  >
-                    คัดลอก
-                  </button>
-                </div>
-              ))
             )}
+          </div>
+
+          {/* 🚫 REVOKE & BLACKLIST TOOL (DEDICATED FOR BANNING VIOLATORS) */}
+          <div className="bg-rose-950/30 p-4 rounded-xl border border-rose-500/40 space-y-3">
+            <div className="flex items-center gap-2 text-rose-300 font-prompt font-bold text-xs">
+              <span className="material-symbols-outlined text-base text-rose-400">block</span>
+              <span>ระบบระงับสิทธิ์ / แบนรหัสผู้ละเมิด (Key Revocation & Blacklist)</span>
+            </div>
+            <p className="text-[11px] text-slate-400 font-sarabun">
+              เมื่อมีลูกค้าขอคืนเงิน หรือตรวจพบรหัสถูกนำไปแจกต่อ กรอกรหัสเพื่อระงับสิทธิ์ทันที ผู้ใช้รหัสนี้จะถูกบล็อกและตัดสิทธิ์อัตโนมัติ:
+            </p>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={keyToRevokeInput}
+                onChange={(e) => setKeyToRevokeInput(e.target.value)}
+                placeholder="กรอกรหัสที่ต้องการแบน เช่น PRO-xxxx-xxxx"
+                className="flex-1 bg-slate-950 border border-rose-500/40 rounded-lg px-3 py-2 text-xs font-mono text-white placeholder:text-slate-600 focus:outline-none focus:border-rose-400"
+              />
+              <button
+                type="button"
+                onClick={() => handleRevokeSpecificKey()}
+                className="px-3.5 py-2 bg-rose-600 hover:bg-rose-500 text-white font-prompt font-bold text-xs rounded-lg transition flex items-center gap-1 shrink-0"
+              >
+                <span className="material-symbols-outlined text-sm">do_not_disturb_on</span>
+                <span>แบนรหัสนี้</span>
+              </button>
+            </div>
+
+            {/* Currently Revoked Keys */}
+            {revokedList.length > 0 && (
+              <div className="pt-2 border-t border-rose-500/20">
+                <span className="text-[11px] text-rose-300 font-prompt font-semibold block mb-1.5">
+                  บัญชีดำรหัสที่ถูกระงับสิทธิ์ในขณะนี้ ({revokedList.length} รหัส):
+                </span>
+                <div className="max-h-28 overflow-y-auto space-y-1 text-xs font-mono">
+                  {revokedList.map((bKey, idx) => (
+                    <div key={idx} className="flex items-center justify-between bg-rose-950/60 px-2.5 py-1.5 rounded border border-rose-500/30">
+                      <span className="line-through text-rose-300 font-bold">{bKey}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleUnrevokeSpecificKey(bKey)}
+                        className="text-[11px] text-slate-300 hover:text-emerald-300 underline font-prompt"
+                      >
+                        ปลดบล็อก
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Preset Demo Keys for Owner to Test */}
+          <div className="bg-slate-800/40 p-3 rounded-xl border border-slate-700/80">
+            <div className="text-xs font-prompt font-semibold text-amber-300 mb-2 flex items-center gap-1">
+              <span className="material-symbols-outlined text-sm">key</span>
+              <span>รหัสตัวอย่างสำหรับเจ้าของทดสอบระบบ:</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              {PRESET_DEMO_KEYS.map((k, i) => (
+                <div key={i} className="bg-slate-900/90 p-2 rounded-lg border border-slate-700 flex flex-col justify-between">
+                  <span className="text-[10px] text-slate-400 font-prompt">{k.label}</span>
+                  <div className="flex items-center justify-between mt-1">
+                    <span className="font-mono text-xs text-white font-bold">{k.key}</span>
+                    <button
+                      onClick={() => handleCopy(k.key)}
+                      className="text-amber-400 hover:text-white text-[10px] font-prompt underline"
+                    >
+                      คัดลอก
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* History / Stored Keys with Quick Ban Button */}
+          <div>
+            <h4 className="text-xs font-prompt font-semibold text-slate-300 mb-2 flex items-center justify-between">
+              <span>ประวัติ License Key ที่สร้างแล้วในเครื่องนี้ ({keyList.length})</span>
+            </h4>
+            <div className="max-h-44 overflow-y-auto space-y-1.5 text-xs font-mono">
+              {keyList.length === 0 ? (
+                <div className="text-slate-500 text-center py-4 font-sarabun">ยังไม่มีประวัติการสร้าง Key</div>
+              ) : (
+                keyList.map((item, idx) => {
+                  const isRevoked = isKeyRevoked(item.key);
+                  return (
+                    <div key={idx} className="flex items-center justify-between bg-slate-800/60 px-3 py-2 rounded border border-slate-700/60">
+                      <div className="flex items-center gap-2">
+                        <span className={`font-bold ${isRevoked ? 'line-through text-rose-400' : 'text-white'}`}>
+                          {item.key}
+                        </span>
+                        <span className={`text-[10px] px-1.5 py-0.2 rounded uppercase font-semibold ${
+                          item.tier === 'starter' ? 'bg-emerald-900/80 text-emerald-300' :
+                          item.tier === 'vip' ? 'bg-indigo-900/80 text-indigo-300' :
+                          'bg-amber-900/80 text-amber-300'
+                        }`}>
+                          {item.tier}
+                        </span>
+                        {isRevoked && (
+                          <span className="text-[10px] px-1.5 py-0.2 rounded bg-rose-900/80 text-rose-300 font-prompt">
+                            ถูกระงับสิทธิ์
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleCopy(item.key)}
+                          className="text-amber-400 hover:text-amber-300 text-[11px] font-prompt"
+                        >
+                          คัดลอก
+                        </button>
+                        {isRevoked ? (
+                          <button
+                            onClick={() => handleUnrevokeSpecificKey(item.key)}
+                            className="text-emerald-400 hover:text-emerald-300 text-[11px] font-prompt"
+                          >
+                            ปลดแบน
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleRevokeSpecificKey(item.key)}
+                            className="text-rose-400 hover:text-rose-300 text-[11px] font-prompt"
+                          >
+                            🚫 ระงับสิทธิ์
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
           </div>
         </div>
       </div>

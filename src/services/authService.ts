@@ -1,5 +1,6 @@
 // =====================================================================
 // AUTH & LICENSE SERVICE FOR CONSTRUCTION BOQ APP (3-TIER + OWNER)
+// WITH REVOCATION / BLACKLIST ENFORCEMENT
 // =====================================================================
 
 export type LicenseTier = 'locked' | 'demo' | 'starter' | 'pro' | 'vip' | 'owner' | 'enterprise';
@@ -11,8 +12,20 @@ export interface LicenseSession {
   userLabel: string;
 }
 
+export interface ValidationResult {
+  valid: boolean;
+  tier: LicenseTier;
+  label: string;
+  isRevoked?: boolean;
+  errorMessage?: string;
+}
+
 const STORAGE_KEY = 'construction_boq_auth_session_v1';
 const GENERATED_KEYS_STORAGE_KEY = 'construction_boq_owner_keys_v1';
+const REVOKED_KEYS_STORAGE_KEY = 'construction_boq_revoked_keys_v1';
+
+// Hardcoded blacklist in code (can add known violators directly here)
+const HARDCODED_REVOKED_KEYS: string[] = [];
 
 // Master Passwords for System Owner (เจ้าของระบบ ปลดล็อก 100%)
 const OWNER_PASSWORDS = [
@@ -40,12 +53,84 @@ const LEGACY_PRESET_KEYS: { [key: string]: { tier: LicenseTier; label: string } 
 };
 
 // =====================================================================
+// REVOCATION & BLACKLIST MANAGEMENT
+// =====================================================================
+
+export function getStoredRevokedKeys(): string[] {
+  try {
+    const raw = localStorage.getItem(REVOKED_KEYS_STORAGE_KEY);
+    const local: string[] = raw ? JSON.parse(raw) : [];
+    const set = new Set<string>([...HARDCODED_REVOKED_KEYS, ...local].map(k => k.trim().toUpperCase()));
+    return Array.from(set);
+  } catch {
+    return HARDCODED_REVOKED_KEYS;
+  }
+}
+
+export function revokeKey(key: string): void {
+  try {
+    const clean = key.trim().toUpperCase();
+    if (!clean) return;
+    const list = getStoredRevokedKeys();
+    if (!list.includes(clean)) {
+      list.unshift(clean);
+      localStorage.setItem(REVOKED_KEYS_STORAGE_KEY, JSON.stringify(list));
+    }
+  } catch {}
+}
+
+export function unrevokeKey(key: string): void {
+  try {
+    const clean = key.trim().toUpperCase();
+    const list = getStoredRevokedKeys().filter(k => k !== clean);
+    localStorage.setItem(REVOKED_KEYS_STORAGE_KEY, JSON.stringify(list));
+  } catch {}
+}
+
+export function isKeyRevoked(key: string): boolean {
+  if (!key) return false;
+  const clean = key.trim().toUpperCase();
+  const list = getStoredRevokedKeys();
+  return list.some(k => k === clean);
+}
+
+// Sync with remote blacklist.json
+export async function syncRemoteBlacklist(): Promise<string[]> {
+  try {
+    const res = await fetch(`./blacklist.json?t=${Date.now()}`, { cache: 'no-store' });
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data.revokedKeys)) {
+        const current = getStoredRevokedKeys();
+        const merged = Array.from(new Set([...current, ...data.revokedKeys.map((k: string) => k.toUpperCase().trim())]));
+        localStorage.setItem(REVOKED_KEYS_STORAGE_KEY, JSON.stringify(merged));
+        return merged;
+      }
+    }
+  } catch (err) {
+    // Offline / network fallback
+  }
+  return getStoredRevokedKeys();
+}
+
+// Check if currently active session was revoked
+export function checkAndEnforceSessionRevocation(): boolean {
+  const session = getCurrentSession();
+  if (session.tier !== 'locked' && session.tier !== 'demo' && session.tier !== 'owner') {
+    if (session.keyOrPass && isKeyRevoked(session.keyOrPass)) {
+      logout();
+      return true;
+    }
+  }
+  return false;
+}
+
+// =====================================================================
 // ALGORITHMIC CHECKSUM FOR LICENSE KEYS (PREVENTS BRUTE FORCE)
 // Format: PREFIX-XXXX-CCCC
-// Example: START-A7B2-C3D4, PRO-8K9M-P2R5, VIP-X2Y7-N8W4
 // =====================================================================
 const CHECKSUM_SALT = 'BOQ2026_KPN_SECURE_SALT_v2';
-const BASE32_ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ'; // No confusing 0, 1, I, O
+const BASE32_ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
 
 export function computeKeyChecksum(prefix: string, seed: string): string {
   const p = prefix.trim().toUpperCase();
@@ -112,7 +197,6 @@ export function getCurrentSession(): LicenseSession {
     if (raw) {
       const parsed = JSON.parse(raw) as LicenseSession;
       if (parsed && parsed.tier) {
-        // Normalize legacy enterprise tier to vip
         if (parsed.tier === ('enterprise' as any)) {
           parsed.tier = 'vip';
         }
@@ -140,10 +224,21 @@ export function logout(): void {
   } catch {}
 }
 
-export function validatePasscodeOrKey(input: string): { valid: boolean; tier: LicenseTier; label: string } {
+export function validatePasscodeOrKey(input: string): ValidationResult {
   const clean = input.trim().toUpperCase();
   if (!clean) {
     return { valid: false, tier: 'locked', label: '' };
+  }
+
+  // 0. CHECK BLACKLIST FIRST: If key is revoked, immediately reject!
+  if (isKeyRevoked(clean)) {
+    return {
+      valid: false,
+      tier: 'locked',
+      label: '',
+      isRevoked: true,
+      errorMessage: '❌ รหัสนี้ถูกระงับสิทธิ์การใช้งาน เนื่องจากตรวจพบการละเมิดเงื่อนไข กรุณาติดต่อ LINE: @003iwzqt'
+    };
   }
 
   // 1. Check Owner Master Passwords
@@ -191,7 +286,6 @@ export function validatePasscodeOrKey(input: string): { valid: boolean; tier: Li
   }
 
   // 5. Algorithmic Checksum Verification
-  // Match START-XXXX-CCCC, PRO-XXXX-CCCC, VIP-XXXX-CCCC or ENT-XXXX-CCCC
   const checksumPattern = /^(START|PRO|VIP|ENT)-([A-Z0-9]{4})-([A-Z0-9]{4})$/;
   const match = clean.match(checksumPattern);
   if (match) {
@@ -250,12 +344,10 @@ export function canAccessFeature(
     | 'actual_cost_tracker',
   tier: LicenseTier
 ): boolean {
-  // Owner and VIP (or legacy enterprise) have 100% unlocked access
   if (tier === 'owner' || tier === 'vip' || tier === 'enterprise') {
     return true;
   }
 
-  // Pro Contractor Tier: Core BOQ + Quotation + Multi-Projects + Procurement + Gantt + JSON Files + White Label
   if (tier === 'pro') {
     switch (feature) {
       case 'export_quotation':
@@ -270,7 +362,6 @@ export function canAccessFeature(
       case 'project_files_json':
       case 'white_label_branding':
         return true;
-      // Strictly VIP and Owner only:
       case 'actual_cost_tracker':
       case 'ai_sanity_check':
       case 'plan_analyzer':
@@ -280,7 +371,6 @@ export function canAccessFeature(
     }
   }
 
-  // Starter Tier: BOQ 10 Categories + 12 Estimators + Quotation PDF + Excel/CSV + Standard Milestones (1 project only)
   if (tier === 'starter') {
     switch (feature) {
       case 'export_quotation':
@@ -290,7 +380,6 @@ export function canAccessFeature(
       case 'cost_analytics':
       case 'advanced_calculators':
         return true;
-      // All other advanced features are locked for Starter:
       case 'multi_projects':
       case 'site_procurement':
       case 'gantt_schedule':
@@ -305,6 +394,5 @@ export function canAccessFeature(
     }
   }
 
-  // Demo Tier: Everything above is LOCKED
   return false;
 }
