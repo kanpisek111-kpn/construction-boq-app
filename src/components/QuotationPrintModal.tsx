@@ -71,7 +71,143 @@ export const QuotationPrintModal: React.FC<QuotationPrintModalProps> = ({
   };
 
   const handlePrint = () => {
-    window.print();
+    const printArea = document.getElementById('quotation-print-area');
+    if (!printArea) {
+      window.print();
+      return;
+    }
+
+    const printWindow = window.open('', '_blank', 'width=900,height=800');
+    if (!printWindow) {
+      // If popup is blocked by browser, fallback to standard window.print()
+      window.print();
+      return;
+    }
+
+    const htmlContent = `<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <title>ใบเสนอราคา - ${meta.quotationNumber} - ${projectName}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;500;600;700;800&family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    @page {
+      size: A4 portrait;
+      margin: 10mm 12mm 12mm 12mm;
+    }
+    * {
+      box-sizing: border-box;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Sarabun', 'Prompt', sans-serif;
+      background: #ffffff !important;
+      color: #0f172a !important;
+      font-size: 11px;
+      line-height: 1.4;
+    }
+    .print-sheet {
+      width: 100%;
+      max-width: 820px;
+      margin: 0 auto;
+      padding: 10px;
+      background: white;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      page-break-inside: auto;
+      margin-bottom: 16px;
+    }
+    thead {
+      display: table-header-group;
+    }
+    tr {
+      page-break-inside: avoid;
+      page-break-after: auto;
+    }
+    th, td {
+      padding: 5px 8px;
+      vertical-align: middle;
+    }
+    .break-inside-avoid {
+      page-break-inside: avoid !important;
+      break-inside: avoid !important;
+    }
+    @media print {
+      body {
+        padding: 0;
+      }
+      .no-print {
+        display: none !important;
+      }
+    }
+    .action-bar {
+      position: sticky;
+      top: 0;
+      background: #0f172a;
+      color: #ffffff;
+      padding: 10px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 4px 6px -1px rgba(0,0,0,0.2);
+      z-index: 9999;
+      font-family: sans-serif;
+    }
+    .btn-print {
+      background: #f59e0b;
+      color: #0f172a;
+      border: none;
+      padding: 8px 18px;
+      border-radius: 8px;
+      font-weight: bold;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .btn-close {
+      background: #334155;
+      color: #f8fafc;
+      border: none;
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div class="action-bar no-print">
+    <div>
+      <strong>📄 ใบเสนอราคา (Quotation Preview)</strong>
+      <span style="font-size: 12px; opacity: 0.8; margin-left: 10px;">เลือก "บันทึกเป็น PDF" ในหน้าต่างพิมพ์</span>
+    </div>
+    <div style="display: flex; gap: 8px;">
+      <button class="btn-print" onclick="window.print()">🖨️ พิมพ์ / บันทึก PDF</button>
+      <button class="btn-close" onclick="window.close()">ปิดหน้าต่าง</button>
+    </div>
+  </div>
+  <div class="print-sheet">
+    ${printArea.innerHTML}
+  </div>
+  <script>
+    window.addEventListener('load', () => {
+      setTimeout(() => {
+        window.print();
+      }, 500);
+    });
+  </script>
+</body>
+</html>`;
+
+    printWindow.document.open();
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
   };
 
   if (!isOpen) return null;
@@ -80,10 +216,10 @@ export const QuotationPrintModal: React.FC<QuotationPrintModalProps> = ({
   const categories: ConstructionCategory[] = Object.keys(CATEGORY_LABELS) as ConstructionCategory[];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in overflow-y-auto">
+    <div id="quotation-print-modal-root" className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in overflow-y-auto">
       
       {/* Container */}
-      <div className="bg-slate-900 border border-slate-700 w-full max-w-5xl rounded-2xl shadow-2xl flex flex-col max-h-[96vh] overflow-hidden text-slate-100 my-auto">
+      <div id="quotation-modal-container" className="bg-slate-900 border border-slate-700 w-full max-w-5xl rounded-2xl shadow-2xl flex flex-col max-h-[96vh] overflow-hidden text-slate-100 my-auto">
         
         {/* Header - Not printed */}
         <div className="print:hidden flex items-center justify-between px-6 py-3.5 border-b border-slate-800 bg-slate-900/90 shrink-0">
@@ -544,29 +680,41 @@ export const QuotationPrintModal: React.FC<QuotationPrintModalProps> = ({
             min-height: auto !important;
             overflow: visible !important;
           }
-          #root {
-            display: none !important;
+          body {
+            visibility: hidden !important;
           }
-          body > *:not(#quotation-print-modal-root) {
-            display: none !important;
+          #quotation-print-modal-root,
+          #quotation-print-modal-root * {
+            visibility: visible !important;
           }
-          .fixed {
-            position: static !important;
+          #quotation-print-modal-root {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            height: auto !important;
+            min-height: 100% !important;
+            background: white !important;
             padding: 0 !important;
-            background: transparent !important;
+            margin: 0 !important;
             overflow: visible !important;
+            z-index: 999999 !important;
             display: block !important;
           }
-          .overflow-y-auto, .overflow-hidden, .max-h-[96vh], .max-h-[92vh] {
-            overflow: visible !important;
+          #quotation-modal-container {
             max-height: none !important;
             height: auto !important;
-          }
-          .bg-slate-900, .bg-slate-950 {
-            background: transparent !important;
+            overflow: visible !important;
             border: none !important;
             box-shadow: none !important;
+            background: white !important;
+            color: black !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
           }
+          .no-print,
           .print\\:hidden {
             display: none !important;
           }

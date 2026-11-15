@@ -265,7 +265,7 @@ export default function App() {
         style.id = styleId;
         style.textContent = `
           html, body, #root {
-            margin: 0; padding: 0; width: 100%; height: 100%;
+            margin: 0; padding: 0; min-height: 100%;
             background: #0f172a;
             color: #f8fafc;
             font-family: 'Sarabun', 'Plus Jakarta Sans', sans-serif;
