@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ProjectSaveState, RegionalZoneId } from '../types';
+import { ProjectSaveState, ProjectStatus, RegionalZoneId } from '../types';
 import { REGIONAL_PRESETS } from '../services/priceBookService';
 import { DEFAULT_STANDARD_BOQ, DEFAULT_QUOTATION_META, DEFAULT_PAYMENT_MILESTONES } from '../constants';
 
@@ -9,7 +9,15 @@ interface ProjectManagerModalProps {
   projects: ProjectSaveState[];
   activeProjectId: string;
   onSwitchProject: (id: string) => void;
-  onCreateProject: (name: string, area: number, regionId?: RegionalZoneId) => void;
+  onCreateProject: (
+    name: string, 
+    area: number, 
+    clientName?: string, 
+    clientPhone?: string, 
+    clientAddress?: string, 
+    status?: ProjectStatus, 
+    regionId?: RegionalZoneId
+  ) => void;
   onDuplicateProject: (id: string) => void;
   onRenameProject: (id: string, newName: string) => void;
   onDeleteProject: (id: string) => void;
@@ -37,7 +45,15 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
 
   const handleCreate = () => {
     if (!newProjectName.trim()) return;
-    onCreateProject(newProjectName.trim(), newProjectArea, newProjectRegionId);
+    onCreateProject(
+      newProjectName.trim(), 
+      newProjectArea, 
+      undefined, 
+      undefined, 
+      undefined, 
+      'draft', 
+      newProjectRegionId
+    );
     setNewProjectName('บ้านพักอาศัย คสล. 1-2 ชั้น');
     setNewProjectArea(120);
     setNewProjectRegionId('central_bkk');

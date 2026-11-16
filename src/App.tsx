@@ -37,7 +37,8 @@ import {
   getDefaultProjectRegionalConfig,
   normalizeProjectRegionalConfig,
   saveGlobalPriceBookLibrary,
-  PRICE_BOOK_LIBRARY_VERSION
+  PRICE_BOOK_LIBRARY_VERSION,
+  REGIONAL_PRESETS
 } from './services/priceBookService';
 import { PriceBookConfig, ProjectRegionalConfig, RegionalZoneId, SavedPriceBookItem } from './types';
 import { Flow } from 'flow-sdk';
@@ -782,11 +783,17 @@ export default function App() {
       setUpgradeModalFeature('สร้างหลายโครงการไม่จำกัด (สิทธิ์ Pro)');
       return;
     }
-    const initRegional = getDefaultProjectRegionalConfig(regionId || 'central_bkk');
+    let effectiveRegionId: RegionalZoneId = regionId || 'central_bkk';
+    let effectiveClientName = clientName;
+    if (clientName && REGIONAL_PRESETS.some(p => p.id === clientName)) {
+      effectiveRegionId = clientName as RegionalZoneId;
+      effectiveClientName = undefined;
+    }
+    const initRegional = getDefaultProjectRegionalConfig(effectiveRegionId);
     const newProj = makeDefaultProject(
       name,
       area,
-      clientName || 'คุณสมศักดิ์ สุขเจริญ (เจ้าของโครงการ)',
+      effectiveClientName || 'คุณสมศักดิ์ สุขเจริญ (เจ้าของโครงการ)',
       clientPhone || '081-234-5678',
       clientAddress || 'แปลงที่ 14 หมู่บ้านสุขนิเวศน์ ต.บางกรวย อ.บางกรวย จ.นนทบุรี',
       status || 'draft',
@@ -867,7 +874,7 @@ export default function App() {
       id: generateId(),
       projectName: `${source.projectName} (สำเนา)`,
       savedAt: new Date().toISOString(),
-      regionalConfig: source.regionalConfig ? { ...source.regionalConfig } : getDefaultProjectRegionalConfig()
+      regionalConfig: normalizeProjectRegionalConfig(source.regionalConfig)
     };
     setProjects((prev) => {
       const next = [...prev, copy];
@@ -917,6 +924,7 @@ export default function App() {
         setActualExpenses(Array.isArray(first.actualExpenses) ? first.actualExpenses.filter((e: any) => !e.id?.startsWith('exp-init-')) : []);
         setProcurementCheckedItems(first.procurementCheckedItems || {});
         setGanttTasks(Array.isArray(first.customTasks) ? first.customTasks : []);
+        setActiveRegionalConfig(normalizeProjectRegionalConfig(first.regionalConfig));
       }
       return next;
     });

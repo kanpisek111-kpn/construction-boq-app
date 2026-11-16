@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   BOQItem, 
   PriceBookConfig, 
@@ -70,9 +70,11 @@ export const PriceBookModal: React.FC<PriceBookModalProps> = ({
   const [customItemFilterCategory, setCustomItemFilterCategory] = useState<string>('all');
   const [customItemSearch, setCustomItemSearch] = useState('');
 
-  // Sync draft when opened - ensure savedCustomItems has default library merged without deleting user custom items
+  const prevIsOpenRef = useRef(false);
+
+  // Sync draft and initialize state ONLY when opening modal (isOpen changes from false -> true)
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && !prevIsOpenRef.current) {
       let items = currentConfig.savedCustomItems || [];
       if (currentConfig.libraryVersion !== PRICE_BOOK_LIBRARY_VERSION) {
         const existingIds = new Set(items.map(i => i.savedId));
@@ -105,7 +107,8 @@ export const PriceBookModal: React.FC<PriceBookModalProps> = ({
         paintLaborPerSqm: String(validConfig.masterRates?.paintLaborPerSqm ?? DEFAULT_MASTER_RATES.paintLaborPerSqm ?? 40),
       });
     }
-  }, [isOpen, currentConfig]);
+    prevIsOpenRef.current = isOpen;
+  }, [isOpen]);
 
   const showToast = (message: string, type: 'success' | 'info' | 'warning' = 'success') => {
     setToast({ message, type });
