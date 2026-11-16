@@ -5,7 +5,6 @@ import {
   saveSession, 
   generateChecksumLicenseKey, 
   getStoredGeneratedKeys,
-  PRESET_DEMO_KEYS,
   getStoredRevokedKeys,
   revokeKey,
   unrevokeKey,
@@ -478,30 +477,6 @@ export const OwnerKeyManagerModal: React.FC<OwnerKeyManagerModalProps> = ({ isOp
                 <span className="material-symbols-outlined text-sm">restart_alt</span>
                 <span>รีเซ็ตเครื่อง</span>
               </button>
-            </div>
-          </div>
-
-          {/* Preset Demo Keys for Owner to Test */}
-          <div className="bg-slate-800/40 p-3 rounded-xl border border-slate-700/80">
-            <div className="text-xs font-prompt font-semibold text-amber-300 mb-2 flex items-center gap-1">
-              <span className="material-symbols-outlined text-sm">key</span>
-              <span>รหัสตัวอย่างสำหรับเจ้าของทดสอบระบบ:</span>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-              {PRESET_DEMO_KEYS.map((k, i) => (
-                <div key={i} className="bg-slate-900/90 p-2 rounded-lg border border-slate-700 flex flex-col justify-between">
-                  <span className="text-[10px] text-slate-400 font-prompt">{k.label}</span>
-                  <div className="flex items-center justify-between mt-1">
-                    <span className="font-mono text-xs text-white font-bold">{k.key}</span>
-                    <button
-                      onClick={() => handleCopy(k.key)}
-                      className="text-amber-400 hover:text-white text-[10px] font-prompt underline"
-                    >
-                      คัดลอก
-                    </button>
-                  </div>
-                </div>
-              ))}
             </div>
           </div>
 

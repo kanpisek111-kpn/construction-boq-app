@@ -55,29 +55,9 @@ const CLOUD_BLACKLIST_KEY = 'boq_blacklist_global';
 const HARDCODED_REVOKED_KEYS: string[] = [];
 
 // Master Passwords for System Owner (เจ้าของระบบ ปลดล็อก 100%)
-const OWNER_PASSWORDS = [
-  'OWNER-BOQ-2026',
-  'admin8888',
-  'admin999',
-  'kanpisek111',
-  'boqpro888',
-  'boq-owner-vip'
-];
-
-// Preset Demo Keys (For owner testing only)
-export const PRESET_DEMO_KEYS = [
-  { key: 'START-DEMO-2026', tier: 'starter' as const, label: '🟢 สิทธิ์ทดสอบ Starter' },
-  { key: 'PRO-DEMO-2026', tier: 'pro' as const, label: '⭐ สิทธิ์ทดสอบ Pro' },
-  { key: 'VIP-DEMO-2026', tier: 'vip' as const, label: '💎 สิทธิ์ทดสอบ VIP Corporate' }
-];
-
-// Legacy presets for backwards compatibility
-const LEGACY_PRESET_KEYS: { [key: string]: { tier: LicenseTier; label: string } } = {
-  'PRO-START-2026': { tier: 'pro', label: '⭐ สมาชิกแพ็กเกจ Pro ตลอดชีพ' },
-  'PRO-VIP-8888': { tier: 'pro', label: '⭐ สมาชิกแพ็กเกจ Pro ตลอดชีพ' },
-  'ENT-CORP-2026': { tier: 'vip', label: '💎 สมาชิกแพ็กเกจ VIP Corporate' },
-  'ENT-VIP-9999': { tier: 'vip', label: '💎 สมาชิกแพ็กเกจ VIP Corporate' }
-};
+const OWNER_PASSWORDS: string[] = [
+  import.meta.env.VITE_OWNER_PASSCODE || 'KPN-OWNER-BOQ-2026#99'
+].filter(Boolean);
 
 // =====================================================================
 // REVOCATION & BLACKLIST MANAGEMENT
@@ -565,26 +545,7 @@ export function validatePasscodeOrKey(input: string): ValidationResult {
     };
   }
 
-  // 2. Check Preset Demo Keys (For owner testing)
-  const matchedDemo = PRESET_DEMO_KEYS.find(k => k.key.toUpperCase() === clean);
-  if (matchedDemo) {
-    return {
-      valid: true,
-      tier: matchedDemo.tier,
-      label: matchedDemo.label
-    };
-  }
-
-  // 3. Check Legacy Preset Keys
-  if (LEGACY_PRESET_KEYS[clean]) {
-    return {
-      valid: true,
-      tier: LEGACY_PRESET_KEYS[clean].tier,
-      label: LEGACY_PRESET_KEYS[clean].label
-    };
-  }
-
-  // 4. Check dynamic owner-generated keys in localStorage
+  // 2. Check dynamic owner-generated keys in localStorage
   const stored = getStoredGeneratedKeys();
   const matchedStored = stored.find(item => item.key.toUpperCase() === clean);
   if (matchedStored) {
