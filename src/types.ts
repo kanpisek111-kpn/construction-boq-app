@@ -407,6 +407,16 @@ export interface ProjectSaveState {
   regionalConfig?: ProjectRegionalConfig;
 }
 
+export interface WorkspaceBackupFile {
+  backupType: 'thai_boq_full_backup';
+  backupVersion: number;
+  exportedAt: string;
+  activeProjectId: string;
+  projects: ProjectSaveState[];
+  globalPriceBookItems: SavedPriceBookItem[];
+  isDaylightMode?: boolean;
+}
+
 export type ExternalItemType = 
   | 'preliminaries'
   | 'fence'

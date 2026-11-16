@@ -38,9 +38,10 @@ import {
   normalizeProjectRegionalConfig,
   saveGlobalPriceBookLibrary,
   PRICE_BOOK_LIBRARY_VERSION,
-  REGIONAL_PRESETS
+  REGIONAL_PRESETS,
+  INITIAL_SAVED_CUSTOM_ITEMS
 } from './services/priceBookService';
-import { PriceBookConfig, ProjectRegionalConfig, RegionalZoneId, SavedPriceBookItem } from './types';
+import { PriceBookConfig, ProjectRegionalConfig, RegionalZoneId, SavedPriceBookItem, WorkspaceBackupFile } from './types';
 import { Flow } from 'flow-sdk';
 import { 
   LicenseTier, 
@@ -235,6 +236,7 @@ export default function App() {
   const [globalSavedItems, setGlobalSavedItems] = useState<SavedPriceBookItem[]>(() => {
     return loadPriceBookConfig().savedCustomItems;
   });
+  const [pendingBackupRestore, setPendingBackupRestore] = useState<WorkspaceBackupFile | null>(null);
 
   // PriceBookConfig รวมระหว่างการตั้งค่าโซนระดับโครงการ (ProjectRegionalConfig) และคลังรายการกลาง (Global Shared Library)
   const priceBookConfig = useMemo<PriceBookConfig>(() => ({
@@ -1224,7 +1226,15 @@ export default function App() {
     reader.onload = (event) => {
       try {
         const text = event.target?.result as string;
-        const parsed: ProjectSaveState = JSON.parse(text);
+        const parsed: any = JSON.parse(text);
+
+        // ตรวจสอบว่าเป็นไฟล์สำรองทั้งระบบ (.boqbackup.json) หรือไม่
+        if (parsed && parsed.backupType === 'thai_boq_full_backup' && Array.isArray(parsed.projects)) {
+          setPendingBackupRestore(parsed as WorkspaceBackupFile);
+          setActiveMainTab('dashboard');
+          return;
+        }
+
         if (parsed && Array.isArray(parsed.items)) {
           const importedId = parsed.id && !projects.some(p => p.id === parsed.id) ? parsed.id : generateId();
           const cleanExpenses = Array.isArray(parsed.actualExpenses) 
@@ -1292,6 +1302,211 @@ export default function App() {
     reader.readAsText(file);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
+    }
+  };
+
+  // ======== FULL WORKSPACE BACKUP & RESTORE ========
+  const handleExportFullBackup = async () => {
+    if (!canAccessFeature('project_files_json', licenseSession.tier)) {
+      setUpgradeModalFeature('สำรองข้อมูลทั้งระบบ (.boqbackup.json)');
+      return;
+    }
+    try {
+      // 1. Prepare current active project snapshot
+      const currentProjSnapshot: ProjectSaveState = {
+        id: activeProjectId || generateId(),
+        version: '1.0',
+        savedAt: new Date().toISOString(),
+        projectName,
+        houseAreaSqm,
+        overheadPercent,
+        vatPercent,
+        items,
+        quotationMeta,
+        milestones,
+        projectStartDate,
+        projectEndDate,
+        actualExpenses,
+        customTasks: ganttTasks,
+        procurementCheckedItems,
+        status: activeProject?.status || 'draft',
+        regionalConfig: activeRegionalConfig
+      };
+
+      // 2. Merge with all projects list
+      const allProjects = projects.map(p => p.id === activeProjectId ? currentProjSnapshot : p);
+      if (!allProjects.some(p => p.id === activeProjectId)) {
+        allProjects.push(currentProjSnapshot);
+      }
+
+      // 3. Create full workspace backup object
+      const now = new Date();
+      const dateStr = now.toISOString().split('T')[0];
+      const backupData: WorkspaceBackupFile = {
+        backupType: 'thai_boq_full_backup',
+        backupVersion: 1,
+        exportedAt: now.toISOString(),
+        activeProjectId,
+        projects: allProjects,
+        globalPriceBookItems: globalSavedItems,
+        isDaylightMode
+      };
+
+      const jsonStr = JSON.stringify(backupData, null, 2);
+      const bytes = new TextEncoder().encode(jsonStr);
+      const base64 = btoa(Array.from(bytes, b => String.fromCharCode(b)).join(''));
+      const filename = `ThaiBOQ_FullBackup_${allProjects.length}projects_${dateStr}.boqbackup.json`;
+
+      await Flow.download({
+        base64,
+        mimeType: 'application/json',
+        filename
+      });
+
+      setSaveStatusToast(`สำรองข้อมูลทั้งระบบสำเร็จ (${allProjects.length} โครงการ, ${globalSavedItems.length} รายการคลัง) ✓`);
+      setTimeout(() => setSaveStatusToast(''), 3500);
+    } catch (e) {
+      console.error('Export full backup failed:', e);
+      setSaveStatusToast('สำรองข้อมูลไม่สำเร็จ กรุณาลองใหม่');
+      setTimeout(() => setSaveStatusToast(''), 3000);
+    }
+  };
+
+  const handleRestoreFullBackup = (backup: WorkspaceBackupFile, mode: 'merge' | 'replace') => {
+    if (!canAccessFeature('project_files_json', licenseSession.tier)) {
+      setUpgradeModalFeature('กู้คืนข้อมูลทั้งระบบ (.boqbackup.json)');
+      return;
+    }
+    if (!backup || backup.backupType !== 'thai_boq_full_backup' || !Array.isArray(backup.projects) || backup.projects.length === 0) {
+      setSaveStatusToast('⚠️ รูปแบบไฟล์สำรองไม่ถูกต้อง หรือไม่มีข้อมูลโครงการ');
+      setTimeout(() => setSaveStatusToast(''), 4000);
+      return;
+    }
+
+    // Normalize imported projects
+    const normalizedImportedProjects: ProjectSaveState[] = backup.projects.map((p) => {
+      const cleanExpenses = Array.isArray(p.actualExpenses)
+        ? p.actualExpenses.filter((e: any) => !e.id?.startsWith('exp-init-'))
+        : [];
+      return {
+        ...p,
+        id: p.id || generateId(),
+        projectName: p.projectName || 'โครงการนำเข้า',
+        houseAreaSqm: p.houseAreaSqm || 120,
+        overheadPercent: p.overheadPercent ?? 7,
+        vatPercent: p.vatPercent ?? 7,
+        items: Array.isArray(p.items) && p.items.length > 0 ? p.items : DEFAULT_STANDARD_BOQ,
+        quotationMeta: p.quotationMeta || DEFAULT_QUOTATION_META,
+        milestones: Array.isArray(p.milestones) && p.milestones.length > 0 ? p.milestones : DEFAULT_PAYMENT_MILESTONES,
+        projectStartDate: p.projectStartDate || new Date().toISOString().split('T')[0],
+        projectEndDate: p.projectEndDate || '',
+        actualExpenses: cleanExpenses,
+        procurementCheckedItems: p.procurementCheckedItems || {},
+        customTasks: Array.isArray(p.customTasks) ? p.customTasks : [],
+        status: p.status || 'draft',
+        regionalConfig: normalizeProjectRegionalConfig(p.regionalConfig)
+      };
+    });
+
+    if (mode === 'replace') {
+      // 1. Replace projects completely
+      setProjects(normalizedImportedProjects);
+      saveProjectsList(normalizedImportedProjects);
+
+      // 2. Replace & merge global price book library
+      let newCustomItems: SavedPriceBookItem[] = Array.isArray(backup.globalPriceBookItems)
+        ? backup.globalPriceBookItems
+        : [];
+      const existingIds = new Set(newCustomItems.map(i => i.savedId));
+      const missingDefaults = INITIAL_SAVED_CUSTOM_ITEMS.filter(def => !existingIds.has(def.savedId));
+      const finalCustomItems = [...newCustomItems, ...missingDefaults];
+      setGlobalSavedItems(finalCustomItems);
+      saveGlobalPriceBookLibrary(finalCustomItems);
+
+      // 3. Set active project
+      const targetActive = (backup.activeProjectId && normalizedImportedProjects.find(p => p.id === backup.activeProjectId))
+        || normalizedImportedProjects[0];
+
+      setActiveProjectId(targetActive.id);
+      localStorage.setItem(ACTIVE_PROJECT_ID_KEY, targetActive.id);
+      setProjectName(targetActive.projectName);
+      setHouseAreaSqm(targetActive.houseAreaSqm);
+      setAreaInputText(String(targetActive.houseAreaSqm || 120));
+      try {
+        window.sessionStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(targetActive));
+      } catch {}
+      setOverheadPercent(targetActive.overheadPercent ?? 7);
+      setVatPercent(targetActive.vatPercent ?? 7);
+      setItems(targetActive.items);
+      setQuotationMeta(targetActive.quotationMeta);
+      setMilestones(targetActive.milestones || DEFAULT_PAYMENT_MILESTONES);
+      setProjectStartDate(targetActive.projectStartDate || new Date().toISOString().split('T')[0]);
+      setProjectEndDate(targetActive.projectEndDate || '');
+      setActualExpenses(targetActive.actualExpenses || []);
+      setProcurementCheckedItems(targetActive.procurementCheckedItems || {});
+      setGanttTasks(targetActive.customTasks || []);
+      setActiveRegionalConfig(normalizeProjectRegionalConfig(targetActive.regionalConfig));
+
+      if (typeof backup.isDaylightMode === 'boolean') {
+        setIsDaylightMode(backup.isDaylightMode);
+      }
+
+      setPendingBackupRestore(null);
+      setSaveStatusToast(`กู้คืนข้อมูลทั้งระบบแทนที่สำเร็จ (${normalizedImportedProjects.length} โครงการ, ${finalCustomItems.length} รายการคลัง) ✓`);
+      setTimeout(() => setSaveStatusToast(''), 3500);
+    } else {
+      // mode === 'merge'
+      // 1. Snapshot current active project
+      const currentProjSnapshot: ProjectSaveState = {
+        id: activeProjectId || generateId(),
+        version: '1.0',
+        savedAt: new Date().toISOString(),
+        projectName,
+        houseAreaSqm,
+        overheadPercent,
+        vatPercent,
+        items,
+        quotationMeta,
+        milestones,
+        projectStartDate,
+        projectEndDate,
+        actualExpenses,
+        customTasks: ganttTasks,
+        procurementCheckedItems,
+        status: activeProject?.status || 'draft',
+        regionalConfig: activeRegionalConfig
+      };
+
+      const existingProjects = projects.map(p => p.id === activeProjectId ? currentProjSnapshot : p);
+      const existingIds = new Set(existingProjects.map(p => p.id));
+
+      // Resolve conflicting IDs
+      const importedToMerge = normalizedImportedProjects.map(p => {
+        if (existingIds.has(p.id)) {
+          return {
+            ...p,
+            id: generateId(),
+            projectName: `${p.projectName} (นำเข้า)`
+          };
+        }
+        return p;
+      });
+
+      const mergedProjects = [...existingProjects, ...importedToMerge];
+      setProjects(mergedProjects);
+      saveProjectsList(mergedProjects);
+
+      // 2. Merge global price book library
+      let importedLibrary = Array.isArray(backup.globalPriceBookItems) ? backup.globalPriceBookItems : [];
+      const existingLibIds = new Set(globalSavedItems.map(i => i.savedId));
+      const newItemsToAdd = importedLibrary.filter(i => !existingLibIds.has(i.savedId));
+      const mergedCustomItems = [...globalSavedItems, ...newItemsToAdd];
+      setGlobalSavedItems(mergedCustomItems);
+      saveGlobalPriceBookLibrary(mergedCustomItems);
+
+      setPendingBackupRestore(null);
+      setSaveStatusToast(`ผสานโครงการและคลังราคาเรียบร้อย (เพิ่ม ${importedToMerge.length} โครงการ, คลังรวม ${mergedCustomItems.length} รายการ) ✓`);
+      setTimeout(() => setSaveStatusToast(''), 3500);
     }
   };
   const handleExportExcel = () => {
@@ -2158,6 +2373,11 @@ export default function App() {
               onImportProjectFile={handleLoadProjectFile}
               onUpdateProjectExpenses={handleUpdateProjectExpenses}
               onUpdateProjectStatus={handleUpdateProjectStatus}
+              onExportFullBackup={handleExportFullBackup}
+              onRestoreFullBackup={handleRestoreFullBackup}
+              pendingBackupRestore={pendingBackupRestore}
+              onSetPendingBackupRestore={setPendingBackupRestore}
+              globalLibraryCount={globalSavedItems.length}
             />
           )}
           {/* TAB 1: BOQ ESTIMATE TABLE */}

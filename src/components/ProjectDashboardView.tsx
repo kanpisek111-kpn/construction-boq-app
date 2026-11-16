@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { ProjectSaveState, ProjectStatus, ActualExpenseItem, RegionalZoneId } from '../types';
+import { ProjectSaveState, ProjectStatus, ActualExpenseItem, RegionalZoneId, WorkspaceBackupFile } from '../types';
 import { ProjectSnapshotSection } from './ProjectSnapshotSection';
 import { computeBOQSummary } from '../services/calculator';
 import { REGIONAL_PRESETS } from '../services/priceBookService';
@@ -23,6 +23,11 @@ interface ProjectDashboardViewProps {
   onImportProjectFile: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onUpdateProjectExpenses?: (projectId: string, expenses: ActualExpenseItem[]) => void;
   onUpdateProjectStatus?: (id: string, status: ProjectStatus) => void;
+  onExportFullBackup?: () => void;
+  onRestoreFullBackup?: (backup: WorkspaceBackupFile, mode: 'merge' | 'replace') => void;
+  pendingBackupRestore?: WorkspaceBackupFile | null;
+  onSetPendingBackupRestore?: (backup: WorkspaceBackupFile | null) => void;
+  globalLibraryCount?: number;
 }
 
 export const ProjectDashboardView: React.FC<ProjectDashboardViewProps> = ({
@@ -35,6 +40,11 @@ export const ProjectDashboardView: React.FC<ProjectDashboardViewProps> = ({
   onImportProjectFile,
   onUpdateProjectExpenses,
   onUpdateProjectStatus,
+  onExportFullBackup,
+  onRestoreFullBackup,
+  pendingBackupRestore,
+  onSetPendingBackupRestore,
+  globalLibraryCount = 0
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | ProjectStatus>('all');
@@ -151,7 +161,7 @@ export const ProjectDashboardView: React.FC<ProjectDashboardViewProps> = ({
         type="file"
         ref={fileInputRef}
         onChange={onImportProjectFile}
-        accept=".json,.boq.json,application/json"
+        accept=".json,.boq.json,.boqbackup.json,application/json"
         className="hidden"
       />
 
@@ -171,19 +181,31 @@ export const ProjectDashboardView: React.FC<ProjectDashboardViewProps> = ({
           </div>
         </div>
 
-        {/* Action Buttons: Import & Create */}
-        <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
+        {/* Action Buttons: Export, Import & Create */}
+        <div className="flex items-center gap-2 shrink-0 flex-wrap">
+          {onExportFullBackup && (
+            <button
+              onClick={onExportFullBackup}
+              className="px-3 py-2 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-indigo-500/50 text-indigo-300 hover:text-indigo-200 text-xs font-bold flex items-center gap-1.5 transition active:scale-95 shadow-sm"
+              title="ดาวน์โหลดไฟล์สำรองทั้งระบบ (.boqbackup.json) รวมทุกโครงการและคลังราคาส่วนตัวเพื่อย้ายไปเครื่องอื่น"
+            >
+              <span className="material-symbols-outlined text-base text-indigo-400">cloud_download</span>
+              <span>สำรองทั้งระบบ</span>
+            </button>
+          )}
+
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="px-3.5 py-2 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-teal-500/50 text-teal-300 hover:text-teal-200 text-xs font-bold flex items-center gap-2 transition active:scale-95 shadow-sm"
+            className="px-3 py-2 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-teal-500/50 text-teal-300 hover:text-teal-200 text-xs font-bold flex items-center gap-1.5 transition active:scale-95 shadow-sm"
+            title="นำเข้าไฟล์เดี่ยว (.boq.json) หรือกู้คืนทั้งระบบ (.boqbackup.json)"
           >
-            <span className="material-symbols-outlined text-base text-teal-400">upload_file</span>
-            <span>นำเข้าไฟล์ (.boq.json)</span>
+            <span className="material-symbols-outlined text-base text-teal-400">cloud_upload</span>
+            <span>กู้คืนข้ามเครื่อง</span>
           </button>
 
           <button
             onClick={() => setIsCreateModalOpen(true)}
-            className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-400 hover:to-orange-500 text-slate-950 font-black text-xs flex items-center gap-2 transition shadow-lg shadow-amber-500/30 active:scale-95"
+            className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-400 hover:to-orange-500 text-slate-950 font-black text-xs flex items-center gap-1.5 transition shadow-lg shadow-amber-500/30 active:scale-95"
           >
             <span className="material-symbols-outlined text-base">add_circle</span>
             <span>+ สร้างโครงการใหม่</span>
@@ -775,6 +797,117 @@ export const ProjectDashboardView: React.FC<ProjectDashboardViewProps> = ({
                 className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold"
               >
                 ยืนยันลบโครงการ
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: กู้คืนข้อมูลทั้งระบบข้ามเครื่อง (Full Workspace Restore) */}
+      {pendingBackupRestore && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-slate-900 border border-slate-700 w-full max-w-2xl rounded-2xl shadow-2xl p-6 flex flex-col gap-5 text-slate-100 max-h-[90vh] overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/30 shrink-0">
+                  <span className="material-symbols-outlined text-white text-2xl">cloud_sync</span>
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+                    <span>กู้คืนข้อมูลทั้งระบบข้ามเครื่อง (Full Workspace Restore)</span>
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    พบไฟล์สำรองระบบ (.boqbackup.json) พร้อมย้ายทุกโครงการและคลังราคาส่วนตัว
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => onSetPendingBackupRestore && onSetPendingBackupRestore(null)}
+                className="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition"
+                title="ยกเลิกการกู้คืน"
+              >
+                <span className="material-symbols-outlined text-sm">close</span>
+              </button>
+            </div>
+
+            {/* Backup Summary Stats */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 bg-slate-950/80 p-3.5 rounded-xl border border-slate-800 text-xs shrink-0">
+              <div className="flex flex-col gap-0.5">
+                <span className="text-slate-400">วันที่สำรองข้อมูล</span>
+                <span className="font-semibold text-white font-mono">
+                  {pendingBackupRestore.exportedAt ? new Date(pendingBackupRestore.exportedAt).toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
+                </span>
+              </div>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-slate-400">โครงการในไฟล์สำรอง</span>
+                <span className="font-bold text-amber-300 font-mono text-sm">
+                  {pendingBackupRestore.projects?.length || 0} โครงการ
+                </span>
+              </div>
+              <div className="flex flex-col gap-0.5 col-span-2 sm:col-span-1">
+                <span className="text-slate-400">รายการในคลังราคากลาง</span>
+                <span className="font-bold text-cyan-300 font-mono text-sm">
+                  {pendingBackupRestore.globalPriceBookItems?.length || 0} รายการ
+                </span>
+              </div>
+            </div>
+
+            {/* Projects Preview List */}
+            <div className="flex flex-col gap-2 min-h-0 flex-1 overflow-hidden">
+              <span className="text-xs font-semibold text-slate-300">
+                รายชื่อโครงการที่จะนำเข้า ({pendingBackupRestore.projects?.length || 0}):
+              </span>
+              <div className="flex-1 overflow-y-auto pr-1 space-y-2 max-h-56">
+                {(pendingBackupRestore.projects || []).map((proj, idx) => (
+                  <div key={proj.id || idx} className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between gap-3 text-xs">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-7 h-7 rounded-lg bg-slate-800 flex items-center justify-center text-slate-300 shrink-0">
+                        <span className="material-symbols-outlined text-base">home_work</span>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-bold text-white truncate">{proj.projectName}</p>
+                        <p className="text-[11px] text-slate-400 font-mono">
+                          {proj.houseAreaSqm} ตร.ม. • {proj.items?.length || 0} รายการ BOQ
+                        </p>
+                      </div>
+                    </div>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 shrink-0">
+                      {proj.regionalConfig?.regionName ? proj.regionalConfig.regionName.split(' ')[0] : 'กรุงเทพฯ'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Mode selection actions */}
+            <div className="pt-3 border-t border-slate-800 flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => onSetPendingBackupRestore && onSetPendingBackupRestore(null)}
+                className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold order-3 sm:order-1 transition"
+              >
+                ยกเลิก
+              </button>
+
+              <button
+                type="button"
+                onClick={() => onRestoreFullBackup && onRestoreFullBackup(pendingBackupRestore, 'merge')}
+                className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/25 order-1 sm:order-2 transition active:scale-95"
+                title="เก็บโครงการเดิมไว้ทั้งหมด และเพิ่มโครงการใหม่จากไฟล์สำรองเข้าไป"
+              >
+                <span className="material-symbols-outlined text-sm">library_add</span>
+                <span>ผสานเพิ่มเข้ากับข้อมูลเดิม (แนะนำ)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => onRestoreFullBackup && onRestoreFullBackup(pendingBackupRestore, 'replace')}
+                className="px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-md shadow-rose-600/25 order-2 sm:order-3 transition active:scale-95"
+                title="ลบโครงการเดิมในเครื่องนี้ทั้งหมด และใช้ข้อมูลจากไฟล์สำรองแทนที่ 100%"
+              >
+                <span className="material-symbols-outlined text-sm">published_with_changes</span>
+                <span>แทนที่ข้อมูลทั้งหมดในเครื่องนี้ (ย้ายเครื่องใหม่)</span>
               </button>
             </div>
           </div>
