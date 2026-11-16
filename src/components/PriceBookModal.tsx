@@ -31,6 +31,7 @@ interface PriceBookModalProps {
   licenseTier?: LicenseTier;
   onRequestUpgrade?: (feature: string) => void;
   currentHouseAreaSqm?: number;
+  projectName?: string;
 }
 
 export const PriceBookModal: React.FC<PriceBookModalProps> = ({
@@ -43,7 +44,8 @@ export const PriceBookModal: React.FC<PriceBookModalProps> = ({
   onInsertCustomItem,
   licenseTier = 'starter',
   onRequestUpgrade,
-  currentHouseAreaSqm = 120
+  currentHouseAreaSqm = 120,
+  projectName = ''
 }) => {
   const [activeTab, setActiveTab] = useState<'regional' | 'master_rates' | 'my_items'>('regional');
   const [draftConfig, setDraftConfig] = useState<PriceBookConfig>(currentConfig);
@@ -103,7 +105,7 @@ export const PriceBookModal: React.FC<PriceBookModalProps> = ({
         paintLaborPerSqm: String(validConfig.masterRates?.paintLaborPerSqm ?? DEFAULT_MASTER_RATES.paintLaborPerSqm ?? 40),
       });
     }
-  }, [isOpen]);
+  }, [isOpen, currentConfig]);
 
   const showToast = (message: string, type: 'success' | 'info' | 'warning' = 'success') => {
     setToast({ message, type });
@@ -389,7 +391,7 @@ export const PriceBookModal: React.FC<PriceBookModalProps> = ({
                 </span>
               </h2>
               <p className="text-xs text-slate-400">
-                ปรับสัดส่วนค่าวัสดุ-ค่าแรงตามจังหวัดหน้างาน พร้อมบันทึกราคากลางและคลังรายการเฉพาะตัวของผู้รับเหมา
+                ตั้งค่าโซนภูมิภาคและราคากลางแยกตามโครงการ <span className="text-amber-300 font-semibold">{projectName ? `"${projectName}"` : 'ปัจจุบัน'}</span> พร้อมคลังรายการกลางใช้ร่วมกันทุกโครงการ
               </p>
             </div>
           </div>
@@ -462,6 +464,20 @@ export const PriceBookModal: React.FC<PriceBookModalProps> = ({
           {/* TAB 1: REGIONAL MULTIPLIERS */}
           {activeTab === 'regional' && (
             <div className="space-y-6">
+
+              {/* Project Scope Banner */}
+              <div className="flex items-center justify-between p-3.5 rounded-xl bg-amber-950/40 border border-amber-500/40 text-xs">
+                <div className="flex items-center gap-2.5">
+                  <span className="material-symbols-outlined text-amber-400 text-lg">home_work</span>
+                  <div>
+                    <span className="text-amber-300/80 font-medium">ตั้งค่าโซนสำหรับโครงการ: </span>
+                    <span className="font-bold text-white text-sm">{projectName || 'โครงการปัจจุบัน'}</span>
+                  </div>
+                </div>
+                <span className="text-[11px] text-amber-300 font-mono bg-amber-500/20 px-2.5 py-1 rounded-full border border-amber-500/40 shrink-0">
+                  บันทึกแยกรายโครงการ
+                </span>
+              </div>
               
               {/* Info banner */}
               <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
@@ -613,6 +629,21 @@ export const PriceBookModal: React.FC<PriceBookModalProps> = ({
           {/* TAB 2: MASTER RATES */}
           {activeTab === 'master_rates' && (
             <div className="space-y-5">
+
+              {/* Project Scope Banner */}
+              <div className="flex items-center justify-between p-3.5 rounded-xl bg-amber-950/40 border border-amber-500/40 text-xs">
+                <div className="flex items-center gap-2.5">
+                  <span className="material-symbols-outlined text-amber-400 text-lg">home_work</span>
+                  <div>
+                    <span className="text-amber-300/80 font-medium">ตั้งค่า Master Rates สำหรับโครงการ: </span>
+                    <span className="font-bold text-white text-sm">{projectName || 'โครงการปัจจุบัน'}</span>
+                  </div>
+                </div>
+                <span className="text-[11px] text-amber-300 font-mono bg-amber-500/20 px-2.5 py-1 rounded-full border border-amber-500/40 shrink-0">
+                  บันทึกแยกรายโครงการ
+                </span>
+              </div>
+
               <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
@@ -834,6 +865,20 @@ export const PriceBookModal: React.FC<PriceBookModalProps> = ({
           {activeTab === 'my_items' && (
             <div className="space-y-5">
               
+              {/* Global Shared Library Scope Banner */}
+              <div className="flex items-center justify-between p-3.5 rounded-xl bg-indigo-950/40 border border-indigo-500/40 text-xs">
+                <div className="flex items-center gap-2.5">
+                  <span className="material-symbols-outlined text-indigo-400 text-lg">public</span>
+                  <div>
+                    <span className="text-indigo-200 font-bold">คลังรายการกลาง (Global Shared Library): </span>
+                    <span className="text-slate-300">ใช้ร่วมกันทุกโครงการ ({draftConfig.savedCustomItems?.length || 0} รายการ)</span>
+                  </div>
+                </div>
+                <span className="text-[11px] text-indigo-300 font-mono bg-indigo-500/20 px-2.5 py-1 rounded-full border border-indigo-500/40 shrink-0">
+                  แชร์ทุกโปรเจกต์
+                </span>
+              </div>
+
               {/* Header and Add button */}
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-slate-950/70 p-4 rounded-xl border border-slate-800">
                 <div>

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { ProjectSaveState } from '../types';
+import { ProjectSaveState, RegionalZoneId } from '../types';
+import { REGIONAL_PRESETS } from '../services/priceBookService';
 import { DEFAULT_STANDARD_BOQ, DEFAULT_QUOTATION_META, DEFAULT_PAYMENT_MILESTONES } from '../constants';
 
 interface ProjectManagerModalProps {
@@ -8,7 +9,7 @@ interface ProjectManagerModalProps {
   projects: ProjectSaveState[];
   activeProjectId: string;
   onSwitchProject: (id: string) => void;
-  onCreateProject: (name: string, area: number) => void;
+  onCreateProject: (name: string, area: number, regionId?: RegionalZoneId) => void;
   onDuplicateProject: (id: string) => void;
   onRenameProject: (id: string, newName: string) => void;
   onDeleteProject: (id: string) => void;
@@ -27,6 +28,7 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
 }) => {
   const [newProjectName, setNewProjectName] = useState('บ้านพักอาศัย คสล. 1-2 ชั้น');
   const [newProjectArea, setNewProjectArea] = useState(120);
+  const [newProjectRegionId, setNewProjectRegionId] = useState<RegionalZoneId>('central_bkk');
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -35,9 +37,10 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
 
   const handleCreate = () => {
     if (!newProjectName.trim()) return;
-    onCreateProject(newProjectName.trim(), newProjectArea);
+    onCreateProject(newProjectName.trim(), newProjectArea, newProjectRegionId);
     setNewProjectName('บ้านพักอาศัย คสล. 1-2 ชั้น');
     setNewProjectArea(120);
+    setNewProjectRegionId('central_bkk');
   };
 
   const handleStartRename = (proj: ProjectSaveState) => {
@@ -143,6 +146,13 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
                         <span className="text-[10px] text-slate-500 font-mono">
                           {proj.items.length} รายการ
                         </span>
+                        <span 
+                          className="text-[10px] text-indigo-300 bg-indigo-500/10 border border-indigo-500/20 px-1.5 py-0.5 rounded flex items-center gap-1 font-semibold"
+                          title={`ฐานราคา: ${proj.regionalConfig?.regionName || 'กรุงเทพฯ และปริมณฑล'} (วัสดุ ${((proj.regionalConfig?.materialMultiplier ?? 1) * 100).toFixed(0)}%, ค่าแรง ${((proj.regionalConfig?.laborMultiplier ?? 1) * 100).toFixed(0)}%)`}
+                        >
+                          <span className="material-symbols-outlined text-[11px]">public</span>
+                          <span>{proj.regionalConfig?.regionName ? proj.regionalConfig.regionName.split(' ')[0] : 'กรุงเทพฯ'}</span>
+                        </span>
                         {isActive && (
                           <span className="text-[10px] bg-indigo-500 text-white px-1.5 py-0.5 rounded font-bold">
                             กำลังใช้งาน
@@ -227,35 +237,56 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
             <span className="material-symbols-outlined text-sm">add_circle</span>
             สร้างโครงการใหม่
           </p>
-          <div className="flex flex-col sm:flex-row gap-2">
-            <input
-              type="text"
-              value={newProjectName}
-              onChange={(e) => setNewProjectName(e.target.value)}
-              placeholder="ชื่อโครงการ..."
-              className="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-400 transition"
-            />
-            <div className="flex items-center gap-2 bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 w-44 shrink-0">
-              <span className="text-xs text-slate-400 shrink-0">พื้นที่:</span>
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-col sm:flex-row gap-2">
               <input
-                type="number"
-                value={newProjectArea}
-                min={30}
-                max={2000}
-                step={10}
-                onChange={(e) => setNewProjectArea(parseInt(e.target.value) || 120)}
-                className="w-full bg-transparent text-sm font-mono text-amber-400 font-bold focus:outline-none text-right"
+                type="text"
+                value={newProjectName}
+                onChange={(e) => setNewProjectName(e.target.value)}
+                placeholder="ชื่อโครงการ..."
+                className="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-400 transition"
               />
-              <span className="text-xs text-slate-400 shrink-0">ตร.ม.</span>
+              <div className="flex items-center gap-2 bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 w-44 shrink-0">
+                <span className="text-xs text-slate-400 shrink-0">พื้นที่:</span>
+                <input
+                  type="number"
+                  value={newProjectArea}
+                  min={30}
+                  max={2000}
+                  step={10}
+                  onChange={(e) => setNewProjectArea(parseInt(e.target.value) || 120)}
+                  className="w-full bg-transparent text-sm font-mono text-amber-400 font-bold focus:outline-none text-right"
+                />
+                <span className="text-xs text-slate-400 shrink-0">ตร.ม.</span>
+              </div>
             </div>
-            <button
-              onClick={handleCreate}
-              disabled={!newProjectName.trim()}
-              className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-bold transition shadow active:scale-95 flex items-center gap-1.5 shrink-0"
-            >
-              <span className="material-symbols-outlined text-base">add</span>
-              <span>สร้าง</span>
-            </button>
+
+            <div className="flex items-center gap-2">
+              <div className="flex-1 flex items-center gap-2 bg-slate-800 border border-slate-700 rounded-xl px-3 py-1.5">
+                <span className="material-symbols-outlined text-sm text-indigo-400 shrink-0">public</span>
+                <span className="text-xs text-slate-400 shrink-0">โซนราคา:</span>
+                <select
+                  value={newProjectRegionId}
+                  onChange={(e) => setNewProjectRegionId(e.target.value as RegionalZoneId)}
+                  className="w-full bg-transparent text-xs text-white focus:outline-none cursor-pointer"
+                >
+                  {REGIONAL_PRESETS.map((preset) => (
+                    <option key={preset.id} value={preset.id} className="bg-slate-900 text-white">
+                      {preset.name} (วัสดุ {(preset.materialMultiplier * 100).toFixed(0)}%, ค่าแรง {(preset.laborMultiplier * 100).toFixed(0)}%)
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <button
+                onClick={handleCreate}
+                disabled={!newProjectName.trim()}
+                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-bold transition shadow active:scale-95 flex items-center gap-1.5 shrink-0"
+              >
+                <span className="material-symbols-outlined text-base">add</span>
+                <span>สร้าง</span>
+              </button>
+            </div>
           </div>
           <p className="text-[10px] text-slate-600 mt-2">
             โครงการใหม่จะเริ่มต้นด้วยรายการ BOQ มาตรฐานตามขนาดพื้นที่บ้านที่กำหนด

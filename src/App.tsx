@@ -33,9 +33,13 @@ import {
   loadPriceBookConfig, 
   savePriceBookConfig, 
   applyPriceBookToItems, 
-  applyPriceBookToSingleItem 
+  applyPriceBookToSingleItem,
+  getDefaultProjectRegionalConfig,
+  normalizeProjectRegionalConfig,
+  saveGlobalPriceBookLibrary,
+  PRICE_BOOK_LIBRARY_VERSION
 } from './services/priceBookService';
-import { PriceBookConfig } from './types';
+import { PriceBookConfig, ProjectRegionalConfig, RegionalZoneId, SavedPriceBookItem } from './types';
 import { Flow } from 'flow-sdk';
 import { 
   LicenseTier, 
@@ -64,9 +68,18 @@ function makeDefaultProject(
   clientName = 'คุณสมศักดิ์ สุขเจริญ (เจ้าของโครงการ)',
   clientPhone = '081-234-5678',
   clientAddress = 'แปลงที่ 14 หมู่บ้านสุขนิเวศน์ ต.บางกรวย อ.บางกรวย จ.นนทบุรี',
-  status: ProjectStatus = 'draft'
+  status: ProjectStatus = 'draft',
+  regionalConfig?: ProjectRegionalConfig
 ): ProjectSaveState {
-  const scaledItems = scaleBOQByArea(DEFAULT_STANDARD_BOQ, area, DEFAULT_BASE_AREA_SQM);
+  const normalizedRegional = normalizeProjectRegionalConfig(regionalConfig);
+  let scaledItems = scaleBOQByArea(DEFAULT_STANDARD_BOQ, area, DEFAULT_BASE_AREA_SQM);
+  if (normalizedRegional.autoApplyToNewItems) {
+    scaledItems = applyPriceBookToItems(scaledItems, {
+      ...normalizedRegional,
+      libraryVersion: PRICE_BOOK_LIBRARY_VERSION,
+      savedCustomItems: []
+    });
+  }
   return {
     id: generateId(),
     version: '1.0',
@@ -91,6 +104,7 @@ function makeDefaultProject(
     })(),
     status,
     actualExpenses: [],
+    regionalConfig: normalizedRegional
   };
 }
 function loadProjectsList(): ProjectSaveState[] {
@@ -103,7 +117,8 @@ function loadProjectsList(): ProjectSaveState[] {
           ...p,
           actualExpenses: Array.isArray(p.actualExpenses) 
             ? p.actualExpenses.filter((e: any) => !e.id?.startsWith('exp-init-'))
-            : []
+            : [],
+          regionalConfig: normalizeProjectRegionalConfig(p.regionalConfig)
         }));
       }
     }
@@ -111,7 +126,11 @@ function loadProjectsList(): ProjectSaveState[] {
     const legacy = sessionStorage.getItem(DRAFT_STORAGE_KEY);
     if (legacy) {
       const p = JSON.parse(legacy) as ProjectSaveState;
-      const migrated = { ...p, id: generateId() };
+      const migrated = { 
+        ...p, 
+        id: generateId(),
+        regionalConfig: normalizeProjectRegionalConfig(p.regionalConfig)
+      };
       return [migrated as ProjectSaveState];
     }
   } catch {}
@@ -209,11 +228,46 @@ export default function App() {
   const [isQuickWizardOpen, setIsQuickWizardOpen] = useState<boolean>(false);
   const [isCostAnalyticsOpen, setIsCostAnalyticsOpen] = useState<boolean>(false);
   const [isPriceBookModalOpen, setIsPriceBookModalOpen] = useState<boolean>(false);
-  const [priceBookConfig, setPriceBookConfig] = useState<PriceBookConfig>(() => loadPriceBookConfig());
+  const [activeRegionalConfig, setActiveRegionalConfig] = useState<ProjectRegionalConfig>(() => {
+    return normalizeProjectRegionalConfig(initialData.activeProject.regionalConfig);
+  });
+  const [globalSavedItems, setGlobalSavedItems] = useState<SavedPriceBookItem[]>(() => {
+    return loadPriceBookConfig().savedCustomItems;
+  });
+
+  // PriceBookConfig รวมระหว่างการตั้งค่าโซนระดับโครงการ (ProjectRegionalConfig) และคลังรายการกลาง (Global Shared Library)
+  const priceBookConfig = useMemo<PriceBookConfig>(() => ({
+    ...activeRegionalConfig,
+    libraryVersion: PRICE_BOOK_LIBRARY_VERSION,
+    savedCustomItems: globalSavedItems,
+    lastUpdated: new Date().toISOString()
+  }), [activeRegionalConfig, globalSavedItems]);
 
   const handleSavePriceBookConfig = (newConfig: PriceBookConfig) => {
-    setPriceBookConfig(newConfig);
-    savePriceBookConfig(newConfig);
+    // 1. บันทึกคลังรายการกลางลง storage กลาง
+    if (newConfig.savedCustomItems) {
+      setGlobalSavedItems(newConfig.savedCustomItems);
+      saveGlobalPriceBookLibrary(newConfig.savedCustomItems);
+    }
+
+    // 2. ดึงค่า regional config แยกรายโครงการและอัปเดต state
+    const newRegional: ProjectRegionalConfig = {
+      regionId: newConfig.regionId,
+      regionName: newConfig.regionName,
+      materialMultiplier: newConfig.materialMultiplier,
+      laborMultiplier: newConfig.laborMultiplier,
+      autoApplyToNewItems: newConfig.autoApplyToNewItems,
+      enableMasterRateOverride: newConfig.enableMasterRateOverride,
+      masterRates: newConfig.masterRates
+    };
+    setActiveRegionalConfig(newRegional);
+
+    // 3. ซิงค์ลง projects list ของโครงการปัจจุบันทันที
+    setProjects(prev => {
+      const updated = prev.map(p => p.id === activeProjectId ? { ...p, regionalConfig: newRegional } : p);
+      saveProjectsList(updated);
+      return updated;
+    });
   };
 
   const handleInsertPriceBookItem = (item: BOQItem) => {
@@ -580,6 +634,9 @@ export default function App() {
             }
             if (parsed.projectStartDate) setProjectStartDate(parsed.projectStartDate);
             if (parsed.projectEndDate) setProjectEndDate(parsed.projectEndDate);
+            if (parsed.regionalConfig) {
+              setActiveRegionalConfig(normalizeProjectRegionalConfig(parsed.regionalConfig));
+            }
           }
         }
       }
@@ -610,7 +667,8 @@ export default function App() {
             customTasks: ganttTasks,
             actualExpenses,
             procurementCheckedItems,
-            status: currentProj?.status || activeProject?.status || 'draft'
+            status: currentProj?.status || activeProject?.status || 'draft',
+            regionalConfig: activeRegionalConfig
           };
           const next = prev.map((p) => (p.id === activeProjectId ? state : p));
           saveProjectsList(next);
@@ -628,7 +686,7 @@ export default function App() {
       }
     }, 1000);
     return () => clearTimeout(timer);
-  }, [projectName, houseAreaSqm, overheadPercent, vatPercent, items, quotationMeta, milestones, projectStartDate, projectEndDate, activeProjectId, actualExpenses, procurementCheckedItems, ganttTasks]);
+  }, [projectName, houseAreaSqm, overheadPercent, vatPercent, items, quotationMeta, milestones, projectStartDate, projectEndDate, activeProjectId, actualExpenses, procurementCheckedItems, ganttTasks, activeRegionalConfig]);
   // ======== MULTI-PROJECT HANDLERS ========
   const handleSwitchProject = (id: string) => {
     // 1. Save current active project state first
@@ -650,7 +708,8 @@ export default function App() {
         customTasks: ganttTasks,
         actualExpenses,
         procurementCheckedItems,
-        status: currentProj?.status || activeProject?.status || 'draft'
+        status: currentProj?.status || activeProject?.status || 'draft',
+        regionalConfig: activeRegionalConfig
       };
       const next = prev.map((p) => (p.id === activeProjectId ? currentState : p));
       saveProjectsList(next);
@@ -699,6 +758,11 @@ export default function App() {
     } else {
       setGanttTasks([]);
     }
+
+    // 3. Load target project's regional pricing config
+    const targetRegional = normalizeProjectRegionalConfig(target.regionalConfig);
+    setActiveRegionalConfig(targetRegional);
+
     setSelectedCategory('all');
     setBoqSearchQuery('');
     setSaveStatusToast(`เปิดโครงการ "${target.projectName}" เรียบร้อย ✓`);
@@ -711,19 +775,22 @@ export default function App() {
     clientName?: string,
     clientPhone?: string,
     clientAddress?: string,
-    status?: ProjectStatus
+    status?: ProjectStatus,
+    regionId?: RegionalZoneId
   ) => {
     if (licenseSession.tier === 'demo' && projects.length >= 1) {
       setUpgradeModalFeature('สร้างหลายโครงการไม่จำกัด (สิทธิ์ Pro)');
       return;
     }
+    const initRegional = getDefaultProjectRegionalConfig(regionId || 'central_bkk');
     const newProj = makeDefaultProject(
       name,
       area,
       clientName || 'คุณสมศักดิ์ สุขเจริญ (เจ้าของโครงการ)',
       clientPhone || '081-234-5678',
       clientAddress || 'แปลงที่ 14 หมู่บ้านสุขนิเวศน์ ต.บางกรวย อ.บางกรวย จ.นนทบุรี',
-      status || 'draft'
+      status || 'draft',
+      initRegional
     );
     setProjects((prev) => {
       const next = [...prev, newProj];
@@ -750,6 +817,7 @@ export default function App() {
     setActualExpenses([]);
     setProcurementCheckedItems({});
     setGanttTasks([]);
+    setActiveRegionalConfig(initRegional);
 
     setActiveMainTab('boq_estimate');
     setSaveStatusToast(`สร้างโครงการ "${newProj.projectName}" เรียบร้อย ✓`);
@@ -799,6 +867,7 @@ export default function App() {
       id: generateId(),
       projectName: `${source.projectName} (สำเนา)`,
       savedAt: new Date().toISOString(),
+      regionalConfig: source.regionalConfig ? { ...source.regionalConfig } : getDefaultProjectRegionalConfig()
     };
     setProjects((prev) => {
       const next = [...prev, copy];
@@ -1120,7 +1189,8 @@ export default function App() {
         actualExpenses,
         customTasks: ganttTasks,
         procurementCheckedItems,
-        status: activeProject?.status || 'draft'
+        status: activeProject?.status || 'draft',
+        regionalConfig: activeRegionalConfig
       };
       const jsonStr = JSON.stringify(state, null, 2);
       const bytes = new TextEncoder().encode(jsonStr);
@@ -1152,6 +1222,7 @@ export default function App() {
           const cleanExpenses = Array.isArray(parsed.actualExpenses) 
             ? parsed.actualExpenses.filter((e: any) => !e.id?.startsWith('exp-init-')) 
             : [];
+          const cleanRegional = normalizeProjectRegionalConfig(parsed.regionalConfig);
           const cleanProject: ProjectSaveState = {
             ...parsed,
             id: importedId,
@@ -1167,7 +1238,8 @@ export default function App() {
             actualExpenses: cleanExpenses,
             procurementCheckedItems: parsed.procurementCheckedItems || {},
             customTasks: Array.isArray(parsed.customTasks) ? parsed.customTasks : [],
-            status: parsed.status || 'draft'
+            status: parsed.status || 'draft',
+            regionalConfig: cleanRegional
           };
 
           setActiveProjectId(cleanProject.id);
@@ -1188,6 +1260,7 @@ export default function App() {
           setActualExpenses(cleanExpenses);
           setProcurementCheckedItems(cleanProject.procurementCheckedItems || {});
           setGanttTasks(cleanProject.customTasks || []);
+          setActiveRegionalConfig(cleanRegional);
 
           setProjects(prev => {
             const exists = prev.some(p => p.id === cleanProject.id);
@@ -2529,6 +2602,7 @@ export default function App() {
         licenseTier={licenseSession.tier}
         onRequestUpgrade={(feature) => setUpgradeModalFeature(feature)}
         currentHouseAreaSqm={houseAreaSqm}
+        projectName={projectName || activeProject.projectName}
       />
 
       {/* Security & Access Lock Modal */}

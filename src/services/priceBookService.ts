@@ -1,4 +1,4 @@
-import { BOQItem, PriceBookConfig, RegionalPreset, RegionalZoneId, MasterRatesConfig, SavedPriceBookItem } from '../types';
+import { BOQItem, PriceBookConfig, ProjectRegionalConfig, RegionalPreset, RegionalZoneId, MasterRatesConfig, SavedPriceBookItem } from '../types';
 
 export const PRICE_BOOK_STORAGE_KEY = 'thai_boq_price_book_v1';
 
@@ -606,18 +606,65 @@ export const INITIAL_SAVED_CUSTOM_ITEMS: SavedPriceBookItem[] = [
 
 export const PRICE_BOOK_LIBRARY_VERSION = 2;
 
+/**
+ * คืนค่าการตั้งค่าโซนภูมิภาคเริ่มต้นสำหรับโครงการใหม่ (ค่าเริ่มต้น: กรุงเทพฯ และปริมณฑล)
+ */
+export function getDefaultProjectRegionalConfig(regionId: RegionalZoneId = 'central_bkk'): ProjectRegionalConfig {
+  const preset = REGIONAL_PRESETS.find(p => p.id === regionId) || REGIONAL_PRESETS[0];
+  return {
+    regionId: preset.id,
+    regionName: preset.name,
+    materialMultiplier: preset.materialMultiplier,
+    laborMultiplier: preset.laborMultiplier,
+    autoApplyToNewItems: true,
+    enableMasterRateOverride: false,
+    masterRates: { ...DEFAULT_MASTER_RATES }
+  };
+}
+
+/**
+ * ปรับข้อมูล regionalConfig ให้สมบูรณ์และถูกต้องสำหรับโครงการเดิมที่ยังไม่มีฟิลด์นี้
+ */
+export function normalizeProjectRegionalConfig(input?: Partial<ProjectRegionalConfig> | null): ProjectRegionalConfig {
+  if (!input) {
+    return getDefaultProjectRegionalConfig();
+  }
+  const preset = REGIONAL_PRESETS.find(p => p.id === input.regionId) || REGIONAL_PRESETS[0];
+  return {
+    regionId: input.regionId || preset.id,
+    regionName: input.regionName || preset.name,
+    materialMultiplier: typeof input.materialMultiplier === 'number' && input.materialMultiplier > 0 ? input.materialMultiplier : preset.materialMultiplier,
+    laborMultiplier: typeof input.laborMultiplier === 'number' && input.laborMultiplier > 0 ? input.laborMultiplier : preset.laborMultiplier,
+    autoApplyToNewItems: input.autoApplyToNewItems ?? true,
+    enableMasterRateOverride: input.enableMasterRateOverride ?? false,
+    masterRates: { ...DEFAULT_MASTER_RATES, ...(input.masterRates || {}) }
+  };
+}
+
 export const DEFAULT_PRICE_BOOK_CONFIG: PriceBookConfig = {
-  regionId: 'central_bkk',
-  regionName: 'กรุงเทพฯ และปริมณฑล',
-  materialMultiplier: 1.00,
-  laborMultiplier: 1.00,
-  autoApplyToNewItems: true,
-  enableMasterRateOverride: false,
+  ...getDefaultProjectRegionalConfig('central_bkk'),
   libraryVersion: PRICE_BOOK_LIBRARY_VERSION,
-  masterRates: { ...DEFAULT_MASTER_RATES },
   savedCustomItems: [...INITIAL_SAVED_CUSTOM_ITEMS],
   lastUpdated: new Date().toISOString()
 };
+
+/**
+ * บันทึกเฉพาะคลังรายการส่วนกลาง (Global Shared Library) ร่วมกันทุกโครงการ
+ */
+export function saveGlobalPriceBookLibrary(savedCustomItems: SavedPriceBookItem[]): void {
+  try {
+    const current = loadPriceBookConfig();
+    const updated: PriceBookConfig = {
+      ...current,
+      savedCustomItems,
+      libraryVersion: PRICE_BOOK_LIBRARY_VERSION,
+      lastUpdated: new Date().toISOString()
+    };
+    savePriceBookConfig(updated);
+  } catch (err) {
+    console.error('Failed to save global PriceBook library', err);
+  }
+}
 
 /**
  * โหลดการตั้งค่าคลังราคาและภูมิภาคจาก localStorage

@@ -1,7 +1,8 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { ProjectSaveState, ProjectStatus, ActualExpenseItem } from '../types';
+import { ProjectSaveState, ProjectStatus, ActualExpenseItem, RegionalZoneId } from '../types';
 import { ProjectSnapshotSection } from './ProjectSnapshotSection';
 import { computeBOQSummary } from '../services/calculator';
+import { REGIONAL_PRESETS } from '../services/priceBookService';
 import { Flow } from 'flow-sdk';
 
 interface ProjectDashboardViewProps {
@@ -14,7 +15,8 @@ interface ProjectDashboardViewProps {
     clientName?: string, 
     clientPhone?: string, 
     clientAddress?: string,
-    status?: ProjectStatus
+    status?: ProjectStatus,
+    regionId?: RegionalZoneId
   ) => void;
   onDuplicateProject: (id: string) => void;
   onDeleteProject: (id: string) => void;
@@ -54,6 +56,7 @@ export const ProjectDashboardView: React.FC<ProjectDashboardViewProps> = ({
   const [newCustomerPhone, setNewCustomerPhone] = useState('081-234-5678');
   const [newCustomerAddress, setNewCustomerAddress] = useState('แปลงที่ 14 หมู่บ้านสุขนิเวศน์ ต.บางกรวย อ.บางกรวย จ.นนทบุรี');
   const [newStatus, setNewStatus] = useState<ProjectStatus>('draft');
+  const [newRegionId, setNewRegionId] = useState<RegionalZoneId>('central_bkk');
   const [deleteConfirmProject, setDeleteConfirmProject] = useState<{ id: string; name: string } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -134,9 +137,11 @@ export const ProjectDashboardView: React.FC<ProjectDashboardViewProps> = ({
       newCustomerName.trim(),
       newCustomerPhone.trim(),
       newCustomerAddress.trim(),
-      newStatus
+      newStatus,
+      newRegionId
     );
     setIsCreateModalOpen(false);
+    setNewRegionId('central_bkk');
   };
 
   return (
@@ -411,6 +416,15 @@ export const ProjectDashboardView: React.FC<ProjectDashboardViewProps> = ({
                           <span>กำลังเปิดทำงาน ★</span>
                         </span>
                       )}
+
+                      {/* Regional Zone Badge */}
+                      <span 
+                        className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 flex items-center gap-1 shrink-0"
+                        title={`ฐานราคาโซน: ${proj.regionalConfig?.regionName || 'กรุงเทพฯ และปริมณฑล'} (วัสดุ ${((proj.regionalConfig?.materialMultiplier ?? 1) * 100).toFixed(0)}%, ค่าแรง ${((proj.regionalConfig?.laborMultiplier ?? 1) * 100).toFixed(0)}%)`}
+                      >
+                        <span className="material-symbols-outlined text-[12px]">public</span>
+                        <span>{proj.regionalConfig?.regionName ? proj.regionalConfig.regionName.split(' ')[0] : 'กรุงเทพฯ'}</span>
+                      </span>
                     </div>
 
                     {/* Area Badge */}
@@ -640,6 +654,33 @@ export const ProjectDashboardView: React.FC<ProjectDashboardViewProps> = ({
                     <option value="completed">แล้วเสร็จ</option>
                   </select>
                 </div>
+              </div>
+
+              {/* โซนภูมิภาคสำหรับคิดราคา */}
+              <div className="p-3 bg-slate-950/70 rounded-xl border border-slate-800 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="font-semibold text-slate-300 flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-sm text-indigo-400">public</span>
+                    <span>โซนภูมิภาคหน้างาน (ดัชนีราคาวัสดุ & ค่าแรง)</span>
+                  </label>
+                  <span className="text-[10px] text-indigo-300 font-mono">
+                    วัสดุ {((REGIONAL_PRESETS.find(p => p.id === newRegionId)?.materialMultiplier ?? 1) * 100).toFixed(0)}% • ค่าแรง {((REGIONAL_PRESETS.find(p => p.id === newRegionId)?.laborMultiplier ?? 1) * 100).toFixed(0)}%
+                  </span>
+                </div>
+                <select
+                  value={newRegionId}
+                  onChange={(e) => setNewRegionId(e.target.value as RegionalZoneId)}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white text-xs focus:outline-none focus:border-amber-400"
+                >
+                  {REGIONAL_PRESETS.map((preset) => (
+                    <option key={preset.id} value={preset.id}>
+                      {preset.name} (วัสดุ {(preset.materialMultiplier * 100).toFixed(0)}%, ค่าแรง {(preset.laborMultiplier * 100).toFixed(0)}%)
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-slate-400">
+                  {REGIONAL_PRESETS.find(p => p.id === newRegionId)?.shortDesc}
+                </p>
               </div>
 
               {/* ข้อมูลลูกค้า */}

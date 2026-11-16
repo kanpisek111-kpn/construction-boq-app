@@ -63,15 +63,18 @@ export interface SavedPriceBookItem extends Omit<BOQItem, 'id'> {
   updatedAt?: string;
 }
 
-export interface PriceBookConfig {
+export interface ProjectRegionalConfig {
   regionId: RegionalZoneId;
   regionName: string;
   materialMultiplier: number;
   laborMultiplier: number;
   autoApplyToNewItems: boolean;
   enableMasterRateOverride?: boolean;
-  libraryVersion?: number;
   masterRates: MasterRatesConfig;
+}
+
+export interface PriceBookConfig extends ProjectRegionalConfig {
+  libraryVersion?: number;
   savedCustomItems: SavedPriceBookItem[];
   lastUpdated?: string;
 }
@@ -401,6 +404,7 @@ export interface ProjectSaveState {
   status?: ProjectStatus;
   actualExpenses?: ActualExpenseItem[];
   procurementCheckedItems?: Record<string, boolean>;
+  regionalConfig?: ProjectRegionalConfig;
 }
 
 export type ExternalItemType = 
