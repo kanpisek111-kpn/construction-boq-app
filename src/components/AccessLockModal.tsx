@@ -189,6 +189,15 @@ export const AccessLockModal: React.FC<AccessLockModalProps> = ({
             <span className="material-symbols-outlined text-base">shopping_cart</span>
             <span>ยังไม่มีรหัส? สั่งซื้อสิทธิ์แพ็กเกจ (คลิกที่นี่)</span>
           </a>
+
+          <a
+            href="https://line.me/R/ti/p/@003iwzqt"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full py-2 px-3 rounded-xl bg-emerald-600/10 hover:bg-emerald-600/20 border border-emerald-500/30 text-emerald-300 font-prompt text-xs font-semibold transition flex items-center justify-center gap-1.5"
+          >
+            <span>💬 ติดต่อสอบถาม / แจ้งปัญหาผ่าน LINE (@003iwzqt)</span>
+          </a>
         </div>
 
         {/* Footer Hint */}

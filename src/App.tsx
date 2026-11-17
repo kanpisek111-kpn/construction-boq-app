@@ -1222,6 +1222,11 @@ export default function App() {
   const handleLoadProjectFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (!canAccessFeature('project_files_json', licenseSession.tier)) {
+      setUpgradeModalFeature('ระบบเปิดไฟล์โครงการเดิม (.json)');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
     const reader = new FileReader();
     reader.onload = (event) => {
       try {

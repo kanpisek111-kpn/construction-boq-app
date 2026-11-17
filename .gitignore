@@ -7,8 +7,9 @@ dist/
 build/
 
 # Local env & cache
-.env.local
-.env.*.local
+.env
+.env.*
+!.env.example
 *.local
 .vite/
 .eslintcache
