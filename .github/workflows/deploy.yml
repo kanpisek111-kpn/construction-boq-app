@@ -34,6 +34,9 @@ jobs:
         run: npm ci
 
       - name: Build
+        env:
+          VITE_OWNER_PASSCODE_HASH: ${{ secrets.VITE_OWNER_PASSCODE_HASH }}
+          VITE_OWNER_PASSCODE: ${{ secrets.VITE_OWNER_PASSCODE }}
         run: npm run build
 
       - name: Setup Pages

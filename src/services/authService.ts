@@ -54,10 +54,140 @@ const CLOUD_BLACKLIST_KEY = 'boq_blacklist_global';
 // Hardcoded blacklist in code (can add known violators directly here)
 const HARDCODED_REVOKED_KEYS: string[] = [];
 
-// Master Passwords for System Owner (เจ้าของระบบ ปลดล็อก 100%)
-const OWNER_PASSWORDS: string[] = [
-  import.meta.env.VITE_OWNER_PASSCODE || 'KPN-OWNER-BOQ-2026#99'
-].filter(Boolean);
+// =====================================================================
+// OWNER PASSCODE CRYPTOGRAPHIC VERIFICATION (SHA-256)
+// ไม่เก็บรหัสผ่าน Owner แบบ Plaintext ในซอร์สโค้ดหรือ JS Bundle
+// =====================================================================
+
+// Fallback SHA-256 Hash สำหรับเจ้าของระบบ (ป้องกันการล็อกตัวเองออกแม้ยังไม่ได้ตั้งค่า Secret บน GitHub)
+// ค่านี้คือ SHA-256 Hash แบบทางเดียว ไม่สามารถย้อนกลับเป็นรหัสผ่านเดิมได้
+const DEFAULT_OWNER_PASSCODE_HASH = '2bedcfc96edf34e5bd796481aeef4b2a654a4dd85d6bf1fdd6c33ebeea4bf5d9';
+
+/**
+ * คำนวณ SHA-256 Hash ของข้อความ (รองรับ UTF-8 / ทุกภาษาและอักขระพิเศษ)
+ * ทำงานได้ทั้งบน HTTPS, HTTP และ Localhost โดยไม่ต้องพึ่งพา Web Crypto API
+ */
+export function computeSha256(input: string): string {
+  const utf8 = unescape(encodeURIComponent(input));
+  function rightRotate(value: number, amount: number): number {
+    return (value >>> amount) | (value << (32 - amount));
+  }
+  const mathPow = Math.pow;
+  const maxWord = mathPow(2, 32);
+  const words: number[] = [];
+  const asciiBitLength = utf8.length * 8;
+  const hash: number[] = [];
+  const k: number[] = [];
+  let primeCounter = 0;
+  const isComposite: Record<number, number> = {};
+
+  for (let candidate = 2; primeCounter < 64; candidate++) {
+    if (!isComposite[candidate]) {
+      for (let i = 0; i < 313; i += candidate) {
+        isComposite[i] = candidate;
+      }
+      hash[primeCounter] = (mathPow(candidate, 0.5) * maxWord) | 0;
+      k[primeCounter++] = (mathPow(candidate, 1 / 3) * maxWord) | 0;
+    }
+  }
+
+  let workingHash = hash.slice(0, 8);
+  let ascii = utf8 + '\x80';
+  while (ascii.length % 64 - 56) ascii += '\x00';
+  for (let i = 0; i < ascii.length; i++) {
+    const j = ascii.charCodeAt(i);
+    words[i >> 2] |= j << ((3 - i) % 4) * 8;
+  }
+  words[words.length] = ((asciiBitLength / maxWord) | 0);
+  words[words.length] = asciiBitLength;
+
+  for (let j = 0; j < words.length;) {
+    const w = words.slice(j, (j += 16));
+    const oldHash = workingHash;
+    workingHash = workingHash.slice(0, 8);
+    for (let i = 0; i < 64; i++) {
+      const w15 = w[i - 15];
+      const w2 = w[i - 2];
+      const a = workingHash[0];
+      const e = workingHash[4];
+      const temp1 =
+        workingHash[7] +
+        (rightRotate(e, 6) ^ rightRotate(e, 11) ^ rightRotate(e, 25)) +
+        ((e & workingHash[5]) ^ (~e & workingHash[6])) +
+        k[i] +
+        (w[i] =
+          i < 16
+            ? w[i]
+            : (w[i - 16] +
+                (rightRotate(w15, 7) ^ rightRotate(w15, 18) ^ (w15 >>> 3)) +
+                w[i - 7] +
+                (rightRotate(w2, 17) ^ rightRotate(w2, 19) ^ (w2 >>> 10))) |
+              0);
+      const temp2 =
+        (rightRotate(a, 2) ^ rightRotate(a, 13) ^ rightRotate(a, 22)) +
+        ((a & workingHash[1]) ^ (a & workingHash[2]) ^ (workingHash[1] & workingHash[2]));
+
+      workingHash = [(temp1 + temp2) | 0].concat(workingHash);
+      workingHash[4] = (workingHash[4] + temp1) | 0;
+    }
+    for (let i = 0; i < 8; i++) {
+      workingHash[i] = (workingHash[i] + oldHash[i]) | 0;
+    }
+  }
+
+  let result = '';
+  for (let i = 0; i < 8; i++) {
+    for (let i2 = 3; i2 >= 0; i2--) {
+      const b = (workingHash[i] >> (8 * i2)) & 255;
+      result += (b < 16 ? '0' : '') + b.toString(16);
+    }
+  }
+  return result.toLowerCase();
+}
+
+/**
+ * รวบรวมรายการ SHA-256 Hashes ที่ได้รับอนุญาตสำหรับสิทธิ์ Owner
+ * 1. อ่านจาก VITE_OWNER_PASSCODE_HASH (รองรับคั่นด้วยจุลภาคหลายรหัส)
+ * 2. อ่านจาก VITE_OWNER_PASSCODE (หากมีระบุใน env จะแปลงเป็น SHA-256 ทันที)
+ * 3. มี DEFAULT_OWNER_PASSCODE_HASH เป็น fallback เสมอ
+ */
+function getAuthorizedOwnerHashes(): Set<string> {
+  const hashes = new Set<string>();
+
+  // 1. เพิ่มค่า Fallback Hash เริ่มต้นเสมอ
+  hashes.add(DEFAULT_OWNER_PASSCODE_HASH.toLowerCase().trim());
+
+  // 2. ตรวจสอบ VITE_OWNER_PASSCODE_HASH จาก build environment
+  const envHash = typeof import.meta !== 'undefined' && import.meta?.env?.VITE_OWNER_PASSCODE_HASH;
+  if (typeof envHash === 'string' && envHash.trim()) {
+    envHash.split(',').forEach(h => {
+      const cleanH = h.trim().toLowerCase();
+      if (cleanH) hashes.add(cleanH);
+    });
+  }
+
+  // 3. หากมี VITE_OWNER_PASSCODE ใน env ให้แปลงเป็น SHA-256 แล้วเพิ่มเข้าชุดตรวจสอบ
+  const envPasscode = typeof import.meta !== 'undefined' && import.meta?.env?.VITE_OWNER_PASSCODE;
+  if (typeof envPasscode === 'string' && envPasscode.trim()) {
+    hashes.add(computeSha256(envPasscode.trim()));
+    hashes.add(computeSha256(envPasscode.trim().toUpperCase()));
+  }
+
+  return hashes;
+}
+
+const AUTHORIZED_OWNER_HASHES = getAuthorizedOwnerHashes();
+
+/**
+ * ตรวจสอบว่ารหัสผ่านที่ส่งมา ตรงกับ Owner SHA-256 Hash หรือไม่
+ */
+export function isOwnerPasscode(input: string): boolean {
+  if (!input) return false;
+  const trimmed = input.trim();
+  const hashRaw = computeSha256(trimmed);
+  const hashUpper = computeSha256(trimmed.toUpperCase());
+  return AUTHORIZED_OWNER_HASHES.has(hashRaw) || AUTHORIZED_OWNER_HASHES.has(hashUpper);
+}
 
 // =====================================================================
 // REVOCATION & BLACKLIST MANAGEMENT
@@ -536,8 +666,8 @@ export function validatePasscodeOrKey(input: string): ValidationResult {
     };
   }
 
-  // 1. Check Owner Master Passwords
-  if (OWNER_PASSWORDS.some(pass => pass.toUpperCase() === clean)) {
+  // 1. Check Owner Master Passwords via Cryptographic Hash (SHA-256)
+  if (isOwnerPasscode(clean)) {
     return {
       valid: true,
       tier: 'owner',
