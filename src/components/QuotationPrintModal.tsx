@@ -1,10 +1,76 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { BOQItem, ConstructionCategory, QuotationMeta, PaymentMilestone, QuotationDisplayOptions, QuotationDisplayMode } from '../types';
 import { CATEGORY_LABELS, formatMilestonesToPaymentTerms, DEFAULT_DISPLAY_OPTIONS } from '../constants';
 import { exportBOQToExcel } from '../services/excelExporter';
 import { computeBOQSummary } from '../services/calculator';
 import { LicenseTier, canAccessFeature } from '../services/authService';
 import { compressImage } from '../services/imageUtils';
+
+/**
+ * แปลงตัวเลขจำนวนเงินเป็นคำอ่านภาษาไทยมาตรฐาน
+ * ตัวอย่าง: 1,250,000 -> หนึ่งล้านสองแสนห้าหมื่นบาทถ้วน
+ */
+export function numberToThaiBahtText(amount: number): string {
+  if (isNaN(amount) || amount === 0) return 'ศูนย์บาทถ้วน';
+
+  const isNegative = amount < 0;
+  const absAmount = Math.abs(amount);
+
+  const rounded = Math.round(absAmount * 100) / 100;
+  const baht = Math.floor(rounded);
+  const satang = Math.round((rounded - baht) * 100);
+
+  const thaiDigits = ['ศูนย์', 'หนึ่ง', 'สอง', 'สาม', 'สี่', 'ห้า', 'หก', 'เจ็ด', 'แปด', 'เก้า'];
+  const thaiUnits = ['', 'สิบ', 'ร้อย', 'พัน', 'หมื่น', 'แสน', 'ล้าน'];
+
+  function convertGroup(numStr: string): string {
+    let result = '';
+    const len = numStr.length;
+    for (let i = 0; i < len; i++) {
+      const digit = parseInt(numStr[i], 10);
+      const position = len - 1 - i;
+      if (digit === 0) continue;
+
+      if (position === 0 && digit === 1 && len > 1) {
+        const hasNonZeroBefore = numStr.slice(0, i).split('').some(d => d !== '0');
+        result += hasNonZeroBefore ? 'เอ็ด' : 'หนึ่ง';
+      } else if (position === 1 && digit === 1) {
+        result += 'สิบ';
+      } else if (position === 1 && digit === 2) {
+        result += 'ยี่สิบ';
+      } else {
+        result += thaiDigits[digit] + thaiUnits[position];
+      }
+    }
+    return result;
+  }
+
+  function convertInteger(num: number): string {
+    if (num === 0) return '';
+    const numStr = num.toString();
+    const len = numStr.length;
+    if (len <= 6) {
+      return convertGroup(numStr);
+    }
+    const millionIdx = len - 6;
+    const higher = parseInt(numStr.slice(0, millionIdx), 10);
+    const lowerStr = numStr.slice(millionIdx);
+    return convertInteger(higher) + 'ล้าน' + convertGroup(lowerStr);
+  }
+
+  let text = '';
+  if (baht > 0) {
+    text += convertInteger(baht) + 'บาท';
+  }
+
+  if (satang === 0) {
+    text += 'ถ้วน';
+  } else {
+    text += convertGroup(satang.toString().padStart(2, '0')) + 'สตางค์';
+  }
+
+  return (isNegative ? 'ลบ' : '') + text;
+}
 
 interface QuotationPrintModalProps {
   isOpen: boolean;
@@ -16,6 +82,7 @@ interface QuotationPrintModalProps {
   vatPercent: number;
   quotationMeta: QuotationMeta;
   onUpdateMeta: (meta: QuotationMeta) => void;
+  onUpdateProjectName?: (name: string) => void;
   milestones?: PaymentMilestone[];
   licenseTier?: LicenseTier;
   onRequestUpgrade?: (featureName: string) => void;
@@ -31,17 +98,28 @@ export const QuotationPrintModal: React.FC<QuotationPrintModalProps> = ({
   vatPercent,
   quotationMeta,
   onUpdateMeta,
+  onUpdateProjectName,
   milestones = [],
   licenseTier = 'owner',
   onRequestUpgrade
 }) => {
   const [meta, setMeta] = useState<QuotationMeta>(quotationMeta);
   const [showMetaEdit, setShowMetaEdit] = useState<boolean>(false);
+  const prevIsOpenRef = useRef(false);
 
-  // Sync meta state whenever quotationMeta prop updates or modal opens (ensures fresh data per project)
+  // Sync meta state only when modal opens (false -> true) to prevent overwriting active typing
   useEffect(() => {
-    setMeta(quotationMeta);
-  }, [quotationMeta, isOpen]);
+    if (!prevIsOpenRef.current && isOpen) {
+      setMeta(quotationMeta);
+    }
+    prevIsOpenRef.current = isOpen;
+  }, [isOpen, quotationMeta]);
+
+  const updateMetaField = (patch: Partial<QuotationMeta>) => {
+    const updated: QuotationMeta = { ...meta, ...patch };
+    setMeta(updated);
+    onUpdateMeta(updated);
+  };
 
   const displayOptions: QuotationDisplayOptions = {
     ...DEFAULT_DISPLAY_OPTIONS,
@@ -53,21 +131,20 @@ export const QuotationPrintModal: React.FC<QuotationPrintModalProps> = ({
       ...displayOptions,
       [key]: value
     };
-    const nextMeta: QuotationMeta = {
-      ...meta,
-      displayOptions: nextOptions
-    };
-    setMeta(nextMeta);
-    onUpdateMeta(nextMeta);
+    updateMetaField({ displayOptions: nextOptions });
   };
 
   const summary = computeBOQSummary(items, overheadPercent, vatPercent);
   const costPerSqm = houseAreaSqm > 0 ? Math.round(summary.grandTotal / houseAreaSqm) : 0;
+  const grandTotalThaiText = numberToThaiBahtText(summary.grandTotal);
 
   // Auto-format payment terms from active project milestones if available
-  const formattedMilestonesText = milestones && milestones.length > 0
+  const autoMilestonesText = milestones && milestones.length > 0
     ? formatMilestonesToPaymentTerms(milestones, summary.grandTotal)
-    : meta.paymentTerms;
+    : '';
+  const displayedPaymentTerms = (meta.paymentTerms && meta.paymentTerms.trim().length > 0)
+    ? meta.paymentTerms
+    : autoMilestonesText;
 
   const [logoToast, setLogoToast] = useState<string>('');
 
@@ -85,9 +162,7 @@ export const QuotationPrintModal: React.FC<QuotationPrintModalProps> = ({
       }
       try {
         const compressedBase64 = await compressImage(file, 400, 200, 0.85);
-        const updatedMeta = { ...meta, companyLogo: compressedBase64 };
-        setMeta(updatedMeta);
-        onUpdateMeta(updatedMeta); // บันทึกลงโครงการทันที ไม่ต้องรอกดปุ่มบันทึก
+        updateMetaField({ companyLogo: compressedBase64 });
         setLogoToast('อัปโหลดและบันทึกโลโก้สำเร็จ ✓');
         setTimeout(() => setLogoToast(''), 3000);
       } catch (err) {
@@ -99,9 +174,7 @@ export const QuotationPrintModal: React.FC<QuotationPrintModalProps> = ({
   };
 
   const handleRemoveLogo = () => {
-    const updatedMeta = { ...meta, companyLogo: '' };
-    setMeta(updatedMeta);
-    onUpdateMeta(updatedMeta); // บันทึกลงโครงการทันที
+    updateMetaField({ companyLogo: '' });
     setLogoToast('ลบโลโก้เรียบร้อย ✓');
     setTimeout(() => setLogoToast(''), 2500);
   };
@@ -139,6 +212,12 @@ export const QuotationPrintModal: React.FC<QuotationPrintModalProps> = ({
       iframe.style.visibility = 'hidden';
       document.body.appendChild(iframe);
 
+      // คัดลอก stylesheet และ style จาก document.head โดยกรอง style ที่มี #quotation-print-modal-root ออก
+      const headStyles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
+        .filter((el) => !el.textContent?.includes('#quotation-print-modal-root'))
+        .map((el) => el.outerHTML)
+        .join('\n');
+
       const htmlContent = `<!DOCTYPE html>
 <html lang="th">
 <head>
@@ -147,6 +226,7 @@ export const QuotationPrintModal: React.FC<QuotationPrintModalProps> = ({
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;500;600;700;800&family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
+  ${headStyles}
   <style>
     @page {
       size: A4 portrait;
@@ -156,6 +236,9 @@ export const QuotationPrintModal: React.FC<QuotationPrintModalProps> = ({
       box-sizing: border-box;
       -webkit-print-color-adjust: exact !important;
       print-color-adjust: exact !important;
+    }
+    html, body, .print-sheet, .print-sheet * {
+      visibility: visible !important;
     }
     body {
       margin: 0;
@@ -216,7 +299,10 @@ export const QuotationPrintModal: React.FC<QuotationPrintModalProps> = ({
       doc.write(htmlContent);
       doc.close();
 
-      setTimeout(() => {
+      let hasPrinted = false;
+      const triggerPrint = () => {
+        if (hasPrinted) return;
+        hasPrinted = true;
         try {
           iframe.contentWindow?.focus();
           iframe.contentWindow?.print();
@@ -224,7 +310,12 @@ export const QuotationPrintModal: React.FC<QuotationPrintModalProps> = ({
           console.warn('Iframe print failed, fallback to window.print()', e);
           window.print();
         }
-      }, 500);
+      };
+
+      iframe.onload = () => {
+        setTimeout(triggerPrint, 300);
+      };
+      setTimeout(triggerPrint, 700);
     } catch (err) {
       console.warn('Hidden iframe print error:', err);
       window.print();
@@ -314,12 +405,23 @@ export const QuotationPrintModal: React.FC<QuotationPrintModalProps> = ({
         {/* Edit Metadata Drawer */}
         {showMetaEdit && (
           <div className="print:hidden p-5 bg-slate-850 border-b border-slate-700 grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+            {onUpdateProjectName && (
+              <div>
+                <label className="text-slate-400 block mb-1">ชื่อโครงการ (Project Name):</label>
+                <input
+                  type="text"
+                  value={projectName}
+                  onChange={(e) => onUpdateProjectName(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1 text-white font-semibold"
+                />
+              </div>
+            )}
             <div>
               <label className="text-slate-400 block mb-1">เลขที่ใบเสนอราคา:</label>
               <input
                 type="text"
                 value={meta.quotationNumber}
-                onChange={(e) => setMeta({ ...meta, quotationNumber: e.target.value })}
+                onChange={(e) => updateMetaField({ quotationNumber: e.target.value })}
                 className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1 text-white font-mono"
               />
             </div>
@@ -328,7 +430,7 @@ export const QuotationPrintModal: React.FC<QuotationPrintModalProps> = ({
               <input
                 type="date"
                 value={meta.issueDate}
-                onChange={(e) => setMeta({ ...meta, issueDate: e.target.value })}
+                onChange={(e) => updateMetaField({ issueDate: e.target.value })}
                 className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1 text-white"
               />
             </div>
@@ -336,9 +438,10 @@ export const QuotationPrintModal: React.FC<QuotationPrintModalProps> = ({
               <label className="text-slate-400 block mb-1">ยืนราคาภายใน (วัน):</label>
               <input
                 type="number"
-                value={meta.validityDays}
-                onChange={(e) => setMeta({ ...meta, validityDays: parseInt(e.target.value) || 30 })}
+                value={meta.validityDays || ''}
+                onChange={(e) => updateMetaField({ validityDays: parseInt(e.target.value, 10) || 0 })}
                 className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1 text-white font-mono"
+                placeholder="30"
               />
             </div>
             <div>
@@ -346,7 +449,7 @@ export const QuotationPrintModal: React.FC<QuotationPrintModalProps> = ({
               <input
                 type="text"
                 value={meta.customerName}
-                onChange={(e) => setMeta({ ...meta, customerName: e.target.value })}
+                onChange={(e) => updateMetaField({ customerName: e.target.value })}
                 className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1 text-white"
               />
             </div>
@@ -355,7 +458,7 @@ export const QuotationPrintModal: React.FC<QuotationPrintModalProps> = ({
               <input
                 type="text"
                 value={meta.customerPhone}
-                onChange={(e) => setMeta({ ...meta, customerPhone: e.target.value })}
+                onChange={(e) => updateMetaField({ customerPhone: e.target.value })}
                 className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1 text-white"
               />
             </div>
@@ -364,7 +467,7 @@ export const QuotationPrintModal: React.FC<QuotationPrintModalProps> = ({
               <input
                 type="text"
                 value={meta.customerAddress}
-                onChange={(e) => setMeta({ ...meta, customerAddress: e.target.value })}
+                onChange={(e) => updateMetaField({ customerAddress: e.target.value })}
                 className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1 text-white"
               />
             </div>
@@ -373,7 +476,7 @@ export const QuotationPrintModal: React.FC<QuotationPrintModalProps> = ({
               <input
                 type="text"
                 value={meta.contractorName}
-                onChange={(e) => setMeta({ ...meta, contractorName: e.target.value })}
+                onChange={(e) => updateMetaField({ contractorName: e.target.value })}
                 className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1 text-white font-semibold"
               />
             </div>
@@ -382,7 +485,7 @@ export const QuotationPrintModal: React.FC<QuotationPrintModalProps> = ({
               <input
                 type="text"
                 value={meta.contractorPhone}
-                onChange={(e) => setMeta({ ...meta, contractorPhone: e.target.value })}
+                onChange={(e) => updateMetaField({ contractorPhone: e.target.value })}
                 className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1 text-white"
               />
             </div>
@@ -391,16 +494,29 @@ export const QuotationPrintModal: React.FC<QuotationPrintModalProps> = ({
               <input
                 type="text"
                 value={meta.contractorTaxId}
-                onChange={(e) => setMeta({ ...meta, contractorTaxId: e.target.value })}
+                onChange={(e) => updateMetaField({ contractorTaxId: e.target.value })}
                 className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1 text-white font-mono"
               />
             </div>
             <div className="md:col-span-2">
-              <label className="text-slate-400 block mb-1">เงื่อนไขการแบ่งงวดชำระเงิน:</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-slate-400">เงื่อนไขการแบ่งงวดชำระเงิน:</label>
+                {autoMilestonesText && (
+                  <button
+                    type="button"
+                    onClick={() => updateMetaField({ paymentTerms: autoMilestonesText })}
+                    className="text-[10px] text-cyan-400 hover:text-cyan-300 underline font-medium flex items-center gap-0.5"
+                    title="ดึงข้อความจากงวดงานในโครงการมาใส่แทนที่"
+                  >
+                    <span className="material-symbols-outlined text-xs">sync</span>
+                    <span>ดึงจากแผนงวดงานอัตโนมัติ</span>
+                  </button>
+                )}
+              </div>
               <textarea
-                rows={2}
-                value={meta.paymentTerms}
-                onChange={(e) => setMeta({ ...meta, paymentTerms: e.target.value })}
+                rows={3}
+                value={displayedPaymentTerms}
+                onChange={(e) => updateMetaField({ paymentTerms: e.target.value })}
                 className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1 text-white text-[11px]"
               />
             </div>
@@ -409,8 +525,18 @@ export const QuotationPrintModal: React.FC<QuotationPrintModalProps> = ({
               <input
                 type="text"
                 value={meta.warrantyTerms}
-                onChange={(e) => setMeta({ ...meta, warrantyTerms: e.target.value })}
+                onChange={(e) => updateMetaField({ warrantyTerms: e.target.value })}
                 className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1 text-white"
+              />
+            </div>
+            <div className="md:col-span-2">
+              <label className="text-slate-400 block mb-1">หมายเหตุเพิ่มเติม (Notes):</label>
+              <textarea
+                rows={2}
+                value={meta.notes || ''}
+                onChange={(e) => updateMetaField({ notes: e.target.value })}
+                className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1 text-white text-[11px]"
+                placeholder="เช่น ราคานี้รวมค่าแรง วัสดุ และภาษีแล้ว ไม่รวมค่าธรรมเนียมขอมิเตอร์น้ำ-ไฟ..."
               />
             </div>
             
@@ -600,13 +726,13 @@ export const QuotationPrintModal: React.FC<QuotationPrintModalProps> = ({
                     วันที่: <strong>{meta.issueDate}</strong>
                   </span>
                   <span className="text-[10px] text-slate-500">
-                    ยืนราคา: <strong>{meta.validityDays} วัน</strong>
+                    ยืนราคา: <strong>{meta.validityDays || 30} วัน</strong>
                   </span>
                 </div>
               </div>
 
               {/* Project & Client Information Box */}
-              <div className="grid grid-cols-2 gap-4 p-3 bg-slate-50 border border-slate-200 rounded-lg mb-5 text-[11px]">
+              <div className="grid grid-cols-2 gap-4 p-3 bg-slate-50 border border-slate-200 rounded-lg mb-4 text-[11px]">
                 <div>
                   <div className="font-bold text-slate-800 text-xs mb-1">ข้อมูลผู้ว่าจ้าง / ลูกค้า:</div>
                   <div className="text-slate-700"><strong>ชื่อ:</strong> {meta.customerName}</div>
@@ -617,7 +743,7 @@ export const QuotationPrintModal: React.FC<QuotationPrintModalProps> = ({
                   <div className="font-bold text-slate-800 text-xs mb-1">รายละเอียดโครงการ:</div>
                   <div className="text-slate-700"><strong>โครงการ:</strong> {projectName}</div>
                   <div className="text-slate-700"><strong>พื้นที่ใช้สอยบ้าน:</strong> {houseAreaSqm} ตร.ม.</div>
-                  {displayOptions.showCostPerSqm && (
+                  {displayOptions.showCostPerSqm && houseAreaSqm > 0 && (
                     <div className="text-slate-700 font-semibold text-amber-700">
                       <strong>ราคาเฉลี่ยสุทธิ:</strong> ฿{costPerSqm.toLocaleString()} บาท / ตร.ม.
                     </div>
@@ -625,29 +751,60 @@ export const QuotationPrintModal: React.FC<QuotationPrintModalProps> = ({
                 </div>
               </div>
 
+              {/* Highlight Grand Total Box */}
+              <div className="border-2 border-slate-900 bg-amber-50/90 rounded-xl px-4 py-3 mb-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm break-inside-avoid">
+                <div>
+                  <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5 uppercase tracking-wide">
+                    <span className="material-symbols-outlined text-base text-amber-600">payments</span>
+                    <span>ยอดเสนอราคาสุทธิรวมทั้งสิ้น (GRAND TOTAL)</span>
+                  </div>
+                  <div className="text-xs font-semibold text-slate-700 mt-0.5 font-sarabun">
+                    ({grandTotalThaiText})
+                  </div>
+                  <div className="text-[10px] text-slate-500 mt-0.5 flex items-center gap-2 flex-wrap">
+                    <span>{vatPercent > 0 ? `รวมภาษีมูลค่าเพิ่ม VAT ${vatPercent}% แล้ว` : 'ราคายังไม่รวมภาษีมูลค่าเพิ่ม'}</span>
+                    {displayOptions.showCostPerSqm && houseAreaSqm > 0 && (
+                      <>
+                        <span>•</span>
+                        <span className="font-semibold text-amber-800">
+                          เฉลี่ย ฿{costPerSqm.toLocaleString()} บาท/ตร.ม.
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </div>
+                <div className="text-right shrink-0">
+                  <div className="text-2xl sm:text-3xl font-mono font-black text-slate-950 leading-none">
+                    ฿{summary.grandTotal.toLocaleString()} <span className="text-sm font-sans font-bold text-slate-700">บาท</span>
+                  </div>
+                </div>
+              </div>
+
               {/* Items Breakdown Table */}
               <div className="overflow-x-auto mb-5">
                 <table className="w-full text-left border-collapse text-[10.5px]">
                   <thead>
-                    <tr className="border-y-2 border-slate-800 bg-slate-100 text-slate-900 font-bold">
-                      <th className="py-2 px-2 w-8 text-center">#</th>
-                      <th className="py-2 px-2">หมวดหมู่งาน / รายการก่อสร้าง</th>
-                      {displayOptions.mode === 'client_summary' && !displayOptions.showMaterialDetails ? (
-                        <th className="py-2 px-2 w-28 text-center">จำนวนรายการ</th>
-                      ) : (
-                        <>
-                          <th className="py-2 px-2 w-16 text-right">ปริมาณ</th>
-                          <th className="py-2 px-2 w-12 text-center">หน่วย</th>
-                          {displayOptions.showMaterialDetails && (
-                            <>
-                              <th className="py-2 px-2 w-20 text-right">ค่าวัสดุ (฿)</th>
-                              <th className="py-2 px-2 w-20 text-right">ค่าแรง (฿)</th>
-                            </>
-                          )}
-                        </>
-                      )}
-                      <th className="py-2 px-2 w-24 text-right">รวมเงิน (฿)</th>
-                    </tr>
+                    {displayOptions.mode === 'client_summary' ? (
+                      <tr className="border-y-2 border-slate-800 bg-slate-100 text-slate-900 font-bold">
+                        <th className="py-2 px-2 w-12 text-center">ลำดับ</th>
+                        <th className="py-2 px-2 text-left">หมวดหมู่งานก่อสร้าง และรายละเอียดงาน / วัสดุ</th>
+                        <th className="py-2 px-2 w-36 text-right">จำนวนเงิน (บาท)</th>
+                      </tr>
+                    ) : (
+                      <tr className="border-y-2 border-slate-800 bg-slate-100 text-slate-900 font-bold">
+                        <th className="py-2 px-2 w-8 text-center">#</th>
+                        <th className="py-2 px-2">หมวดหมู่งาน / รายการก่อสร้าง</th>
+                        <th className="py-2 px-2 w-16 text-right">ปริมาณ</th>
+                        <th className="py-2 px-2 w-12 text-center">หน่วย</th>
+                        {displayOptions.showMaterialDetails && (
+                          <>
+                            <th className="py-2 px-2 w-20 text-right">ค่าวัสดุ (฿)</th>
+                            <th className="py-2 px-2 w-20 text-right">ค่าแรง (฿)</th>
+                          </>
+                        )}
+                        <th className="py-2 px-2 w-24 text-right">รวมเงิน (฿)</th>
+                      </tr>
+                    )}
                   </thead>
                   <tbody>
                     {categories.map((catKey, catIdx) => {
@@ -658,21 +815,65 @@ export const QuotationPrintModal: React.FC<QuotationPrintModalProps> = ({
                       const catTotal = catMat + catLab;
                       const catTitle = CATEGORY_LABELS[catKey]?.title || catKey;
 
-                      // If in client_summary mode without material details, show only category summary rows (Ultra clean executive summary)
-                      if (displayOptions.mode === 'client_summary' && !displayOptions.showMaterialDetails) {
+                      // ==========================================
+                      // MODE: client_summary (แบบย่อส่งลูกค้า 3 คอลัมน์)
+                      // ==========================================
+                      if (displayOptions.mode === 'client_summary') {
+                        // หากปิด showMaterialDetails จะแสดงเฉพาะแถวสรุปแต่ละหมวด
+                        if (!displayOptions.showMaterialDetails) {
+                          return (
+                            <tr key={catKey} className="border-b border-slate-200 hover:bg-slate-50 break-inside-avoid">
+                              <td className="py-2.5 px-2 text-center font-bold text-slate-700">{catIdx + 1}</td>
+                              <td className="py-2.5 px-2">
+                                <div className="font-bold text-slate-900 text-xs">{catTitle}</div>
+                                <div className="text-[10px] text-slate-500 font-normal">ประกอบด้วย {catItems.length} รายการมาตรฐาน</div>
+                              </td>
+                              <td className="py-2.5 px-2 text-right font-mono font-bold text-slate-950 text-xs">
+                                ฿{Math.round(catTotal).toLocaleString()}
+                              </td>
+                            </tr>
+                          );
+                        }
+
+                        // หากเปิด showMaterialDetails ในโหมด client_summary จะแสดงรายการย่อยในตาราง 3 คอลัมน์
                         return (
-                          <tr key={catKey} className="border-b border-slate-200 hover:bg-slate-50 break-inside-avoid">
-                            <td className="py-2 px-2 text-center font-bold text-slate-700">{catIdx + 1}</td>
-                            <td className="py-2 px-2 font-bold text-slate-900 text-xs">{catTitle}</td>
-                            <td className="py-2 px-2 text-center text-slate-600 font-mono">{catItems.length} รายการ</td>
-                            <td className="py-2 px-2 text-right font-mono font-bold text-slate-900 text-xs">
-                              ฿{Math.round(catTotal).toLocaleString()}
-                            </td>
-                          </tr>
+                          <React.Fragment key={catKey}>
+                            <tr className="bg-slate-100/80 border-t border-slate-300 font-bold text-slate-900 break-inside-avoid">
+                              <td className="py-1.5 px-2 text-center font-bold">{catIdx + 1}</td>
+                              <td className="py-1.5 px-2 text-slate-900 font-bold">
+                                {catTitle} ({catItems.length} รายการ)
+                              </td>
+                              <td className="py-1.5 px-2 text-right font-mono font-bold text-slate-950">
+                                ฿{Math.round(catTotal).toLocaleString()}
+                              </td>
+                            </tr>
+                            {catItems.map((item, itemIdx) => {
+                              const mat = item.quantity * item.materialUnitPrice * (1 + item.wastePercent / 100);
+                              const lab = item.quantity * item.laborUnitPrice;
+                              const line = mat + lab;
+
+                              return (
+                                <tr key={item.id} className="border-b border-slate-200 hover:bg-slate-50/50 break-inside-avoid">
+                                  <td className="py-1 px-2 text-center text-slate-400 font-mono text-[9px]">
+                                    {catIdx + 1}.{itemIdx + 1}
+                                  </td>
+                                  <td className="py-1 px-2">
+                                    <div className="font-medium text-slate-900">{item.name}</div>
+                                    {item.spec && <div className="text-[9.5px] text-slate-500">{item.spec}</div>}
+                                  </td>
+                                  <td className="py-1 px-2 text-right font-mono text-slate-800">
+                                    ฿{Math.round(line).toLocaleString()}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </React.Fragment>
                         );
                       }
 
-                      // Otherwise, show category header + individual items
+                      // ==========================================
+                      // MODE: detailed_boq (แจกแจงละเอียดเต็มรูปแบบ)
+                      // ==========================================
                       return (
                         <React.Fragment key={catKey}>
                           {/* Category Header Row */}
@@ -733,48 +934,77 @@ export const QuotationPrintModal: React.FC<QuotationPrintModalProps> = ({
                   <div>
                     <strong className="text-slate-800 block mb-0.5">เงื่อนไขการแบ่งงวดชำระเงิน:</strong>
                     <pre className="font-sans whitespace-pre-wrap leading-relaxed text-[9.5px] bg-slate-50 p-2 rounded border border-slate-200">
-                      {formattedMilestonesText}
+                      {displayedPaymentTerms}
                     </pre>
                   </div>
                   <div>
                     <strong className="text-slate-800 block mb-0.5">การรับประกัน:</strong>
                     <div className="text-[9.5px]">{meta.warrantyTerms}</div>
                   </div>
+                  {meta.notes && meta.notes.trim().length > 0 && (
+                    <div>
+                      <strong className="text-slate-800 block mb-0.5">หมายเหตุเพิ่มเติม:</strong>
+                      <div className="text-[9.5px] leading-relaxed text-slate-600 bg-slate-50 p-2 rounded border border-slate-200 whitespace-pre-wrap">
+                        {meta.notes}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Totals Table */}
                 <div className="flex flex-col gap-1.5 text-xs">
-                  {displayOptions.showMaterialDetails && (
+                  {displayOptions.mode === 'client_summary' ? (
                     <>
                       <div className="flex justify-between py-1 border-b border-slate-200">
-                        <span className="text-slate-600">รวมค่าวัสดุก่อสร้าง (Total Material):</span>
-                        <span className="font-mono font-semibold">฿{summary.totalMaterial.toLocaleString()}</span>
+                        <span className="text-slate-800 font-semibold">
+                          {displayOptions.showProfitLine ? 'รวมค่างานก่อสร้าง (Total Construction Cost):' : 'รวมค่างานก่อสร้าง (Total Construction Value):'}
+                        </span>
+                        <span className="font-mono font-semibold">
+                          ฿{(displayOptions.showProfitLine ? summary.directCost : (summary.directCost + summary.overheadCost)).toLocaleString()}
+                        </span>
                       </div>
-                      <div className="flex justify-between py-1 border-b border-slate-200">
-                        <span className="text-slate-600">รวมค่าแรงงานช่าง (Total Labor):</span>
-                        <span className="font-mono font-semibold">฿{summary.totalLabor.toLocaleString()}</span>
-                      </div>
-                    </>
-                  )}
-
-                  {displayOptions.showProfitLine ? (
-                    <>
-                      <div className="flex justify-between py-1 border-b border-slate-200">
-                        <span className="text-slate-800 font-bold">ต้นทุนตรง (Direct Cost):</span>
-                        <span className="font-mono font-bold">฿{summary.directCost.toLocaleString()}</span>
-                      </div>
-                      <div className="flex justify-between py-1 border-b border-slate-200 text-slate-600">
-                        <span>ค่าดำเนินการและกำไร ({overheadPercent}%):</span>
-                        <span className="font-mono">฿{summary.overheadCost.toLocaleString()}</span>
-                      </div>
+                      {displayOptions.showProfitLine && (
+                        <div className="flex justify-between py-1 border-b border-slate-200 text-slate-600">
+                          <span>ค่าดำเนินการและกำไร ({overheadPercent}%):</span>
+                          <span className="font-mono">฿{summary.overheadCost.toLocaleString()}</span>
+                        </div>
+                      )}
                     </>
                   ) : (
-                    <div className="flex justify-between py-1 border-b border-slate-200">
-                      <span className="text-slate-800 font-bold">รวมมูลค่างานก่อสร้าง (Total Construction Value):</span>
-                      <span className="font-mono font-bold text-slate-900">
-                        ฿{(summary.directCost + summary.overheadCost).toLocaleString()}
-                      </span>
-                    </div>
+                    <>
+                      {displayOptions.showMaterialDetails && (
+                        <>
+                          <div className="flex justify-between py-1 border-b border-slate-200">
+                            <span className="text-slate-600">รวมค่าวัสดุก่อสร้าง (Total Material):</span>
+                            <span className="font-mono font-semibold">฿{summary.totalMaterial.toLocaleString()}</span>
+                          </div>
+                          <div className="flex justify-between py-1 border-b border-slate-200">
+                            <span className="text-slate-600">รวมค่าแรงงานช่าง (Total Labor):</span>
+                            <span className="font-mono font-semibold">฿{summary.totalLabor.toLocaleString()}</span>
+                          </div>
+                        </>
+                      )}
+
+                      {displayOptions.showProfitLine ? (
+                        <>
+                          <div className="flex justify-between py-1 border-b border-slate-200">
+                            <span className="text-slate-800 font-bold">ต้นทุนตรง (Direct Cost):</span>
+                            <span className="font-mono font-bold">฿{summary.directCost.toLocaleString()}</span>
+                          </div>
+                          <div className="flex justify-between py-1 border-b border-slate-200 text-slate-600">
+                            <span>ค่าดำเนินการและกำไร ({overheadPercent}%):</span>
+                            <span className="font-mono">฿{summary.overheadCost.toLocaleString()}</span>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="flex justify-between py-1 border-b border-slate-200">
+                          <span className="text-slate-800 font-bold">รวมมูลค่างานก่อสร้าง (Total Construction Value):</span>
+                          <span className="font-mono font-bold text-slate-900">
+                            ฿{(summary.directCost + summary.overheadCost).toLocaleString()}
+                          </span>
+                        </div>
+                      )}
+                    </>
                   )}
 
                   {vatPercent > 0 && (
@@ -784,11 +1014,17 @@ export const QuotationPrintModal: React.FC<QuotationPrintModalProps> = ({
                     </div>
                   )}
 
-                  <div className="flex justify-between py-2 border-y-2 border-slate-900 bg-slate-100 px-2 rounded mt-1">
-                    <span className="font-black text-slate-900 text-sm">ยอดเงินสุทธิรวมทั้งสิ้น:</span>
-                    <span className="font-mono font-black text-base text-slate-900">
-                      ฿{summary.grandTotal.toLocaleString()}
-                    </span>
+                  {/* High-Contrast Grand Total Box */}
+                  <div className="bg-slate-900 text-white px-3.5 py-3 rounded-xl border-l-4 border-amber-400 mt-2 shadow-md">
+                    <div className="flex justify-between items-baseline">
+                      <span className="font-bold text-slate-200 text-xs sm:text-sm">ยอดเงินสุทธิรวมทั้งสิ้น:</span>
+                      <span className="font-mono font-black text-xl sm:text-2xl text-amber-300">
+                        ฿{summary.grandTotal.toLocaleString()}
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-amber-200/90 font-sarabun text-right mt-1">
+                      ({grandTotalThaiText})
+                    </div>
                   </div>
                 </div>
 

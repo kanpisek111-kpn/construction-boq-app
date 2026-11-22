@@ -2701,6 +2701,7 @@ export default function App() {
         vatPercent={vatPercent}
         quotationMeta={quotationMeta}
         onUpdateMeta={setQuotationMeta}
+        onUpdateProjectName={setProjectName}
         milestones={milestones}
         licenseTier={licenseSession.tier}
         onRequestUpgrade={(feature) => setUpgradeModalFeature(feature)}
