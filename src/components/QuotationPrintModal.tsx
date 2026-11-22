@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { BOQItem, ConstructionCategory, QuotationMeta, PaymentMilestone } from '../types';
-import { CATEGORY_LABELS, formatMilestonesToPaymentTerms } from '../constants';
+import { BOQItem, ConstructionCategory, QuotationMeta, PaymentMilestone, QuotationDisplayOptions, QuotationDisplayMode } from '../types';
+import { CATEGORY_LABELS, formatMilestonesToPaymentTerms, DEFAULT_DISPLAY_OPTIONS } from '../constants';
 import { exportBOQToExcel } from '../services/excelExporter';
 import { computeBOQSummary } from '../services/calculator';
 import { LicenseTier, canAccessFeature } from '../services/authService';
@@ -42,6 +42,24 @@ export const QuotationPrintModal: React.FC<QuotationPrintModalProps> = ({
   useEffect(() => {
     setMeta(quotationMeta);
   }, [quotationMeta, isOpen]);
+
+  const displayOptions: QuotationDisplayOptions = {
+    ...DEFAULT_DISPLAY_OPTIONS,
+    ...(meta.displayOptions || {})
+  };
+
+  const handleToggleOption = <K extends keyof QuotationDisplayOptions>(key: K, value: QuotationDisplayOptions[K]) => {
+    const nextOptions: QuotationDisplayOptions = {
+      ...displayOptions,
+      [key]: value
+    };
+    const nextMeta: QuotationMeta = {
+      ...meta,
+      displayOptions: nextOptions
+    };
+    setMeta(nextMeta);
+    onUpdateMeta(nextMeta);
+  };
 
   const summary = computeBOQSummary(items, overheadPercent, vatPercent);
   const costPerSqm = houseAreaSqm > 0 ? Math.round(summary.grandTotal / houseAreaSqm) : 0;
@@ -455,6 +473,94 @@ export const QuotationPrintModal: React.FC<QuotationPrintModalProps> = ({
           </div>
         )}
 
+        {/* Quotation Display Options Toolbar (Print: Hidden) */}
+        <div className="print:hidden bg-slate-850 border-b border-slate-750 px-6 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs shrink-0">
+          {/* Mode Selector */}
+          <div className="flex items-center gap-2">
+            <span className="text-slate-400 font-semibold flex items-center gap-1">
+              <span className="material-symbols-outlined text-sm text-amber-400">tune</span>
+              <span>รูปแบบเอกสาร:</span>
+            </span>
+            <div className="inline-flex rounded-lg bg-slate-900 p-0.5 border border-slate-700">
+              <button
+                type="button"
+                onClick={() => handleToggleOption('mode', 'client_summary')}
+                className={`px-3 py-1 rounded-md font-medium text-xs transition flex items-center gap-1.5 ${
+                  displayOptions.mode === 'client_summary'
+                    ? 'bg-amber-500 text-slate-950 font-bold shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <span className="material-symbols-outlined text-xs">summarize</span>
+                <span>สรุปเสนอลูกค้า (Summary)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleToggleOption('mode', 'detailed_boq')}
+                className={`px-3 py-1 rounded-md font-medium text-xs transition flex items-center gap-1.5 ${
+                  displayOptions.mode === 'detailed_boq'
+                    ? 'bg-amber-500 text-slate-950 font-bold shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <span className="material-symbols-outlined text-xs">table_rows</span>
+                <span>แจกแจงละเอียด (Detailed BOQ)</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Feature Toggles */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={() => handleToggleOption('showProfitLine', !displayOptions.showProfitLine)}
+              className={`px-2.5 py-1 rounded-lg border text-xs font-medium transition flex items-center gap-1.5 ${
+                displayOptions.showProfitLine
+                  ? 'bg-emerald-950/60 border-emerald-500/50 text-emerald-300'
+                  : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-slate-200'
+              }`}
+              title="แสดง/ซ่อนบรรทัดกำไรและค่าดำเนินการ (หากปิดจะรวมอยู่ในมูลค่างานก่อสร้าง)"
+            >
+              <span className="material-symbols-outlined text-xs">
+                {displayOptions.showProfitLine ? 'check_box' : 'check_box_outline_blank'}
+              </span>
+              <span>แสดงบรรทัดกำไร/ดำเนินการ ({overheadPercent}%)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleToggleOption('showMaterialDetails', !displayOptions.showMaterialDetails)}
+              className={`px-2.5 py-1 rounded-lg border text-xs font-medium transition flex items-center gap-1.5 ${
+                displayOptions.showMaterialDetails
+                  ? 'bg-cyan-950/60 border-cyan-500/50 text-cyan-300'
+                  : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-slate-200'
+              }`}
+              title="แสดง/ซ่อนการแยกคอลัมน์ค่าวัสดุและค่าแรง"
+            >
+              <span className="material-symbols-outlined text-xs">
+                {displayOptions.showMaterialDetails ? 'check_box' : 'check_box_outline_blank'}
+              </span>
+              <span>แยกคอลัมน์วัสดุ/ค่าแรง</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleToggleOption('showCostPerSqm', !displayOptions.showCostPerSqm)}
+              className={`px-2.5 py-1 rounded-lg border text-xs font-medium transition flex items-center gap-1.5 ${
+                displayOptions.showCostPerSqm
+                  ? 'bg-amber-950/60 border-amber-500/50 text-amber-300'
+                  : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-slate-200'
+              }`}
+              title="แสดง/ซ่อนราคาเฉลี่ยต่อ ตร.ม."
+            >
+              <span className="material-symbols-outlined text-xs">
+                {displayOptions.showCostPerSqm ? 'check_box' : 'check_box_outline_blank'}
+              </span>
+              <span>แสดงราคาเฉลี่ย/ตร.ม.</span>
+            </button>
+          </div>
+        </div>
+
         {/* Paper Document Preview Area (Printable Sheet) */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-8 bg-slate-950 flex justify-center">
           
@@ -511,9 +617,11 @@ export const QuotationPrintModal: React.FC<QuotationPrintModalProps> = ({
                   <div className="font-bold text-slate-800 text-xs mb-1">รายละเอียดโครงการ:</div>
                   <div className="text-slate-700"><strong>โครงการ:</strong> {projectName}</div>
                   <div className="text-slate-700"><strong>พื้นที่ใช้สอยบ้าน:</strong> {houseAreaSqm} ตร.ม.</div>
-                  <div className="text-slate-700 font-semibold text-amber-700">
-                    <strong>ราคาเฉลี่ยสุทธิ:</strong> ฿{costPerSqm.toLocaleString()} บาท / ตร.ม.
-                  </div>
+                  {displayOptions.showCostPerSqm && (
+                    <div className="text-slate-700 font-semibold text-amber-700">
+                      <strong>ราคาเฉลี่ยสุทธิ:</strong> ฿{costPerSqm.toLocaleString()} บาท / ตร.ม.
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -524,10 +632,20 @@ export const QuotationPrintModal: React.FC<QuotationPrintModalProps> = ({
                     <tr className="border-y-2 border-slate-800 bg-slate-100 text-slate-900 font-bold">
                       <th className="py-2 px-2 w-8 text-center">#</th>
                       <th className="py-2 px-2">หมวดหมู่งาน / รายการก่อสร้าง</th>
-                      <th className="py-2 px-2 w-16 text-right">ปริมาณ</th>
-                      <th className="py-2 px-2 w-12 text-center">หน่วย</th>
-                      <th className="py-2 px-2 w-20 text-right">ค่าวัสดุ (฿)</th>
-                      <th className="py-2 px-2 w-20 text-right">ค่าแรง (฿)</th>
+                      {displayOptions.mode === 'client_summary' && !displayOptions.showMaterialDetails ? (
+                        <th className="py-2 px-2 w-28 text-center">จำนวนรายการ</th>
+                      ) : (
+                        <>
+                          <th className="py-2 px-2 w-16 text-right">ปริมาณ</th>
+                          <th className="py-2 px-2 w-12 text-center">หน่วย</th>
+                          {displayOptions.showMaterialDetails && (
+                            <>
+                              <th className="py-2 px-2 w-20 text-right">ค่าวัสดุ (฿)</th>
+                              <th className="py-2 px-2 w-20 text-right">ค่าแรง (฿)</th>
+                            </>
+                          )}
+                        </>
+                      )}
                       <th className="py-2 px-2 w-24 text-right">รวมเงิน (฿)</th>
                     </tr>
                   </thead>
@@ -540,12 +658,27 @@ export const QuotationPrintModal: React.FC<QuotationPrintModalProps> = ({
                       const catTotal = catMat + catLab;
                       const catTitle = CATEGORY_LABELS[catKey]?.title || catKey;
 
+                      // If in client_summary mode without material details, show only category summary rows (Ultra clean executive summary)
+                      if (displayOptions.mode === 'client_summary' && !displayOptions.showMaterialDetails) {
+                        return (
+                          <tr key={catKey} className="border-b border-slate-200 hover:bg-slate-50 break-inside-avoid">
+                            <td className="py-2 px-2 text-center font-bold text-slate-700">{catIdx + 1}</td>
+                            <td className="py-2 px-2 font-bold text-slate-900 text-xs">{catTitle}</td>
+                            <td className="py-2 px-2 text-center text-slate-600 font-mono">{catItems.length} รายการ</td>
+                            <td className="py-2 px-2 text-right font-mono font-bold text-slate-900 text-xs">
+                              ฿{Math.round(catTotal).toLocaleString()}
+                            </td>
+                          </tr>
+                        );
+                      }
+
+                      // Otherwise, show category header + individual items
                       return (
                         <React.Fragment key={catKey}>
                           {/* Category Header Row */}
                           <tr className="bg-slate-100/70 border-t border-slate-300 font-bold text-slate-900 break-inside-avoid">
                             <td className="py-1 px-2 text-center">{catIdx + 1}</td>
-                            <td colSpan={5} className="py-1 px-2 text-slate-800">
+                            <td colSpan={displayOptions.showMaterialDetails ? 5 : 3} className="py-1 px-2 text-slate-800">
                               {catTitle} ({catItems.length} รายการ)
                             </td>
                             <td className="py-1 px-2 text-right font-mono">
@@ -565,16 +698,20 @@ export const QuotationPrintModal: React.FC<QuotationPrintModalProps> = ({
                                 </td>
                                 <td className="py-1 px-2">
                                   <div className="font-medium text-slate-900">{item.name}</div>
-                                  <div className="text-[9.5px] text-slate-500">{item.spec}</div>
+                                  {item.spec && <div className="text-[9.5px] text-slate-500">{item.spec}</div>}
                                 </td>
                                 <td className="py-1 px-2 text-right font-mono">{item.quantity}</td>
                                 <td className="py-1 px-2 text-center text-slate-600">{item.unit}</td>
-                                <td className="py-1 px-2 text-right font-mono text-slate-700">
-                                  ฿{Math.round(mat).toLocaleString()}
-                                </td>
-                                <td className="py-1 px-2 text-right font-mono text-slate-700">
-                                  ฿{Math.round(lab).toLocaleString()}
-                                </td>
+                                {displayOptions.showMaterialDetails && (
+                                  <>
+                                    <td className="py-1 px-2 text-right font-mono text-slate-700">
+                                      ฿{Math.round(mat).toLocaleString()}
+                                    </td>
+                                    <td className="py-1 px-2 text-right font-mono text-slate-700">
+                                      ฿{Math.round(lab).toLocaleString()}
+                                    </td>
+                                  </>
+                                )}
                                 <td className="py-1 px-2 text-right font-mono font-bold text-slate-900">
                                   ฿{Math.round(line).toLocaleString()}
                                 </td>
@@ -607,26 +744,46 @@ export const QuotationPrintModal: React.FC<QuotationPrintModalProps> = ({
 
                 {/* Totals Table */}
                 <div className="flex flex-col gap-1.5 text-xs">
-                  <div className="flex justify-between py-1 border-b border-slate-200">
-                    <span className="text-slate-600">รวมค่าวัสดุก่อสร้าง (Total Material):</span>
-                    <span className="font-mono font-semibold">฿{summary.totalMaterial.toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between py-1 border-b border-slate-200">
-                    <span className="text-slate-600">รวมค่าแรงงานช่าง (Total Labor):</span>
-                    <span className="font-mono font-semibold">฿{summary.totalLabor.toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between py-1 border-b border-slate-200">
-                    <span className="text-slate-800 font-bold">ต้นทุนตรง (Direct Cost):</span>
-                    <span className="font-mono font-bold">฿{summary.directCost.toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between py-1 border-b border-slate-200 text-slate-600">
-                    <span>ค่าดำเนินการและกำไร ({overheadPercent}%):</span>
-                    <span className="font-mono">฿{summary.overheadCost.toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between py-1 border-b border-slate-200 text-slate-600">
-                    <span>ภาษีมูลค่าเพิ่ม VAT ({vatPercent}%):</span>
-                    <span className="font-mono">฿{summary.vatAmount.toLocaleString()}</span>
-                  </div>
+                  {displayOptions.showMaterialDetails && (
+                    <>
+                      <div className="flex justify-between py-1 border-b border-slate-200">
+                        <span className="text-slate-600">รวมค่าวัสดุก่อสร้าง (Total Material):</span>
+                        <span className="font-mono font-semibold">฿{summary.totalMaterial.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between py-1 border-b border-slate-200">
+                        <span className="text-slate-600">รวมค่าแรงงานช่าง (Total Labor):</span>
+                        <span className="font-mono font-semibold">฿{summary.totalLabor.toLocaleString()}</span>
+                      </div>
+                    </>
+                  )}
+
+                  {displayOptions.showProfitLine ? (
+                    <>
+                      <div className="flex justify-between py-1 border-b border-slate-200">
+                        <span className="text-slate-800 font-bold">ต้นทุนตรง (Direct Cost):</span>
+                        <span className="font-mono font-bold">฿{summary.directCost.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between py-1 border-b border-slate-200 text-slate-600">
+                        <span>ค่าดำเนินการและกำไร ({overheadPercent}%):</span>
+                        <span className="font-mono">฿{summary.overheadCost.toLocaleString()}</span>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex justify-between py-1 border-b border-slate-200">
+                      <span className="text-slate-800 font-bold">รวมมูลค่างานก่อสร้าง (Total Construction Value):</span>
+                      <span className="font-mono font-bold text-slate-900">
+                        ฿{(summary.directCost + summary.overheadCost).toLocaleString()}
+                      </span>
+                    </div>
+                  )}
+
+                  {vatPercent > 0 && (
+                    <div className="flex justify-between py-1 border-b border-slate-200 text-slate-600">
+                      <span>ภาษีมูลค่าเพิ่ม VAT ({vatPercent}%):</span>
+                      <span className="font-mono">฿{summary.vatAmount.toLocaleString()}</span>
+                    </div>
+                  )}
+
                   <div className="flex justify-between py-2 border-y-2 border-slate-900 bg-slate-100 px-2 rounded mt-1">
                     <span className="font-black text-slate-900 text-sm">ยอดเงินสุทธิรวมทั้งสิ้น:</span>
                     <span className="font-mono font-black text-base text-slate-900">

@@ -354,6 +354,15 @@ export interface DecorationItemPreset {
   installationTip: string;
 }
 
+export type QuotationDisplayMode = 'client_summary' | 'detailed_boq';
+
+export interface QuotationDisplayOptions {
+  mode: QuotationDisplayMode;
+  showProfitLine: boolean;
+  showMaterialDetails: boolean;
+  showCostPerSqm: boolean;
+}
+
 export interface QuotationMeta {
   quotationNumber: string;
   issueDate: string;
@@ -368,6 +377,7 @@ export interface QuotationMeta {
   warrantyTerms: string;
   notes: string;
   companyLogo?: string;
+  displayOptions?: QuotationDisplayOptions;
 }
 
 export type ProjectStatus = 'draft' | 'quotation' | 'construction' | 'completed';

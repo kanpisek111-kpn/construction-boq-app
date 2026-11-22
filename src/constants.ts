@@ -1,4 +1,4 @@
-import { ConstructionCategory, BOQItem, AluminumItemPreset, TileItemPreset, RoomDoorPreset, ExternalWorksPreset, QuotationMeta, DecorationItemPreset, ElectricalCircuitConfig, WireCrossSection, WireType, PaymentMilestone, MilestoneTemplate, SanitaryFixturePreset } from './types';
+import { ConstructionCategory, BOQItem, AluminumItemPreset, TileItemPreset, RoomDoorPreset, ExternalWorksPreset, QuotationMeta, QuotationDisplayOptions, DecorationItemPreset, ElectricalCircuitConfig, WireCrossSection, WireType, PaymentMilestone, MilestoneTemplate, SanitaryFixturePreset } from './types';
 
 export const CATEGORY_LABELS: Record<ConstructionCategory, { title: string; icon: string }> = {
   preparation: { title: '1. งานเตรียมพื้นที่ & ฐานราก/เสาเข็ม', icon: 'foundation' },
@@ -659,6 +659,13 @@ export function formatMilestonesToPaymentTerms(milestones: PaymentMilestone[], g
   }).join('\n');
 }
 
+export const DEFAULT_DISPLAY_OPTIONS: QuotationDisplayOptions = {
+  mode: 'client_summary',
+  showProfitLine: true,
+  showMaterialDetails: true,
+  showCostPerSqm: true,
+};
+
 // ค่าเริ่มต้นสำหรับเอกสารใบเสนอราคา
 export const DEFAULT_QUOTATION_META: QuotationMeta = {
   quotationNumber: `QT-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 900) + 100)}`,
@@ -672,7 +679,8 @@ export const DEFAULT_QUOTATION_META: QuotationMeta = {
   contractorTaxId: '0-1035-64012-34-5',
   paymentTerms: 'งวดที่ 1 (20%): ทำสัญญา วางผัง ฐานราก และเสาเข็ม\nงวดที่ 2 (30%): โครงสร้าง คสล. เสา-คาน-พื้น และโครงหลังคามุงเสร็จ\nงวดที่ 3 (30%): ก่อผนัง ฉาบปูน ฝ้าเพดาน ปูกระเบื้อง ท่อสายไฟและประปา\nงวดที่ 4 (20%): ทาสี สุขภัณฑ์ ติดตั้งดวงโคม เก็บรายละเอียดส่งมอบ',
   warrantyTerms: 'รับประกันโครงสร้างอาคาร 5 ปี • รับประกันงานสถาปัตยกรรมและการรั่วซึม 1 ปี • รับประกันระบบไฟฟ้า 1 ปี',
-  notes: 'ราคานี้รวมค่าแรง ค่าวัสดุ ขนส่ง และภาษีแล้ว ไม่รวมค่าธรรมเนียมขออนุญาตขอมิเตอร์น้ำ-ไฟ'
+  notes: 'ราคานี้รวมค่าแรง ค่าวัสดุ ขนส่ง และภาษีแล้ว ไม่รวมค่าธรรมเนียมขออนุญาตขอมิเตอร์น้ำ-ไฟ',
+  displayOptions: DEFAULT_DISPLAY_OPTIONS
 };
 
 // 🏛️ แคตตาล็อกงานตกแต่งภายในและภายนอก
