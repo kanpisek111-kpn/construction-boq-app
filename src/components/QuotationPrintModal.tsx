@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { BOQItem, ConstructionCategory, QuotationMeta, PaymentMilestone, QuotationDisplayOptions, QuotationDisplayMode } from '../types';
 import { CATEGORY_LABELS, formatMilestonesToPaymentTerms, DEFAULT_DISPLAY_OPTIONS } from '../constants';
 import { exportBOQToExcel } from '../services/excelExporter';
@@ -72,6 +72,67 @@ export function numberToThaiBahtText(amount: number): string {
   return (isNegative ? 'ลบ' : '') + text;
 }
 
+/**
+ * ปันส่วนยอดเงินเป้าหมาย (targetTotal) ให้แต่ละรายการตามสัดส่วน (Hare-Niemeyer / Largest-Remainder method)
+ * รับประกันว่าผลรวมของยอดที่ปันส่วนทั้งหมดจะเท่ากับ targetTotal เสมอแบบ 100% (ไม่มีเศษบาทเกินหรือขาดแม้แต่ 1 บาท)
+ */
+export function allocateRoundedAmounts(rawAmounts: number[], targetTotal: number): number[] {
+  if (!rawAmounts || rawAmounts.length === 0) return [];
+  if (rawAmounts.length === 1) return [targetTotal];
+
+  const safeRaw = rawAmounts.map(v => Math.max(0, isNaN(v) ? 0 : v));
+  const totalRaw = safeRaw.reduce((sum, val) => sum + val, 0);
+
+  if (totalRaw <= 0) {
+    const count = safeRaw.length;
+    const base = Math.floor(targetTotal / count);
+    const rem = targetTotal - (base * count);
+    return safeRaw.map((_, i) => base + (i < rem ? 1 : 0));
+  }
+
+  const items = safeRaw.map((raw, idx) => {
+    const exact = (raw / totalRaw) * targetTotal;
+    const floor = Math.floor(exact);
+    const remainder = exact - floor;
+    return { idx, floor, remainder };
+  });
+
+  const floorSum = items.reduce((sum, item) => sum + item.floor, 0);
+  const diff = Math.max(0, Math.min(items.length, targetTotal - floorSum));
+
+  items.sort((a, b) => b.remainder - a.remainder);
+  for (let i = 0; i < diff; i++) {
+    items[i].floor += 1;
+  }
+
+  items.sort((a, b) => a.idx - b.idx);
+  return items.map(item => item.floor);
+}
+
+interface ProcessedItem {
+  id: string;
+  name: string;
+  spec?: string;
+  quantity: number;
+  unit: string;
+  materialUnitPrice: number;
+  laborUnitPrice: number;
+  wastePercent: number;
+  allocatedMat: number;
+  allocatedLab: number;
+  allocatedTotal: number;
+}
+
+interface ProcessedCategory {
+  catKey: ConstructionCategory;
+  catNumber: number;
+  title: string;
+  items: ProcessedItem[];
+  allocatedMat: number;
+  allocatedLab: number;
+  allocatedTotal: number;
+}
+
 interface QuotationPrintModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -137,6 +198,82 @@ export const QuotationPrintModal: React.FC<QuotationPrintModalProps> = ({
   const summary = computeBOQSummary(items, overheadPercent, vatPercent);
   const costPerSqm = houseAreaSqm > 0 ? Math.round(summary.grandTotal / houseAreaSqm) : 0;
   const grandTotalThaiText = numberToThaiBahtText(summary.grandTotal);
+
+  const subtotalBeforeVat = summary.grandTotal - summary.vatAmount;
+  const rowsTargetTotal = displayOptions.showProfitLine ? summary.directCost : subtotalBeforeVat;
+  const displayedProfit = Math.max(0, subtotalBeforeVat - summary.directCost);
+
+  const processedCategories: ProcessedCategory[] = useMemo(() => {
+    const categoriesList = Object.keys(CATEGORY_LABELS) as ConstructionCategory[];
+    const activeCats = categoriesList
+      .map(catKey => {
+        const catItems = items.filter(i => i.category === catKey);
+        const itemsWithRaw = catItems.map(item => {
+          const rawMat = item.quantity * item.materialUnitPrice * (1 + (item.wastePercent || 0) / 100);
+          const rawLab = item.quantity * item.laborUnitPrice;
+          const rawTotal = rawMat + rawLab;
+          return { item, rawMat, rawLab, rawTotal };
+        });
+        const rawCatTotal = itemsWithRaw.reduce((sum, i) => sum + i.rawTotal, 0);
+        return {
+          catKey,
+          title: CATEGORY_LABELS[catKey]?.title || catKey,
+          itemsWithRaw,
+          rawCatTotal
+        };
+      })
+      .filter(cat => cat.itemsWithRaw.length > 0);
+
+    if (activeCats.length === 0) return [];
+
+    const catAllocatedTotals = allocateRoundedAmounts(
+      activeCats.map(c => c.rawCatTotal),
+      rowsTargetTotal
+    );
+
+    return activeCats.map((cat, catIdx) => {
+      const catAllocatedTotal = catAllocatedTotals[catIdx];
+      const itemAllocatedTotals = allocateRoundedAmounts(
+        cat.itemsWithRaw.map(i => i.rawTotal),
+        catAllocatedTotal
+      );
+
+      const processedItems: ProcessedItem[] = cat.itemsWithRaw.map((itemRaw, itemIdx) => {
+        const itemAllocatedTotal = itemAllocatedTotals[itemIdx];
+        const [allocatedMat, allocatedLab] = allocateRoundedAmounts(
+          [itemRaw.rawMat, itemRaw.rawLab],
+          itemAllocatedTotal
+        );
+
+        return {
+          id: itemRaw.item.id,
+          name: itemRaw.item.name,
+          spec: itemRaw.item.spec,
+          quantity: itemRaw.item.quantity,
+          unit: itemRaw.item.unit,
+          materialUnitPrice: itemRaw.item.materialUnitPrice,
+          laborUnitPrice: itemRaw.item.laborUnitPrice,
+          wastePercent: itemRaw.item.wastePercent,
+          allocatedMat,
+          allocatedLab,
+          allocatedTotal: itemAllocatedTotal
+        };
+      });
+
+      const catAllocatedMat = processedItems.reduce((sum, i) => sum + i.allocatedMat, 0);
+      const catAllocatedLab = processedItems.reduce((sum, i) => sum + i.allocatedLab, 0);
+
+      return {
+        catKey: cat.catKey,
+        catNumber: catIdx + 1,
+        title: cat.title,
+        items: processedItems,
+        allocatedMat: catAllocatedMat,
+        allocatedLab: catAllocatedLab,
+        allocatedTotal: catAllocatedTotal
+      };
+    });
+  }, [items, rowsTargetTotal]);
 
   // Auto-format payment terms from active project milestones if available
   const autoMilestonesText = milestones && milestones.length > 0
@@ -323,9 +460,6 @@ export const QuotationPrintModal: React.FC<QuotationPrintModalProps> = ({
   };
 
   if (!isOpen) return null;
-
-  // Group items by category for professional layout
-  const categories: ConstructionCategory[] = Object.keys(CATEGORY_LABELS) as ConstructionCategory[];
 
   return (
     <div id="quotation-print-modal-root" className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in overflow-y-auto">
@@ -807,14 +941,7 @@ export const QuotationPrintModal: React.FC<QuotationPrintModalProps> = ({
                     )}
                   </thead>
                   <tbody>
-                    {categories.map((catKey, catIdx) => {
-                      const catItems = items.filter(i => i.category === catKey);
-                      if (catItems.length === 0) return null;
-                      const catMat = catItems.reduce((acc, cur) => acc + (cur.quantity * cur.materialUnitPrice * (1 + cur.wastePercent / 100)), 0);
-                      const catLab = catItems.reduce((acc, cur) => acc + (cur.quantity * cur.laborUnitPrice), 0);
-                      const catTotal = catMat + catLab;
-                      const catTitle = CATEGORY_LABELS[catKey]?.title || catKey;
-
+                    {processedCategories.map((cat) => {
                       // ==========================================
                       // MODE: client_summary (แบบย่อส่งลูกค้า 3 คอลัมน์)
                       // ==========================================
@@ -822,14 +949,14 @@ export const QuotationPrintModal: React.FC<QuotationPrintModalProps> = ({
                         // หากปิด showMaterialDetails จะแสดงเฉพาะแถวสรุปแต่ละหมวด
                         if (!displayOptions.showMaterialDetails) {
                           return (
-                            <tr key={catKey} className="border-b border-slate-200 hover:bg-slate-50 break-inside-avoid">
-                              <td className="py-2.5 px-2 text-center font-bold text-slate-700">{catIdx + 1}</td>
+                            <tr key={cat.catKey} className="border-b border-slate-200 hover:bg-slate-50 break-inside-avoid">
+                              <td className="py-2.5 px-2 text-center font-bold text-slate-700">{cat.catNumber}</td>
                               <td className="py-2.5 px-2">
-                                <div className="font-bold text-slate-900 text-xs">{catTitle}</div>
-                                <div className="text-[10px] text-slate-500 font-normal">ประกอบด้วย {catItems.length} รายการมาตรฐาน</div>
+                                <div className="font-bold text-slate-900 text-xs">{cat.title}</div>
+                                <div className="text-[10px] text-slate-500 font-normal">ประกอบด้วย {cat.items.length} รายการมาตรฐาน</div>
                               </td>
                               <td className="py-2.5 px-2 text-right font-mono font-bold text-slate-950 text-xs">
-                                ฿{Math.round(catTotal).toLocaleString()}
+                                ฿{cat.allocatedTotal.toLocaleString()}
                               </td>
                             </tr>
                           );
@@ -837,36 +964,30 @@ export const QuotationPrintModal: React.FC<QuotationPrintModalProps> = ({
 
                         // หากเปิด showMaterialDetails ในโหมด client_summary จะแสดงรายการย่อยในตาราง 3 คอลัมน์
                         return (
-                          <React.Fragment key={catKey}>
+                          <React.Fragment key={cat.catKey}>
                             <tr className="bg-slate-100/80 border-t border-slate-300 font-bold text-slate-900 break-inside-avoid">
-                              <td className="py-1.5 px-2 text-center font-bold">{catIdx + 1}</td>
+                              <td className="py-1.5 px-2 text-center font-bold">{cat.catNumber}</td>
                               <td className="py-1.5 px-2 text-slate-900 font-bold">
-                                {catTitle} ({catItems.length} รายการ)
+                                {cat.title} ({cat.items.length} รายการ)
                               </td>
                               <td className="py-1.5 px-2 text-right font-mono font-bold text-slate-950">
-                                ฿{Math.round(catTotal).toLocaleString()}
+                                ฿{cat.allocatedTotal.toLocaleString()}
                               </td>
                             </tr>
-                            {catItems.map((item, itemIdx) => {
-                              const mat = item.quantity * item.materialUnitPrice * (1 + item.wastePercent / 100);
-                              const lab = item.quantity * item.laborUnitPrice;
-                              const line = mat + lab;
-
-                              return (
-                                <tr key={item.id} className="border-b border-slate-200 hover:bg-slate-50/50 break-inside-avoid">
-                                  <td className="py-1 px-2 text-center text-slate-400 font-mono text-[9px]">
-                                    {catIdx + 1}.{itemIdx + 1}
-                                  </td>
-                                  <td className="py-1 px-2">
-                                    <div className="font-medium text-slate-900">{item.name}</div>
-                                    {item.spec && <div className="text-[9.5px] text-slate-500">{item.spec}</div>}
-                                  </td>
-                                  <td className="py-1 px-2 text-right font-mono text-slate-800">
-                                    ฿{Math.round(line).toLocaleString()}
-                                  </td>
-                                </tr>
-                              );
-                            })}
+                            {cat.items.map((item, itemIdx) => (
+                              <tr key={item.id} className="border-b border-slate-200 hover:bg-slate-50/50 break-inside-avoid">
+                                <td className="py-1 px-2 text-center text-slate-400 font-mono text-[9px]">
+                                  {cat.catNumber}.{itemIdx + 1}
+                                </td>
+                                <td className="py-1 px-2">
+                                  <div className="font-medium text-slate-900">{item.name}</div>
+                                  {item.spec && <div className="text-[9.5px] text-slate-500">{item.spec}</div>}
+                                </td>
+                                <td className="py-1 px-2 text-right font-mono text-slate-800">
+                                  ฿{item.allocatedTotal.toLocaleString()}
+                                </td>
+                              </tr>
+                            ))}
                           </React.Fragment>
                         );
                       }
@@ -875,50 +996,44 @@ export const QuotationPrintModal: React.FC<QuotationPrintModalProps> = ({
                       // MODE: detailed_boq (แจกแจงละเอียดเต็มรูปแบบ)
                       // ==========================================
                       return (
-                        <React.Fragment key={catKey}>
+                        <React.Fragment key={cat.catKey}>
                           {/* Category Header Row */}
                           <tr className="bg-slate-100/70 border-t border-slate-300 font-bold text-slate-900 break-inside-avoid">
-                            <td className="py-1 px-2 text-center">{catIdx + 1}</td>
+                            <td className="py-1 px-2 text-center">{cat.catNumber}</td>
                             <td colSpan={displayOptions.showMaterialDetails ? 5 : 3} className="py-1 px-2 text-slate-800">
-                              {catTitle} ({catItems.length} รายการ)
+                              {cat.title} ({cat.items.length} รายการ)
                             </td>
                             <td className="py-1 px-2 text-right font-mono">
-                              ฿{Math.round(catTotal).toLocaleString()}
+                              ฿{cat.allocatedTotal.toLocaleString()}
                             </td>
                           </tr>
                           {/* Individual items under this category */}
-                          {catItems.map((item, itemIdx) => {
-                            const mat = item.quantity * item.materialUnitPrice * (1 + item.wastePercent / 100);
-                            const lab = item.quantity * item.laborUnitPrice;
-                            const line = mat + lab;
-
-                            return (
-                              <tr key={item.id} className="border-b border-slate-200 hover:bg-slate-50/50 break-inside-avoid">
-                                <td className="py-1 px-2 text-center text-slate-400 font-mono text-[9px]">
-                                  {catIdx + 1}.{itemIdx + 1}
-                                </td>
-                                <td className="py-1 px-2">
-                                  <div className="font-medium text-slate-900">{item.name}</div>
-                                  {item.spec && <div className="text-[9.5px] text-slate-500">{item.spec}</div>}
-                                </td>
-                                <td className="py-1 px-2 text-right font-mono">{item.quantity}</td>
-                                <td className="py-1 px-2 text-center text-slate-600">{item.unit}</td>
-                                {displayOptions.showMaterialDetails && (
-                                  <>
-                                    <td className="py-1 px-2 text-right font-mono text-slate-700">
-                                      ฿{Math.round(mat).toLocaleString()}
-                                    </td>
-                                    <td className="py-1 px-2 text-right font-mono text-slate-700">
-                                      ฿{Math.round(lab).toLocaleString()}
-                                    </td>
-                                  </>
-                                )}
-                                <td className="py-1 px-2 text-right font-mono font-bold text-slate-900">
-                                  ฿{Math.round(line).toLocaleString()}
-                                </td>
-                              </tr>
-                            );
-                          })}
+                          {cat.items.map((item, itemIdx) => (
+                            <tr key={item.id} className="border-b border-slate-200 hover:bg-slate-50/50 break-inside-avoid">
+                              <td className="py-1 px-2 text-center text-slate-400 font-mono text-[9px]">
+                                {cat.catNumber}.{itemIdx + 1}
+                              </td>
+                              <td className="py-1 px-2">
+                                <div className="font-medium text-slate-900">{item.name}</div>
+                                {item.spec && <div className="text-[9.5px] text-slate-500">{item.spec}</div>}
+                              </td>
+                              <td className="py-1 px-2 text-right font-mono">{item.quantity}</td>
+                              <td className="py-1 px-2 text-center text-slate-600">{item.unit}</td>
+                              {displayOptions.showMaterialDetails && (
+                                <>
+                                  <td className="py-1 px-2 text-right font-mono text-slate-700">
+                                    ฿{item.allocatedMat.toLocaleString()}
+                                  </td>
+                                  <td className="py-1 px-2 text-right font-mono text-slate-700">
+                                    ฿{item.allocatedLab.toLocaleString()}
+                                  </td>
+                                </>
+                              )}
+                              <td className="py-1 px-2 text-right font-mono font-bold text-slate-900">
+                                ฿{item.allocatedTotal.toLocaleString()}
+                              </td>
+                            </tr>
+                          ))}
                         </React.Fragment>
                       );
                     })}
@@ -960,13 +1075,13 @@ export const QuotationPrintModal: React.FC<QuotationPrintModalProps> = ({
                           {displayOptions.showProfitLine ? 'รวมค่างานก่อสร้าง (Total Construction Cost):' : 'รวมค่างานก่อสร้าง (Total Construction Value):'}
                         </span>
                         <span className="font-mono font-semibold">
-                          ฿{(displayOptions.showProfitLine ? summary.directCost : (summary.directCost + summary.overheadCost)).toLocaleString()}
+                          ฿{(displayOptions.showProfitLine ? summary.directCost : subtotalBeforeVat).toLocaleString()}
                         </span>
                       </div>
                       {displayOptions.showProfitLine && (
                         <div className="flex justify-between py-1 border-b border-slate-200 text-slate-600">
                           <span>ค่าดำเนินการและกำไร ({overheadPercent}%):</span>
-                          <span className="font-mono">฿{summary.overheadCost.toLocaleString()}</span>
+                          <span className="font-mono">฿{displayedProfit.toLocaleString()}</span>
                         </div>
                       )}
                     </>
@@ -975,12 +1090,20 @@ export const QuotationPrintModal: React.FC<QuotationPrintModalProps> = ({
                       {displayOptions.showMaterialDetails && (
                         <>
                           <div className="flex justify-between py-1 border-b border-slate-200">
-                            <span className="text-slate-600">รวมค่าวัสดุก่อสร้าง (Total Material):</span>
-                            <span className="font-mono font-semibold">฿{summary.totalMaterial.toLocaleString()}</span>
+                            <span className="text-slate-600">
+                              {displayOptions.showProfitLine ? 'รวมค่าวัสดุก่อสร้าง (Total Material):' : 'รวมค่าวัสดุก่อสร้าง (Allocated Material):'}
+                            </span>
+                            <span className="font-mono font-semibold">
+                              ฿{(displayOptions.showProfitLine ? summary.totalMaterial : processedCategories.reduce((sum, c) => sum + c.allocatedMat, 0)).toLocaleString()}
+                            </span>
                           </div>
                           <div className="flex justify-between py-1 border-b border-slate-200">
-                            <span className="text-slate-600">รวมค่าแรงงานช่าง (Total Labor):</span>
-                            <span className="font-mono font-semibold">฿{summary.totalLabor.toLocaleString()}</span>
+                            <span className="text-slate-600">
+                              {displayOptions.showProfitLine ? 'รวมค่าแรงงานช่าง (Total Labor):' : 'รวมค่าแรงงานช่าง (Allocated Labor):'}
+                            </span>
+                            <span className="font-mono font-semibold">
+                              ฿{(displayOptions.showProfitLine ? summary.totalLabor : processedCategories.reduce((sum, c) => sum + c.allocatedLab, 0)).toLocaleString()}
+                            </span>
                           </div>
                         </>
                       )}
@@ -993,14 +1116,14 @@ export const QuotationPrintModal: React.FC<QuotationPrintModalProps> = ({
                           </div>
                           <div className="flex justify-between py-1 border-b border-slate-200 text-slate-600">
                             <span>ค่าดำเนินการและกำไร ({overheadPercent}%):</span>
-                            <span className="font-mono">฿{summary.overheadCost.toLocaleString()}</span>
+                            <span className="font-mono">฿{displayedProfit.toLocaleString()}</span>
                           </div>
                         </>
                       ) : (
                         <div className="flex justify-between py-1 border-b border-slate-200">
                           <span className="text-slate-800 font-bold">รวมมูลค่างานก่อสร้าง (Total Construction Value):</span>
                           <span className="font-mono font-bold text-slate-900">
-                            ฿{(summary.directCost + summary.overheadCost).toLocaleString()}
+                            ฿{subtotalBeforeVat.toLocaleString()}
                           </span>
                         </div>
                       )}
