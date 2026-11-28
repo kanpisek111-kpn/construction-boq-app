@@ -1493,32 +1493,35 @@ export function calculateMasonryMaterials(params: MasonryCalcParams): MasonryCal
   let plasterLaborPerSqm = 90;
 
   if (brickType === 'aac_block') {
+    const isThick10cm = wallThicknessCm >= 10;
     brickRate = 8.8;
-    brickUnitPrice = 24;
-    mortarBagsPerSqm = 0.045;
+    brickUnitPrice = isThick10cm ? 32 : 24;
+    mortarBagsPerSqm = isThick10cm ? 0.055 : 0.045;
     sandPerSqm = 0;
-    brickLaborPerSqm = 95;
+    brickLaborPerSqm = isThick10cm ? 105 : 95;
     plasterLaborPerSqm = 90;
   } else if (brickType === 'red_brick') {
-    brickRate = 135;
+    const isDoubleWall = wallThicknessCm >= 14;
+    brickRate = isDoubleWall ? 265 : 135;
     brickUnitPrice = 1.35;
-    mortarBagsPerSqm = 0.32;
-    sandPerSqm = 0.045;
-    brickLaborPerSqm = 120;
+    mortarBagsPerSqm = isDoubleWall ? 0.62 : 0.32;
+    sandPerSqm = isDoubleWall ? 0.085 : 0.045;
+    brickLaborPerSqm = isDoubleWall ? 210 : 120;
     plasterLaborPerSqm = 95;
   } else if (brickType === 'concrete_block') {
+    const isThick9cm = wallThicknessCm >= 9;
     brickRate = 13.2;
-    brickUnitPrice = 7.5;
-    mortarBagsPerSqm = 0.18;
-    sandPerSqm = 0.032;
-    brickLaborPerSqm = 85;
+    brickUnitPrice = isThick9cm ? 9.5 : 7.5;
+    mortarBagsPerSqm = isThick9cm ? 0.22 : 0.18;
+    sandPerSqm = isThick9cm ? 0.038 : 0.032;
+    brickLaborPerSqm = isThick9cm ? 95 : 85;
     plasterLaborPerSqm = 90;
   }
 
   const brickCount = Math.ceil(wallAreaSqm * brickRate);
   const mortarBags50kg = Math.ceil(wallAreaSqm * mortarBagsPerSqm);
-  const totalPlasterAreaSqm = wallAreaSqm * plasterSides;
-  const plasterBags50kg = Math.ceil(totalPlasterAreaSqm / 2.6);
+  const totalPlasterAreaSqm = wallAreaSqm * Math.max(0, plasterSides);
+  const plasterBags50kg = totalPlasterAreaSqm > 0 ? Math.ceil(totalPlasterAreaSqm / 2.6) : 0;
   const masonrySandCuM = Math.round(wallAreaSqm * sandPerSqm * 10) / 10;
 
   const openingLintelM = openingsCount * (4.0 + (2 * (avgOpeningWidthM + 0.40)));

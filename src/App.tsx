@@ -1123,6 +1123,14 @@ export default function App() {
     setTimeout(() => setSaveStatusToast(''), 3000);
   };
 
+  const handleApplyMasonryItems = (newItems: BOQItem[], mode: 'replace' | 'append' = 'replace') => {
+    if (mode === 'append') {
+      handleMergeNewItems(newItems);
+    } else {
+      handleApplyCategoryItems(newItems, 'masonry_wall');
+    }
+  };
+
   const handleApplyStairItems = (newItems: BOQItem[]) => {
     const finalItems = priceBookConfig.autoApplyToNewItems 
       ? applyPriceBookToItems(newItems, priceBookConfig) 
@@ -2731,8 +2739,9 @@ export default function App() {
       <MasonryEstimatorModal
         isOpen={isMasonryModalOpen}
         onClose={() => setIsMasonryModalOpen(false)}
-        onApplyToBOQ={(newItems) => handleApplyCategoryItems(newItems, 'masonry_wall')}
+        onApplyToBOQ={handleApplyMasonryItems}
         currentHouseAreaSqm={houseAreaSqm}
+        existingMasonryItems={items.filter(item => item.category === 'masonry_wall')}
       />
       {/* Room Door Selector Modal */}
       <RoomDoorSelectorModal

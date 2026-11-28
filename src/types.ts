@@ -515,7 +515,13 @@ export interface MasonryCalcParams {
   openingsCount: number;
   avgOpeningWidthM: number;
   wallThicknessCm: number;
-  plasterSides: 1 | 2;
+  plasterSides: 0 | 1 | 2;
+}
+
+export interface MasonryWallZone extends MasonryCalcParams {
+  id: string;
+  zoneName: string;
+  includeLintel: boolean;
 }
 
 export interface MasonryCalcResult {
