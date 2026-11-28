@@ -516,6 +516,7 @@ export interface MasonryCalcParams {
   avgOpeningWidthM: number;
   wallThicknessCm: number;
   plasterSides: 0 | 1 | 2;
+  plasterType?: 'site_mix' | 'premixed';
 }
 
 export interface MasonryWallZone extends MasonryCalcParams {

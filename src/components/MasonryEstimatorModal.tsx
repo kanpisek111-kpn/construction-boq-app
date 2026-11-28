@@ -177,7 +177,8 @@ export const MasonryEstimatorModal: React.FC<MasonryEstimatorModalProps> = ({
         openingsCount: zone.includeLintel ? Math.max(0, zone.openingsCount) : 0,
         avgOpeningWidthM: zone.avgOpeningWidthM,
         wallThicknessCm: zone.wallThicknessCm,
-        plasterSides: zone.plasterSides
+        plasterSides: zone.plasterSides,
+        plasterType: zone.plasterType || 'site_mix'
       });
       if (!zone.includeLintel) {
         return {
@@ -416,11 +417,16 @@ export const MasonryEstimatorModal: React.FC<MasonryEstimatorModalProps> = ({
 
         if (zone.plasterSides > 0) {
           const plasterArea = Math.round(area * zone.plasterSides * 10) / 10;
+          const isPremixed = zone.plasterType === 'premixed';
           newItems.push({
             id: `wall-plaster-${idx}-${timestamp}`,
             category: 'masonry_wall',
-            name: `งานฉาบปูนผิวผนัง (${zone.plasterSides === 2 ? 'ฉาบ 2 ด้าน' : 'ฉาบด้านเดียว'})${zoneSuffix}`,
-            spec: `พื้นที่ฉาบ ${plasterArea} ตร.ม. (ปูนฉาบ ${calc.plasterBags50kg} กระสอบ + ทรายละเอียด ${calc.plasterFineSandCuM || 0} คิว หนา 1.5 ซม.)`,
+            name: isPremixed
+              ? `งานฉาบปูนสำเร็จรูป มอร์ตาร์ (${zone.plasterSides === 2 ? 'ฉาบ 2 ด้าน' : 'ฉาบด้านเดียว'})${zoneSuffix}`
+              : `งานฉาบปูนผิวผนัง (${zone.plasterSides === 2 ? 'ฉาบ 2 ด้าน' : 'ฉาบด้านเดียว'})${zoneSuffix}`,
+            spec: isPremixed
+              ? `พื้นที่ฉาบ ${plasterArea} ตร.ม. (ปูนฉาบสำเร็จรูป ${calc.plasterBags50kg} กระสอบ ไม่ต้องใช้ทราย หนา 1.5 ซม.)`
+              : `พื้นที่ฉาบ ${plasterArea} ตร.ม. (ปูนฉาบ ${calc.plasterBags50kg} กระสอบ + ทรายละเอียด ${calc.plasterFineSandCuM || 0} คิว หนา 1.5 ซม.)`,
             quantity: plasterArea,
             unit: 'ตร.ม.',
             materialUnitPrice: 90,
@@ -449,11 +455,14 @@ export const MasonryEstimatorModal: React.FC<MasonryEstimatorModalProps> = ({
       }
 
       if (totals.totalPlasterAreaSqm > 0) {
+        const allPremixed = totals.totalPlasterFineSandCuM === 0;
         newItems.push({
           id: `wall-plaster-all-${timestamp}`,
           category: 'masonry_wall',
-          name: `งานฉาบปูนผิวผนัง รวมทุกโซน`,
-          spec: `พื้นที่ฉาบรวม ${totals.totalPlasterAreaSqm} ตร.ม. (ปูนฉาบ ${totals.totalPlasterBags50kg} กระสอบ + ทรายละเอียด ${totals.totalPlasterFineSandCuM} คิว หนา 1.5 ซม.)`,
+          name: allPremixed ? `งานฉาบปูนสำเร็จรูป มอร์ตาร์ รวมทุกโซน` : `งานฉาบปูนผิวผนัง รวมทุกโซน`,
+          spec: allPremixed
+            ? `พื้นที่ฉาบรวม ${totals.totalPlasterAreaSqm} ตร.ม. (ปูนฉาบสำเร็จรูป ${totals.totalPlasterBags50kg} กระสอบ ไม่ต้องใช้ทราย หนา 1.5 ซม.)`
+            : `พื้นที่ฉาบรวม ${totals.totalPlasterAreaSqm} ตร.ม. (ปูนฉาบ ${totals.totalPlasterBags50kg} กระสอบ + ทรายละเอียด ${totals.totalPlasterFineSandCuM} คิว หนา 1.5 ซม.)`,
           quantity: totals.totalPlasterAreaSqm,
           unit: 'ตร.ม.',
           materialUnitPrice: 90,
@@ -743,6 +752,32 @@ export const MasonryEstimatorModal: React.FC<MasonryEstimatorModalProps> = ({
                     </button>
                   ))}
                 </div>
+                {activeZone.plasterSides > 0 && (
+                  <div className="grid grid-cols-2 gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => updateActiveZone({ plasterType: 'site_mix' })}
+                      className={`py-1.5 px-2 text-[11px] rounded-lg border transition ${
+                        (activeZone.plasterType || 'site_mix') === 'site_mix'
+                          ? 'bg-emerald-500/20 border-emerald-400 text-emerald-300 font-semibold'
+                          : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      ปูนฉาบ + ทรายละเอียด (คิว)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateActiveZone({ plasterType: 'premixed' })}
+                      className={`py-1.5 px-2 text-[11px] rounded-lg border transition ${
+                        activeZone.plasterType === 'premixed'
+                          ? 'bg-emerald-500/20 border-emerald-400 text-emerald-300 font-semibold'
+                          : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      ปูนสำเร็จรูป (มอร์ตาร์)
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -835,7 +870,15 @@ export const MasonryEstimatorModal: React.FC<MasonryEstimatorModalProps> = ({
                           <div>อิฐ: <span className="text-slate-200 font-mono font-semibold">{calc.brickCount.toLocaleString()}</span> ก้อน</div>
                           <div>ปูนก่อ: <span className="text-orange-300 font-mono font-semibold">{calc.mortarBags50kg}</span> กระสอบ{calc.masonrySandCuM > 0 && ` / ทรายหยาบ ${calc.masonrySandCuM} คิว`}</div>
                           <div>เสาเอ็น: <span className="text-cyan-300 font-mono font-semibold">{zone.includeLintel ? `${calc.lintelCementBags50kg || 0} กส. / ทรายหยาบ ${calc.lintelCoarseSandCuM || 0} คิว` : 'ไม่รวม'}</span></div>
-                          <div>ฉาบ: <span className="text-emerald-300 font-mono font-semibold">{zone.plasterSides === 0 ? 'ไม่ฉาบ' : `${calc.plasterBags50kg} กส. / ทรายละเอียด ${calc.plasterFineSandCuM || 0} คิว`}</span></div>
+                          <div>
+                            ฉาบ: <span className="text-emerald-300 font-mono font-semibold">
+                              {zone.plasterSides === 0
+                                ? 'ไม่ฉาบ'
+                                : zone.plasterType === 'premixed'
+                                ? `${calc.plasterBags50kg} กส. (มอร์ตาร์)`
+                                : `${calc.plasterBags50kg} กส. / ทรายละเอียด ${calc.plasterFineSandCuM || 0} คิว`}
+                            </span>
+                          </div>
                         </div>
                       </div>
                     );

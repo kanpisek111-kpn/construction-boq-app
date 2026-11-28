@@ -590,6 +590,7 @@ export function generateSiteMaterialsProcurementList(
 
     // 🌟 หมวดงานผนังก่อฉาบ & เสาเอ็น-คานทับหลัง: แยกสั่งปูนเป็นกระสอบ (ก่อ / เททับหลัง / ฉาบ), ทรายหยาบ (ก่อ + ทับหลัง) เป็นคิว, และทรายละเอียด (ฉาบ) เป็นคิว
     if (item.category === 'masonry_wall') {
+      if (exactOrderQty <= 0) return;
       const priceRatio = (item.baseMaterialUnitPrice && item.baseMaterialUnitPrice > 0 && item.materialUnitPrice > 0)
         ? (item.materialUnitPrice / item.baseMaterialUnitPrice)
         : 1.0;
@@ -682,10 +683,39 @@ export function generateSiteMaterialsProcurementList(
         return;
       }
 
-      // 2) งานฉาบปูนผนัง (แยกปูนฉาบเป็นกระสอบ + ทรายละเอียดสำหรับฉาบเป็นคิว)
+      // 2) งานฉาบปูนผนัง (รองรับทั้งปูนฉาบผสมทรายละเอียดเป็นคิว และปูนฉาบสำเร็จรูปมอร์ตาร์)
       if (nameLower.includes('ฉาบ')) {
         const plasterOrderSqm = exactOrderQty;
         if (plasterOrderSqm <= 0) return;
+
+        const isPremixedPlaster =
+          nameLower.includes('สำเร็จรูป') ||
+          nameLower.includes('มอร์ตาร์') ||
+          specLower.includes('ไม่ต้องใช้ทราย');
+
+        if (isPremixedPlaster) {
+          const premixedBags = Math.max(1, Math.ceil(plasterOrderSqm / 2.6));
+          const estPremixedPrice = Math.round(125 * priceRatio);
+
+          materials.push({
+            id: `mat-proc-plaster-premixed-${item.id}-${index}`,
+            materialGroup: 'masonry_brick',
+            name: 'ปูนฉาบสำเร็จรูป (มอร์ตาร์ กระสอบ 50 กก.)',
+            spec: `${item.name} พื้นที่ ${item.quantity} ตร.ม. (เผื่อ ${wastePercent}% = ${Math.round(plasterOrderSqm)} ตร.ม. ~2.6 ตร.ม./กระสอบ ไม่ต้องผสมทราย)`,
+            netQuantity: Math.max(1, Math.ceil(item.quantity / 2.6)),
+            wastePercent,
+            orderQuantity: premixedBags,
+            unit: 'กระสอบ',
+            unitPriceEstimate: estPremixedPrice,
+            totalEstimatedCost: Math.round(premixedBags * estPremixedPrice),
+            priorityPhase,
+            milestoneNumber,
+            milestoneTitle,
+            boqCategory: item.category,
+            packageNote: 'ปูนฉาบสำเร็จรูป (เช่น เสือมอร์ตาร์ฉาบทั่วไป/ฉาบมวลเบา) ผสมน้ำฉาบได้ทันที ไม่ต้องสั่งทรายละเอียด'
+          });
+          return;
+        }
 
         const plasterBags = Math.max(1, Math.ceil(plasterOrderSqm / 5.5));
         const fineSandCuM = Math.max(0.1, Math.round(plasterOrderSqm * 0.018 * 100) / 100);
@@ -1855,8 +1885,14 @@ export function calculateMasonryMaterials(params: MasonryCalcParams): MasonryCal
   const brickCount = Math.ceil(wallAreaSqm * brickRate);
   const mortarBags50kg = Math.ceil(wallAreaSqm * mortarBagsPerSqm);
   const totalPlasterAreaSqm = wallAreaSqm * Math.max(0, plasterSides);
-  const plasterBags50kg = totalPlasterAreaSqm > 0 ? Math.ceil(totalPlasterAreaSqm / 5.5) : 0;
-  const plasterFineSandCuM = totalPlasterAreaSqm > 0 ? Math.round(totalPlasterAreaSqm * 0.018 * 100) / 100 : 0;
+  const isPremixedPlaster = params.plasterType === 'premixed';
+  // งานฉาบผสมทรายละเอียดหนา 1.5 ซม. (~5.5 ตร.ม./กระสอบ + ทรายละเอียด ~0.018 คิว/ตร.ม.) vs ปูนฉาบสำเร็จรูป (~2.6 ตร.ม./กระสอบ ไม่ใช้ทราย)
+  const plasterBags50kg = totalPlasterAreaSqm > 0
+    ? Math.ceil(totalPlasterAreaSqm / (isPremixedPlaster ? 2.6 : 5.5))
+    : 0;
+  const plasterFineSandCuM = (totalPlasterAreaSqm > 0 && !isPremixedPlaster)
+    ? Math.round(totalPlasterAreaSqm * 0.018 * 100) / 100
+    : 0;
   const masonrySandCuM = Math.round(wallAreaSqm * sandPerSqm * 100) / 100;
 
   const openingLintelM = openingsCount * (4.0 + (2 * (avgOpeningWidthM + 0.40)));
@@ -1876,7 +1912,9 @@ export function calculateMasonryMaterials(params: MasonryCalcParams): MasonryCal
 
   const estBrickCost = brickCount * brickUnitPrice;
   const estMortarCost = mortarBags50kg * 145;
-  const estPlasterCost = (plasterBags50kg * 138) + (plasterFineSandCuM * 480) + (totalPlasterAreaSqm * 18);
+  const estPlasterCost = isPremixedPlaster
+    ? (plasterBags50kg * 125) + (totalPlasterAreaSqm * 18)
+    : (plasterBags50kg * 138) + (plasterFineSandCuM * 480) + (totalPlasterAreaSqm * 18);
   const estSandCost = masonrySandCuM * 450;
   const estLintelConcCost = (lintelCementBags50kg * 155) + (lintelCoarseSandCuM * 450) + (lintelRockCuM * 520);
   const estLintelSteelCost = (lintelRebarKg * 29) + (wireMeshOrDowelQty * 12);
