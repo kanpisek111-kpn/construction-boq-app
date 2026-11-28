@@ -530,9 +530,13 @@ export interface MasonryCalcResult {
   brickUnit: string;
   mortarBags50kg: number;
   plasterBags50kg: number;
+  plasterFineSandCuM?: number;
   masonrySandCuM: number;
   lintelLengthM: number;
   lintelConcreteCuM: number;
+  lintelCementBags50kg?: number;
+  lintelCoarseSandCuM?: number;
+  lintelRockCuM?: number;
   lintelRebarKg: number;
   lintelRebarBars: number;
   wireMeshOrDowelQty: number;

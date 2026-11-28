@@ -588,6 +588,340 @@ export function generateSiteMaterialsProcurementList(
       }
     }
 
+    // 🌟 หมวดงานผนังก่อฉาบ & เสาเอ็น-คานทับหลัง: แยกสั่งปูนเป็นกระสอบ (ก่อ / เททับหลัง / ฉาบ), ทรายหยาบ (ก่อ + ทับหลัง) เป็นคิว, และทรายละเอียด (ฉาบ) เป็นคิว
+    if (item.category === 'masonry_wall') {
+      const priceRatio = (item.baseMaterialUnitPrice && item.baseMaterialUnitPrice > 0 && item.materialUnitPrice > 0)
+        ? (item.materialUnitPrice / item.baseMaterialUnitPrice)
+        : 1.0;
+
+      // 1) งานเสาเอ็น & คานทับหลัง คสล.
+      if (nameLower.includes('เสาเอ็น') || nameLower.includes('ทับหลัง')) {
+        const lintelOrderM = exactOrderQty;
+        const concreteCuM = Math.max(0.05, lintelOrderM * 0.01);
+        const lintelCementBags = Math.max(1, Math.ceil(concreteCuM * 7));
+        const lintelSandCuM = Math.max(0.05, Math.round(concreteCuM * 0.5 * 100) / 100);
+        const lintelRockCuM = Math.max(0.05, Math.round(concreteCuM * 0.85 * 100) / 100);
+        const rebarBars = Math.max(1, Math.ceil((lintelOrderM * 2) / 10));
+
+        const estBagPrice = Math.round(155 * priceRatio);
+        const estSandPrice = Math.round(450 * priceRatio);
+        const estRockPrice = Math.round(520 * priceRatio);
+        const estRebarPrice = Math.round(145 * priceRatio);
+
+        materials.push({
+          id: `mat-proc-lintel-cement-${item.id}-${index}`,
+          materialGroup: 'masonry_brick',
+          name: 'ปูนซีเมนต์สำหรับเทเสาเอ็น-คานทับหลัง คสล. (กระสอบ 50 กก.)',
+          spec: `จาก${item.name} ยาว ${item.quantity} ม. (คอนกรีต ~${(Math.round(concreteCuM * 100) / 100)} คิว ใช้ปูน ~7 กระสอบ/คิว)`,
+          netQuantity: Math.max(1, Math.round(item.quantity * 0.01 * 7)),
+          wastePercent,
+          orderQuantity: lintelCementBags,
+          unit: 'กระสอบ',
+          unitPriceEstimate: estBagPrice,
+          totalEstimatedCost: Math.round(lintelCementBags * estBagPrice),
+          priorityPhase,
+          milestoneNumber,
+          milestoneTitle,
+          boqCategory: item.category,
+          packageNote: 'ปูนซีเมนต์ปอร์ตแลนด์ผสมคอนกรีต (เช่น ตราเสือปอร์ตแลนด์/อินทรีแดง) สำหรับเทเสาเอ็น-ทับหลัง'
+        });
+
+        materials.push({
+          id: `mat-proc-lintel-sand-${item.id}-${index}`,
+          materialGroup: 'masonry_brick',
+          name: 'ทรายหยาบสำหรับงานก่ออิฐและเทเสาเอ็น-ทับหลัง',
+          spec: `ส่วนเทเสาเอ็น-ทับหลัง (${item.name} ยาว ${item.quantity} ม. ใช้ทรายหยาบ ~0.5 คิว/คิวคอนกรีต)`,
+          netQuantity: Math.round(item.quantity * 0.01 * 0.5 * 100) / 100,
+          wastePercent,
+          orderQuantity: lintelSandCuM,
+          unit: 'ลบ.ม. (คิว)',
+          unitPriceEstimate: estSandPrice,
+          totalEstimatedCost: Math.round(lintelSandCuM * estSandPrice),
+          priorityPhase,
+          milestoneNumber,
+          milestoneTitle,
+          boqCategory: item.category,
+          packageNote: 'สั่งเป็นทรายหยาบเม็ดคมสะอาด สำหรับงานเทเสาเอ็น-ทับหลัง และผสมปูนก่ออิฐ'
+        });
+
+        materials.push({
+          id: `mat-proc-lintel-rock-${item.id}-${index}`,
+          materialGroup: 'masonry_brick',
+          name: 'หินก่อสร้าง (หิน 3/4") สำหรับเทเสาเอ็น-ทับหลัง',
+          spec: `จาก${item.name} ยาว ${item.quantity} ม. (คอนกรีต ~${(Math.round(concreteCuM * 100) / 100)} คิว ใช้หิน ~0.85 คิว/คิวคอนกรีต)`,
+          netQuantity: Math.round(item.quantity * 0.01 * 0.85 * 100) / 100,
+          wastePercent,
+          orderQuantity: lintelRockCuM,
+          unit: 'ลบ.ม. (คิว)',
+          unitPriceEstimate: estRockPrice,
+          totalEstimatedCost: Math.round(lintelRockCuM * estRockPrice),
+          priorityPhase,
+          milestoneNumber,
+          milestoneTitle,
+          boqCategory: item.category,
+          packageNote: 'หินย่อยเบอร์ 3/4 นิ้ว (หินเกล็ดเล็กเหมาะสำหรับหล่อเสาเอ็น-คานทับหลังขนาด 10x10 ซม.)'
+        });
+
+        materials.push({
+          id: `mat-proc-lintel-rebar-${item.id}-${index}`,
+          materialGroup: 'steel_rebar',
+          name: 'เหล็กแกนเสาเอ็น-ทับหลัง (RB9 / DB12 ยาว 10 ม.)',
+          spec: `จาก${item.name} ยาว ${item.quantity} ม. เสริมเหล็กแกน 2 เส้นตลอดแนว (~${rebarBars} เส้น)`,
+          netQuantity: Math.ceil((item.quantity * 2) / 10),
+          wastePercent,
+          orderQuantity: rebarBars,
+          unit: 'เส้น (ยาว 10ม.)',
+          unitPriceEstimate: estRebarPrice,
+          totalEstimatedCost: Math.round(rebarBars * estRebarPrice),
+          priorityPhase,
+          milestoneNumber,
+          milestoneTitle,
+          boqCategory: item.category,
+          packageNote: 'สั่งพร้อมเหล็กปลอก RB6 และลวดผูกเหล็กสำหรับดัดผูกเสาเอ็น-ทับหลัง'
+        });
+        return;
+      }
+
+      // 2) งานฉาบปูนผนัง (แยกปูนฉาบเป็นกระสอบ + ทรายละเอียดสำหรับฉาบเป็นคิว)
+      if (nameLower.includes('ฉาบ')) {
+        const plasterOrderSqm = exactOrderQty;
+        if (plasterOrderSqm <= 0) return;
+
+        const plasterBags = Math.max(1, Math.ceil(plasterOrderSqm / 5.5));
+        const fineSandCuM = Math.max(0.1, Math.round(plasterOrderSqm * 0.018 * 100) / 100);
+        const estPlasterBagPrice = Math.round(138 * priceRatio);
+        const estFineSandPrice = Math.round(480 * priceRatio);
+
+        materials.push({
+          id: `mat-proc-plaster-cement-${item.id}-${index}`,
+          materialGroup: 'masonry_brick',
+          name: 'ปูนซีเมนต์สำหรับงานฉาบผนัง (กระสอบ 50 กก.)',
+          spec: `${item.name} พื้นที่ ${item.quantity} ตร.ม. (เผื่อ ${wastePercent}% = ${Math.round(plasterOrderSqm)} ตร.ม. ~5.5 ตร.ม./กระสอบ)`,
+          netQuantity: Math.max(1, Math.ceil(item.quantity / 5.5)),
+          wastePercent,
+          orderQuantity: plasterBags,
+          unit: 'กระสอบ',
+          unitPriceEstimate: estPlasterBagPrice,
+          totalEstimatedCost: Math.round(plasterBags * estPlasterBagPrice),
+          priorityPhase,
+          milestoneNumber,
+          milestoneTitle,
+          boqCategory: item.category,
+          packageNote: 'ปูนซีเมนต์ผสมสำหรับงานฉาบ (เช่น ตราเสือซีเมนต์ผสม/อินทรีเขียว) ใช้ผสมทรายละเอียดฉาบเรียบ หนา 1.5 ซม.'
+        });
+
+        materials.push({
+          id: `mat-proc-plaster-finesand-${item.id}-${index}`,
+          materialGroup: 'masonry_brick',
+          name: 'ทรายละเอียดสำหรับงานฉาบผนัง',
+          spec: `${item.name} พื้นที่ ${item.quantity} ตร.ม. (หนา 1.5 ซม. + เผื่อร่อนตะแกรง ~0.018 คิว/ตร.ม.)`,
+          netQuantity: Math.round(item.quantity * 0.018 * 100) / 100,
+          wastePercent,
+          orderQuantity: fineSandCuM,
+          unit: 'ลบ.ม. (คิว)',
+          unitPriceEstimate: estFineSandPrice,
+          totalEstimatedCost: Math.round(fineSandCuM * estFineSandPrice),
+          priorityPhase,
+          milestoneNumber,
+          milestoneTitle,
+          boqCategory: item.category,
+          packageNote: 'สั่งเป็นทรายละเอียดสำหรับงานฉาบ (ร่อนตะแกรงละเอียดก่อนฉาบ) แยกกองจากทรายหยาบ'
+        });
+        return;
+      }
+
+      // 3) งานก่อผนังอิฐ (ก้อนอิฐ + ปูนก่อเป็นกระสอบ + ทรายหยาบสำหรับงานก่อเป็นคิว)
+      if (nameLower.includes('ก่อ') || nameLower.includes('อิฐ') || nameLower.includes('บล็อก')) {
+        const wallOrderSqm = exactOrderQty;
+        if (wallOrderSqm <= 0) return;
+
+        const isAac = nameLower.includes('มวลเบา') || nameLower.includes('aac');
+        const isRed = !isAac && (nameLower.includes('อิฐแดง') || nameLower.includes('อิฐมอญ'));
+
+        if (isAac) {
+          const isThick10cm = nameLower.includes('10') || specLower.includes('10');
+          const bricksCount = Math.ceil(wallOrderSqm * 8.8);
+          const glueBags = Math.max(1, Math.ceil(wallOrderSqm * (isThick10cm ? 0.055 : 0.045)));
+          const estBrickPrice = Math.round((isThick10cm ? 32 : 24) * priceRatio);
+          const estGluePrice = Math.round(145 * priceRatio);
+
+          materials.push({
+            id: `mat-proc-aac-brick-${item.id}-${index}`,
+            materialGroup: 'masonry_brick',
+            name: isThick10cm ? 'อิฐมวลเบา AAC 20x60x10 ซม. (G4)' : 'อิฐมวลเบา AAC 20x60x7.5 ซม. (G4)',
+            spec: `${item.name} พื้นที่ ${item.quantity} ตร.ม. (8.8 ก้อน/ตร.ม. รวมเผื่อ ${wastePercent}% = ${bricksCount.toLocaleString()} ก้อน)`,
+            netQuantity: Math.ceil(item.quantity * 8.8),
+            wastePercent,
+            orderQuantity: bricksCount,
+            unit: 'ก้อน',
+            unitPriceEstimate: estBrickPrice,
+            totalEstimatedCost: Math.round(bricksCount * estBrickPrice),
+            priorityPhase,
+            milestoneNumber,
+            milestoneTitle,
+            boqCategory: item.category,
+            packageNote: 'จัดส่งเป็นพาเลท พร้อมคานวางยกไม่ให้ชื้นและเหล็กหนวดกุ้งยึดเสาทุก 2 ชั้น'
+          });
+
+          materials.push({
+            id: `mat-proc-aac-mortar-${item.id}-${index}`,
+            materialGroup: 'masonry_brick',
+            name: 'ปูนกาวสำหรับก่ออิฐมวลเบา (กระสอบ 50 กก.)',
+            spec: `สำหรับก่อ${item.name} (${item.quantity} ตร.ม.) ปูก่อบาง 2-3 มม.`,
+            netQuantity: Math.max(1, Math.ceil(item.quantity * (isThick10cm ? 0.055 : 0.045))),
+            wastePercent,
+            orderQuantity: glueBags,
+            unit: 'กระสอบ',
+            unitPriceEstimate: estGluePrice,
+            totalEstimatedCost: Math.round(glueBags * estGluePrice),
+            priorityPhase,
+            milestoneNumber,
+            milestoneTitle,
+            boqCategory: item.category,
+            packageNote: 'ปูนกาวมวลเบาสำเร็จรูป ผสมน้ำก่อได้ทันที (ไม่ต้องผสมทรายหยาบ)'
+          });
+          return;
+        }
+
+        if (isRed) {
+          const isDoubleWall = nameLower.includes('2 ชั้น') || nameLower.includes('เต็มแผ่น') || nameLower.includes('15');
+          const brickRate = isDoubleWall ? 265 : 135;
+          const mortarRate = isDoubleWall ? 0.62 : 0.32;
+          const sandRate = isDoubleWall ? 0.085 : 0.045;
+
+          const bricksCount = Math.ceil(wallOrderSqm * brickRate);
+          const mortarBags = Math.max(1, Math.ceil(wallOrderSqm * mortarRate));
+          const coarseSandCuM = Math.max(0.1, Math.round(wallOrderSqm * sandRate * 100) / 100);
+
+          const estBrickPrice = Math.round(1.35 * priceRatio);
+          const estMortarPrice = Math.round(145 * priceRatio);
+          const estSandPrice = Math.round(450 * priceRatio);
+
+          materials.push({
+            id: `mat-proc-red-brick-${item.id}-${index}`,
+            materialGroup: 'masonry_brick',
+            name: isDoubleWall ? 'อิฐมอญ/อิฐแดง 2 รู (สำหรับก่อ 2 ชั้นเต็มแผ่น)' : 'อิฐมอญ/อิฐแดง 2 รู มาตรฐาน',
+            spec: `${item.name} พื้นที่ ${item.quantity} ตร.ม. (${brickRate} ก้อน/ตร.ม. รวมเผื่อ ${wastePercent}% = ${bricksCount.toLocaleString()} ก้อน)`,
+            netQuantity: Math.ceil(item.quantity * brickRate),
+            wastePercent,
+            orderQuantity: bricksCount,
+            unit: 'ก้อน',
+            unitPriceEstimate: estBrickPrice,
+            totalEstimatedCost: Math.round(bricksCount * estBrickPrice),
+            priorityPhase,
+            milestoneNumber,
+            milestoneTitle,
+            boqCategory: item.category,
+            packageNote: 'รดน้ำอิฐมอญให้ชุ่มก่อนก่อทุกครั้งเพื่อไม่ให้ดูดน้ำปูนก่อ'
+          });
+
+          materials.push({
+            id: `mat-proc-masonry-cement-${item.id}-${index}`,
+            materialGroup: 'masonry_brick',
+            name: 'ปูนซีเมนต์สำหรับงานก่ออิฐ (กระสอบ 50 กก.)',
+            spec: `สำหรับก่อ${item.name} (${item.quantity} ตร.ม. อัตรา ${mortarRate} กระสอบ/ตร.ม.)`,
+            netQuantity: Math.max(1, Math.ceil(item.quantity * mortarRate)),
+            wastePercent,
+            orderQuantity: mortarBags,
+            unit: 'กระสอบ',
+            unitPriceEstimate: estMortarPrice,
+            totalEstimatedCost: Math.round(mortarBags * estMortarPrice),
+            priorityPhase,
+            milestoneNumber,
+            milestoneTitle,
+            boqCategory: item.category,
+            packageNote: 'ปูนซีเมนต์ผสมสำหรับงานก่ออิฐมอญ/อิฐบล็อก (ผสมทรายหยาบอัตราส่วน 1:3)'
+          });
+
+          materials.push({
+            id: `mat-proc-masonry-coarsesand-${item.id}-${index}`,
+            materialGroup: 'masonry_brick',
+            name: 'ทรายหยาบสำหรับงานก่ออิฐและเทเสาเอ็น-ทับหลัง',
+            spec: `ส่วนก่ออิฐ (${item.name} ${item.quantity} ตร.ม. อัตรา ${sandRate} คิว/ตร.ม.)`,
+            netQuantity: Math.round(item.quantity * sandRate * 100) / 100,
+            wastePercent,
+            orderQuantity: coarseSandCuM,
+            unit: 'ลบ.ม. (คิว)',
+            unitPriceEstimate: estSandPrice,
+            totalEstimatedCost: Math.round(coarseSandCuM * estSandPrice),
+            priorityPhase,
+            milestoneNumber,
+            milestoneTitle,
+            boqCategory: item.category,
+            packageNote: 'สั่งเป็นทรายหยาบเม็ดคมสะอาด สำหรับผสมปูนก่ออิฐและเทเสาเอ็น-ทับหลัง'
+          });
+          return;
+        }
+
+        const isThick9cm = nameLower.includes('9') || specLower.includes('9');
+        const mortarRate = isThick9cm ? 0.22 : 0.18;
+        const sandRate = isThick9cm ? 0.038 : 0.032;
+
+        const blocksCount = Math.ceil(wallOrderSqm * 13.2);
+        const mortarBags = Math.max(1, Math.ceil(wallOrderSqm * mortarRate));
+        const coarseSandCuM = Math.max(0.1, Math.round(wallOrderSqm * sandRate * 100) / 100);
+
+        const estBlockPrice = Math.round((isThick9cm ? 9.5 : 7.5) * priceRatio);
+        const estMortarPrice = Math.round(145 * priceRatio);
+        const estSandPrice = Math.round(450 * priceRatio);
+
+        materials.push({
+          id: `mat-proc-cblock-brick-${item.id}-${index}`,
+          materialGroup: 'masonry_brick',
+          name: isThick9cm ? 'คอนกรีตบล็อก 9x19x39 ซม. (มอก.)' : 'คอนกรีตบล็อก 7x19x39 ซม. (มอก.)',
+          spec: `${item.name} พื้นที่ ${item.quantity} ตร.ม. (13.2 ก้อน/ตร.ม. รวมเผื่อ ${wastePercent}% = ${blocksCount.toLocaleString()} ก้อน)`,
+          netQuantity: Math.ceil(item.quantity * 13.2),
+          wastePercent,
+          orderQuantity: blocksCount,
+          unit: 'ก้อน',
+          unitPriceEstimate: estBlockPrice,
+          totalEstimatedCost: Math.round(blocksCount * estBlockPrice),
+          priorityPhase,
+          milestoneNumber,
+          milestoneTitle,
+          boqCategory: item.category,
+          packageNote: 'เลือกคอนกรีตบล็อกเนื้อแน่น มอก. ไม่บิ่นแตกมุม'
+        });
+
+        materials.push({
+          id: `mat-proc-masonry-cement-${item.id}-${index}`,
+          materialGroup: 'masonry_brick',
+          name: 'ปูนซีเมนต์สำหรับงานก่ออิฐ (กระสอบ 50 กก.)',
+          spec: `สำหรับก่อ${item.name} (${item.quantity} ตร.ม. อัตรา ${mortarRate} กระสอบ/ตร.ม.)`,
+          netQuantity: Math.max(1, Math.ceil(item.quantity * mortarRate)),
+          wastePercent,
+          orderQuantity: mortarBags,
+          unit: 'กระสอบ',
+          unitPriceEstimate: estMortarPrice,
+          totalEstimatedCost: Math.round(mortarBags * estMortarPrice),
+          priorityPhase,
+          milestoneNumber,
+          milestoneTitle,
+          boqCategory: item.category,
+          packageNote: 'ปูนซีเมนต์ผสมสำหรับงานก่ออิฐมอญ/อิฐบล็อก (ผสมทรายหยาบอัตราส่วน 1:3)'
+        });
+
+        materials.push({
+          id: `mat-proc-masonry-coarsesand-${item.id}-${index}`,
+          materialGroup: 'masonry_brick',
+          name: 'ทรายหยาบสำหรับงานก่ออิฐและเทเสาเอ็น-ทับหลัง',
+          spec: `ส่วนก่ออิฐ (${item.name} ${item.quantity} ตร.ม. อัตรา ${sandRate} คิว/ตร.ม.)`,
+          netQuantity: Math.round(item.quantity * sandRate * 100) / 100,
+          wastePercent,
+          orderQuantity: coarseSandCuM,
+          unit: 'ลบ.ม. (คิว)',
+          unitPriceEstimate: estSandPrice,
+          totalEstimatedCost: Math.round(coarseSandCuM * estSandPrice),
+          priorityPhase,
+          milestoneNumber,
+          milestoneTitle,
+          boqCategory: item.category,
+          packageNote: 'สั่งเป็นทรายหยาบเม็ดคมสะอาด สำหรับผสมปูนก่ออิฐและเทเสาเอ็น-ทับหลัง'
+        });
+        return;
+      }
+    }
+
     if (((nameLower.includes('กระเบื้อง') && item.category !== 'roof' && item.unit !== 'ขั้น' && !nameLower.includes('ขั้นบันได')) || nameLower.includes('แกรนิตโต้') || nameLower.includes('พอร์ซเลน') || (item.category === 'finishes' && nameLower.includes('tile')))) {
       let sqmPerBox = 1.0;
       let piecesPerBox = 11;
@@ -1521,8 +1855,9 @@ export function calculateMasonryMaterials(params: MasonryCalcParams): MasonryCal
   const brickCount = Math.ceil(wallAreaSqm * brickRate);
   const mortarBags50kg = Math.ceil(wallAreaSqm * mortarBagsPerSqm);
   const totalPlasterAreaSqm = wallAreaSqm * Math.max(0, plasterSides);
-  const plasterBags50kg = totalPlasterAreaSqm > 0 ? Math.ceil(totalPlasterAreaSqm / 2.6) : 0;
-  const masonrySandCuM = Math.round(wallAreaSqm * sandPerSqm * 10) / 10;
+  const plasterBags50kg = totalPlasterAreaSqm > 0 ? Math.ceil(totalPlasterAreaSqm / 5.5) : 0;
+  const plasterFineSandCuM = totalPlasterAreaSqm > 0 ? Math.round(totalPlasterAreaSqm * 0.018 * 100) / 100 : 0;
+  const masonrySandCuM = Math.round(wallAreaSqm * sandPerSqm * 100) / 100;
 
   const openingLintelM = openingsCount * (4.0 + (2 * (avgOpeningWidthM + 0.40)));
   const solidWallStiffenerM = (wallAreaSqm / 15) * 3.0;
@@ -1531,6 +1866,9 @@ export function calculateMasonryMaterials(params: MasonryCalcParams): MasonryCal
   const lintelWidthM = 0.10;
   const lintelThickM = Math.max(0.075, wallThicknessCm / 100);
   const lintelConcreteCuM = Math.round(lintelLengthM * lintelWidthM * lintelThickM * 1.15 * 100) / 100;
+  const lintelCementBags50kg = lintelConcreteCuM > 0 ? Math.ceil(lintelConcreteCuM * 7) : 0;
+  const lintelCoarseSandCuM = lintelConcreteCuM > 0 ? Math.round(lintelConcreteCuM * 0.5 * 100) / 100 : 0;
+  const lintelRockCuM = lintelConcreteCuM > 0 ? Math.round(lintelConcreteCuM * 0.85 * 100) / 100 : 0;
   const lintelMainSteelM = lintelLengthM * 2 * 1.15;
   const lintelRebarKg = Math.round(lintelMainSteelM * 0.499);
   const lintelRebarBars = Math.ceil(lintelMainSteelM / 10);
@@ -1538,9 +1876,9 @@ export function calculateMasonryMaterials(params: MasonryCalcParams): MasonryCal
 
   const estBrickCost = brickCount * brickUnitPrice;
   const estMortarCost = mortarBags50kg * 145;
-  const estPlasterCost = plasterBags50kg * 125;
+  const estPlasterCost = (plasterBags50kg * 138) + (plasterFineSandCuM * 480) + (totalPlasterAreaSqm * 18);
   const estSandCost = masonrySandCuM * 450;
-  const estLintelConcCost = lintelConcreteCuM * 2150;
+  const estLintelConcCost = (lintelCementBags50kg * 155) + (lintelCoarseSandCuM * 450) + (lintelRockCuM * 520);
   const estLintelSteelCost = (lintelRebarKg * 29) + (wireMeshOrDowelQty * 12);
 
   const estMaterialCost = Math.round(estBrickCost + estMortarCost + estPlasterCost + estSandCost + estLintelConcCost + estLintelSteelCost);
@@ -1556,9 +1894,13 @@ export function calculateMasonryMaterials(params: MasonryCalcParams): MasonryCal
     brickUnit: 'ก้อน',
     mortarBags50kg,
     plasterBags50kg,
+    plasterFineSandCuM,
     masonrySandCuM,
     lintelLengthM,
     lintelConcreteCuM,
+    lintelCementBags50kg,
+    lintelCoarseSandCuM,
+    lintelRockCuM,
     lintelRebarKg,
     lintelRebarBars,
     wireMeshOrDowelQty,

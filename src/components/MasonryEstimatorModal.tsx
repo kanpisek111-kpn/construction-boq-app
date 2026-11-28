@@ -186,6 +186,9 @@ export const MasonryEstimatorModal: React.FC<MasonryEstimatorModalProps> = ({
             ...calc,
             lintelLengthM: 0,
             lintelConcreteCuM: 0,
+            lintelCementBags50kg: 0,
+            lintelCoarseSandCuM: 0,
+            lintelRockCuM: 0,
             lintelRebarKg: 0,
             lintelRebarBars: 0,
             wireMeshOrDowelQty: 0
@@ -204,10 +207,16 @@ export const MasonryEstimatorModal: React.FC<MasonryEstimatorModalProps> = ({
     };
 
     let totalWallAreaSqm = 0;
+    let totalMortarBags50kg = 0;
+    let totalMasonrySandCuM = 0;
     let totalPlasterAreaSqm = 0;
     let totalPlasterBags50kg = 0;
+    let totalPlasterFineSandCuM = 0;
     let totalLintelLengthM = 0;
     let totalLintelConcreteCuM = 0;
+    let totalLintelCementBags50kg = 0;
+    let totalLintelCoarseSandCuM = 0;
+    let totalLintelRockCuM = 0;
     let totalLintelRebarBars = 0;
     let totalLintelRebarKg = 0;
     let totalWireMeshOrDowelQty = 0;
@@ -218,10 +227,16 @@ export const MasonryEstimatorModal: React.FC<MasonryEstimatorModalProps> = ({
     zoneCalculations.forEach(({ zone, calc }) => {
       const area = Math.max(0, Number(zone.wallAreaSqm) || 0);
       totalWallAreaSqm += area;
+      totalMortarBags50kg += calc.mortarBags50kg;
+      totalMasonrySandCuM += calc.masonrySandCuM;
       totalPlasterAreaSqm += area * Math.max(0, zone.plasterSides);
       totalPlasterBags50kg += calc.plasterBags50kg;
+      totalPlasterFineSandCuM += calc.plasterFineSandCuM || 0;
       totalLintelLengthM += calc.lintelLengthM;
       totalLintelConcreteCuM += calc.lintelConcreteCuM;
+      totalLintelCementBags50kg += calc.lintelCementBags50kg || 0;
+      totalLintelCoarseSandCuM += calc.lintelCoarseSandCuM || 0;
+      totalLintelRockCuM += calc.lintelRockCuM || 0;
       totalLintelRebarBars += calc.lintelRebarBars;
       totalLintelRebarKg += calc.lintelRebarKg;
       totalWireMeshOrDowelQty += calc.wireMeshOrDowelQty;
@@ -239,10 +254,17 @@ export const MasonryEstimatorModal: React.FC<MasonryEstimatorModalProps> = ({
     return {
       brickBreakdown,
       totalWallAreaSqm: Math.round(totalWallAreaSqm * 10) / 10,
+      totalMortarBags50kg,
+      totalMasonrySandCuM: Math.round(totalMasonrySandCuM * 100) / 100,
       totalPlasterAreaSqm: Math.round(totalPlasterAreaSqm * 10) / 10,
       totalPlasterBags50kg,
+      totalPlasterFineSandCuM: Math.round(totalPlasterFineSandCuM * 100) / 100,
       totalLintelLengthM: Math.round(totalLintelLengthM * 10) / 10,
       totalLintelConcreteCuM: Math.round(totalLintelConcreteCuM * 100) / 100,
+      totalLintelCementBags50kg,
+      totalLintelCoarseSandCuM: Math.round(totalLintelCoarseSandCuM * 100) / 100,
+      totalLintelRockCuM: Math.round(totalLintelRockCuM * 100) / 100,
+      totalCoarseSandAllCuM: Math.round((totalMasonrySandCuM + totalLintelCoarseSandCuM) * 100) / 100,
       totalLintelRebarBars,
       totalLintelRebarKg,
       totalWireMeshOrDowelQty,
@@ -382,7 +404,7 @@ export const MasonryEstimatorModal: React.FC<MasonryEstimatorModalProps> = ({
             id: `wall-lintel-${idx}-${timestamp}`,
             category: 'masonry_wall',
             name: `งานเสาเอ็น & คานทับหลัง คสล. (รอบวงกบ ${zone.openingsCount} ช่อง)${zoneSuffix}`,
-            spec: `ความยาว ${calc.lintelLengthM} ม. (คอนกรีต ${calc.lintelConcreteCuM} คิว + เหล็ก ${calc.lintelRebarBars} เส้น ${calc.lintelRebarKg} กก. + หนวดกุ้ง ${calc.wireMeshOrDowelQty} จุด)`,
+            spec: `ยาว ${calc.lintelLengthM} ม. (ปูน ${calc.lintelCementBags50kg || 0} กระสอบ + ทรายหยาบ ${calc.lintelCoarseSandCuM || 0} คิว + หิน ${calc.lintelRockCuM || 0} คิว + เหล็ก ${calc.lintelRebarBars} เส้น)`,
             quantity: calc.lintelLengthM,
             unit: 'ม.',
             materialUnitPrice: 115,
@@ -397,8 +419,8 @@ export const MasonryEstimatorModal: React.FC<MasonryEstimatorModalProps> = ({
           newItems.push({
             id: `wall-plaster-${idx}-${timestamp}`,
             category: 'masonry_wall',
-            name: `ปูนฉาบผิวผนังสำเร็จรูป (${zone.plasterSides === 2 ? 'ฉาบ 2 ด้าน' : 'ฉาบด้านเดียว'})${zoneSuffix}`,
-            spec: `พื้นที่ฉาบ ${plasterArea} ตร.ม. (ปูนฉาบ ${calc.plasterBags50kg} ถุง หนา 1.5 ซม. + ตาข่ายไฟเบอร์)`,
+            name: `งานฉาบปูนผิวผนัง (${zone.plasterSides === 2 ? 'ฉาบ 2 ด้าน' : 'ฉาบด้านเดียว'})${zoneSuffix}`,
+            spec: `พื้นที่ฉาบ ${plasterArea} ตร.ม. (ปูนฉาบ ${calc.plasterBags50kg} กระสอบ + ทรายละเอียด ${calc.plasterFineSandCuM || 0} คิว หนา 1.5 ซม.)`,
             quantity: plasterArea,
             unit: 'ตร.ม.',
             materialUnitPrice: 90,
@@ -416,7 +438,7 @@ export const MasonryEstimatorModal: React.FC<MasonryEstimatorModalProps> = ({
           id: `wall-lintel-all-${timestamp}`,
           category: 'masonry_wall',
           name: `งานเสาเอ็น & คานทับหลัง คสล. รวมทุกโซน (รอบวงกบ ${totals.totalOpenings} ช่อง)`,
-          spec: `ความยาวรวม ${totals.totalLintelLengthM} ม. (คอนกรีต ${totals.totalLintelConcreteCuM} คิว + เหล็ก ${totals.totalLintelRebarBars} เส้น ${totals.totalLintelRebarKg} กก. + หนวดกุ้ง ${totals.totalWireMeshOrDowelQty} จุด)`,
+          spec: `ยาวรวม ${totals.totalLintelLengthM} ม. (ปูน ${totals.totalLintelCementBags50kg} กระสอบ + ทรายหยาบ ${totals.totalLintelCoarseSandCuM} คิว + หิน ${totals.totalLintelRockCuM} คิว + เหล็ก ${totals.totalLintelRebarBars} เส้น)`,
           quantity: totals.totalLintelLengthM,
           unit: 'ม.',
           materialUnitPrice: 115,
@@ -430,8 +452,8 @@ export const MasonryEstimatorModal: React.FC<MasonryEstimatorModalProps> = ({
         newItems.push({
           id: `wall-plaster-all-${timestamp}`,
           category: 'masonry_wall',
-          name: `ปูนฉาบผิวผนังสำเร็จรูป รวมทุกโซน`,
-          spec: `พื้นที่ฉาบรวม ${totals.totalPlasterAreaSqm} ตร.ม. (ปูนฉาบ ${totals.totalPlasterBags50kg} ถุง หนา 1.5 ซม. + ตาข่ายไฟเบอร์)`,
+          name: `งานฉาบปูนผิวผนัง รวมทุกโซน`,
+          spec: `พื้นที่ฉาบรวม ${totals.totalPlasterAreaSqm} ตร.ม. (ปูนฉาบ ${totals.totalPlasterBags50kg} กระสอบ + ทรายละเอียด ${totals.totalPlasterFineSandCuM} คิว หนา 1.5 ซม.)`,
           quantity: totals.totalPlasterAreaSqm,
           unit: 'ตร.ม.',
           materialUnitPrice: 90,
@@ -728,12 +750,7 @@ export const MasonryEstimatorModal: React.FC<MasonryEstimatorModalProps> = ({
           <div className="lg:col-span-7 flex flex-col gap-4">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div className="bg-slate-800/70 p-3 rounded-xl border border-slate-700/80">
-                <span className="text-[11px] text-slate-400 block mb-1">พื้นที่ผนังรวมทุกโซน</span>
-                <span className="text-xl font-bold font-mono text-white">{totals.totalWallAreaSqm.toLocaleString()}</span>
-                <span className="text-xs text-slate-400 ml-1">ตร.ม.</span>
-              </div>
-              <div className="bg-slate-800/70 p-3 rounded-xl border border-slate-700/80">
-                <span className="text-[11px] text-slate-400 block mb-1">จำนวนอิฐแยกชนิด</span>
+                <span className="text-[11px] text-slate-400 block mb-1">อิฐแยกชนิด (พท. {totals.totalWallAreaSqm.toLocaleString()} ตร.ม.)</span>
                 <div className="flex flex-col gap-0.5 text-xs font-mono">
                   {totals.brickBreakdown.aac_block.count > 0 && (
                     <span className="text-sky-300 font-bold">มวลเบา {totals.brickBreakdown.aac_block.count.toLocaleString()} ก้อน</span>
@@ -748,14 +765,28 @@ export const MasonryEstimatorModal: React.FC<MasonryEstimatorModalProps> = ({
                 </div>
               </div>
               <div className="bg-slate-800/70 p-3 rounded-xl border border-slate-700/80">
-                <span className="text-[11px] text-slate-400 block mb-1">เสาเอ็น-ทับหลังรวม</span>
-                <span className="text-xl font-bold font-mono text-cyan-400">{totals.totalLintelLengthM}</span>
-                <span className="text-xs text-slate-400 ml-1">เมตร</span>
+                <span className="text-[11px] text-slate-400 block mb-1">ปูนสั่งซื้อ (กระสอบ 50 กก.)</span>
+                <div className="flex flex-col gap-0.5 text-[11px] font-mono">
+                  <span className="text-orange-300 font-bold">ก่อ: {totals.totalMortarBags50kg} กระสอบ</span>
+                  <span className="text-cyan-300 font-bold">ทับหลัง: {totals.totalLintelCementBags50kg} กระสอบ</span>
+                  <span className="text-emerald-300 font-bold">ฉาบ: {totals.totalPlasterBags50kg} กระสอบ</span>
+                </div>
               </div>
               <div className="bg-slate-800/70 p-3 rounded-xl border border-slate-700/80">
-                <span className="text-[11px] text-slate-400 block mb-1">ปูนฉาบรวม (50กก.)</span>
-                <span className="text-xl font-bold font-mono text-emerald-400">{totals.totalPlasterBags50kg}</span>
-                <span className="text-xs text-slate-400 ml-1">ถุง</span>
+                <span className="text-[11px] text-slate-400 block mb-1">ทรายหยาบ (ก่อ+ทับหลัง)</span>
+                <span className="text-xl font-bold font-mono text-amber-300">{totals.totalCoarseSandAllCuM}</span>
+                <span className="text-xs text-slate-400 ml-1">คิว</span>
+                <span className="text-[10px] text-slate-500 block font-mono">
+                  ก่อ {totals.totalMasonrySandCuM} + ทับหลัง {totals.totalLintelCoarseSandCuM}
+                </span>
+              </div>
+              <div className="bg-slate-800/70 p-3 rounded-xl border border-slate-700/80">
+                <span className="text-[11px] text-slate-400 block mb-1">ทรายละเอียด (งานฉาบ)</span>
+                <span className="text-xl font-bold font-mono text-emerald-400">{totals.totalPlasterFineSandCuM}</span>
+                <span className="text-xs text-slate-400 ml-1">คิว</span>
+                <span className="text-[10px] text-slate-500 block font-mono">
+                  พท.ฉาบ {totals.totalPlasterAreaSqm} ตร.ม.
+                </span>
               </div>
             </div>
 
@@ -802,9 +833,9 @@ export const MasonryEstimatorModal: React.FC<MasonryEstimatorModalProps> = ({
                         </div>
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] text-slate-400">
                           <div>อิฐ: <span className="text-slate-200 font-mono font-semibold">{calc.brickCount.toLocaleString()}</span> ก้อน</div>
-                          <div>ปูนก่อ: <span className="text-slate-200 font-mono font-semibold">{calc.mortarBags50kg}</span> ถุง{calc.masonrySandCuM > 0 && ` / ทราย ${calc.masonrySandCuM} คิว`}</div>
-                          <div>เสาเอ็น: <span className="text-cyan-300 font-mono font-semibold">{zone.includeLintel ? `${calc.lintelLengthM} ม.` : 'ไม่รวม'}</span></div>
-                          <div>ปูนฉาบ: <span className="text-emerald-300 font-mono font-semibold">{zone.plasterSides === 0 ? 'ไม่ฉาบ' : `${calc.plasterBags50kg} ถุง (${zone.plasterSides} ด้าน)`}</span></div>
+                          <div>ปูนก่อ: <span className="text-orange-300 font-mono font-semibold">{calc.mortarBags50kg}</span> กระสอบ{calc.masonrySandCuM > 0 && ` / ทรายหยาบ ${calc.masonrySandCuM} คิว`}</div>
+                          <div>เสาเอ็น: <span className="text-cyan-300 font-mono font-semibold">{zone.includeLintel ? `${calc.lintelCementBags50kg || 0} กส. / ทรายหยาบ ${calc.lintelCoarseSandCuM || 0} คิว` : 'ไม่รวม'}</span></div>
+                          <div>ฉาบ: <span className="text-emerald-300 font-mono font-semibold">{zone.plasterSides === 0 ? 'ไม่ฉาบ' : `${calc.plasterBags50kg} กส. / ทรายละเอียด ${calc.plasterFineSandCuM || 0} คิว`}</span></div>
                         </div>
                       </div>
                     );
@@ -814,8 +845,8 @@ export const MasonryEstimatorModal: React.FC<MasonryEstimatorModalProps> = ({
                 {activeCalcItem && activeZone && activeZone.includeLintel && (
                   <div className="p-2.5 rounded-lg bg-slate-900/70 border border-slate-800 flex flex-wrap justify-between items-center gap-2 text-[11px]">
                     <span className="text-slate-300">
-                      <strong className="text-cyan-300">ดีเทลเสาเอ็น-ทับหลัง ({activeZone.zoneName}):</strong>{' '}
-                      คอนกรีต {activeCalcItem.calc.lintelConcreteCuM} คิว + เหล็ก RB9/DB12 {activeCalcItem.calc.lintelRebarBars} เส้น ({activeCalcItem.calc.lintelRebarKg} กก.) + หนวดกุ้ง {activeCalcItem.calc.wireMeshOrDowelQty} จุด
+                      <strong className="text-cyan-300">ดีเทลเทเสาเอ็น-ทับหลัง ({activeZone.zoneName} ยาว {activeCalcItem.calc.lintelLengthM} ม.):</strong>{' '}
+                      ปูน {activeCalcItem.calc.lintelCementBags50kg || 0} กระสอบ + ทรายหยาบ {activeCalcItem.calc.lintelCoarseSandCuM || 0} คิว + หิน 3/4" {activeCalcItem.calc.lintelRockCuM || 0} คิว + เหล็ก {activeCalcItem.calc.lintelRebarBars} เส้น ({activeCalcItem.calc.lintelRebarKg} กก.)
                     </span>
                   </div>
                 )}
